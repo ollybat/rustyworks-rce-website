@@ -19,6 +19,8 @@
   var TIMEOUT_MS = 6000;
   var STRIP_MAX = 40;
   var EVENT_MAX = 40;
+  var BRAND = (window.RW_BRAND && window.RW_BRAND.name) || "Spinback RCE";
+  var SITE = (window.RW_BRAND && window.RW_BRAND.site) || "https://rustyworks-rce-j7ao5f.camelai.app";
   var PAUSE_KEY = "rw-status-paused";
   var NOTIFY_KEY = "rw-status-notify";
   /* How often to check, depending on what the last answer said: a quiet system
@@ -228,7 +230,7 @@
     setDot(els.stMiniDot, verdict.level);
     text(els.stMiniText, verdict.title);
     if (document.visibilityState === "visible") {
-      document.title = (verdict.level === "ok" ? "" : verdict.level === "warn" ? "! " : "x ") + "Status - RustyWorks RCE";
+      document.title = (verdict.level === "ok" ? "" : verdict.level === "warn" ? "! " : "x ") + "Status - " + BRAND;
     }
   }
 
@@ -647,7 +649,7 @@
     if (state.notifiedPause) return;
     state.notifiedPause = true;
     try {
-      new Notification("RustyWorks RCE: " + (state.verdict === "down" ? "service problem" : "something to note"), {
+      new Notification(BRAND + ": " + (state.verdict === "down" ? "service problem" : "something to note"), {
         body: state.lastReason || (state.verdict === "down" ? "The bot could not be reached." : "A check needs attention on the status page."),
         tag: "rw-status"
       });
@@ -681,32 +683,32 @@
     } catch (error) { done(false); }
   }
   function summary() {
-    if (!state.lastGood) return "RustyWorks RCE status: the bot could not be reached at " + clock(Date.now()) + ".";
+    if (!state.lastGood) return BRAND + " status: the bot could not be reached at " + clock(Date.now()) + ".";
     var stats = state.lastGood.stats || {};
     var monitor = state.monitor;
     return [
-      "RustyWorks RCE status - " + (state.lastGood.online === false ? "bot offline" : "bot online") + (state.lastGood.version ? " (" + state.lastGood.version + ")" : ""),
+      BRAND + " status - " + (state.lastGood.online === false ? "bot offline" : "bot online") + (state.lastGood.version ? " (" + state.lastGood.version + ")" : ""),
       "Verdict: " + state.title,
       "Checked at " + clock(state.lastGoodAt) + ", " + ago(state.lastGoodAt) + ".",
       "Linked players: " + count(stats.users) + " - Servers connected: " + count(stats.servers) + " - Guilds: " + count(stats.guilds),
       "Bot uptime 30d: " + pct(state.lastGood.uptime30d) + " - API uptime 30d: " + pct(state.lastGood.apiUptime30d),
       typeof state.lastGood.lastHeartbeat === "number" ? "Last heartbeat: " + clock(state.lastGood.lastHeartbeat) + " (" + ago(state.lastGood.lastHeartbeat) + ")" : "",
       monitor && monitor.available ? "Measured by this site over the last " + rangeLabel() + ": " + pct(monitor.totals.uptimePct, 2) + " uptime across " + formatCount(monitor.totals.checks) + " checks." : "",
-      "Source: https://rustyworks-rce-j7ao5f.camelai.app/status.html"
+      "Source: " + SITE + "/status.html"
     ].filter(Boolean).join(String.fromCharCode(10));
   }
   function discordSummary() {
     var stats = state.lastGood ? state.lastGood.stats || {} : {};
     var monitor = state.monitor;
     return [
-      "**RustyWorks RCE status**",
+      "**" + BRAND + " status**",
       "Verdict: " + state.title,
       "Checked: " + (state.lastGoodAt ? clock(state.lastGoodAt) + " (" + ago(state.lastGoodAt) + ")" : "never"),
       "Players: " + count(stats.users) + " | Servers: " + count(stats.servers) + " | Guilds: " + count(stats.guilds),
       "Bot uptime 30d: " + pct(state.lastGood && state.lastGood.uptime30d) + " | API uptime 30d: " + pct(state.lastGood && state.lastGood.apiUptime30d),
       monitor && monitor.available ? "Site measured: " + pct(monitor.totals.uptimePct, 2) + " over " + formatCount(monitor.totals.checks) + " checks in the last " + rangeLabel() : "",
       monitor && monitor.available && monitor.totals.avgMs ? "Response: " + monitor.totals.avgMs + " ms average, " + monitor.totals.p95Ms + " ms p95 (site to API)" : "",
-      "<https://rustyworks-rce-j7ao5f.camelai.app/status>"
+      "<" + SITE + "/status>"
     ].filter(Boolean).join(String.fromCharCode(10));
   }
   function download(name, content, type) {
@@ -801,7 +803,7 @@
     if (els.stCopyDiscord) els.stCopyDiscord.addEventListener("click", function () { copy(discordSummary(), els.stExportNote); });
     if (els.stNotify) els.stNotify.addEventListener("click", toggleNotify);
     if (els.stExportJson) els.stExportJson.addEventListener("click", function () {
-      download("rustyworks-status-visit.json", JSON.stringify({
+      download("spinback-status-visit.json", JSON.stringify({
         page: "/status.html",
         capturedAt: new Date().toISOString(),
         verdict: state.title,
@@ -811,7 +813,7 @@
       }, null, 2), "application/json");
     });
     if (els.stExportCsv) els.stExportCsv.addEventListener("click", function () {
-      download("rustyworks-status-visit.csv", visitCsv(), "text/csv");
+      download("spinback-status-visit.csv", visitCsv(), "text/csv");
     });
     if (els.stRawJump) els.stRawJump.addEventListener("click", function () {
       if (els.stRawPanel) els.stRawPanel.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
