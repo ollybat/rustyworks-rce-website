@@ -7,7 +7,9 @@ import { join } from "node:path";
    the size limit of a single commit. Decode it all before the site is copied, so
    a fresh clone builds and deploys with the artwork actually in place. */
 const MEDIA = join("public", "media");
-const RASTER = /^(.*\.(?:png|jpe?g))\.b64(?:\.part(\d+))?$/;
+/* Any file sent as .b64 (or .b64.partN) is decoded back to its real name: images, and
+   also larger scripts or stylesheets that would otherwise be cut in half by text transfer. */
+const RASTER = /^(.*\.(?:png|jpe?g|webp|gif|js|css|json|txt))\.b64(?:\.part(\d+))?$/;
 const rasterGroups = new Map();
 for (const name of readdirSync(MEDIA)) {
   const match = RASTER.exec(name);
