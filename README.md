@@ -167,3 +167,25 @@ still earlier rebuilt copies, so the project is deliberately not deployed in thi
 
 Images, fonts and the logo are original assets. RustyWorks RCE is not affiliated with
 Facepunch Studios or Rust.
+
+## Social cards and app icons
+
+`public/media/` holds three generated raster assets:
+
+- `icon-192.png` — the installable app icon, used by the manifest with `any maskable`.
+- `apple-touch-icon.png` — the homescreen icon for iOS, which ignores SVG icons.
+- `og-card.jpg` — the 1200x630 link preview card used by `og:image` and `twitter:image`
+  on every page that has a canonical URL.
+
+Each one sits next to a base64 companion (`.b64`, and `.b64.partN` for the large
+image) because the tooling that publishes this repository can only send text. The
+build decodes them back into real image files before `public/` is copied, so a fresh
+clone builds and deploys with the artwork in place.
+
+## Pages added after launch
+
+`rustservers.html`, `rustskins.html`, `dashboard/kitbuilder.html`,
+`dashboard/colortext.html`, `legal/privacy.html` and `legal/terms.html`. Each one
+says plainly what the page will do and what is not built yet — none of them invents
+numbers or features for a tool that does not exist yet. `page.js` only fills in the
+footer year.
