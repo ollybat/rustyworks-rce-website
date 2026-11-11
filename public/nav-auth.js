@@ -125,7 +125,7 @@
     var name  = me.username || 'Account';
     var isDev = !!me.isDev;
 
-    // Developer Admin Hub is a RustyWorks addition; it renders as an
+    // Developer Admin Hub is a Spinback addition; it renders as an
     // ordinary row so it does not break the flat list.
     var devLink = isDev
       ? '<a class="rw-account-dev" role="menuitem" href="' + LINKS.admin + '">' +

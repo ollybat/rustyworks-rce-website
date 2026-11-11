@@ -1,5 +1,5 @@
 /* ============================================================================
- * theme.js — RustyWorks global appearance engine
+ * theme.js — Spinback global appearance engine
  *
  * Load this in <head>, BEFORE the page renders:
  *     <script src="/theme.js"></script>
@@ -84,7 +84,7 @@
   // The others replace EVERY font on the page. Files live in /fonts/ and are
   // only downloaded when somebody actually picks one.
   var FONTS = [
-    { key: 'default',  label: 'Default',               family: "'Chakra Petch', sans-serif", note: 'The standard RustyWorks look' },
+    { key: 'default',  label: 'Default',               family: "'Chakra Petch', sans-serif", note: 'The standard Spinback look' },
     { key: 'dyslexic', label: 'OpenDyslexic',          family: "'OpenDyslexic', 'Comic Sans MS', sans-serif", note: 'Dyslexia-friendly. Weighted letter bottoms, wider spacing, no capitals' },
     { key: 'atkinson', label: 'Atkinson Hyperlegible', family: "'Atkinson Hyperlegible', Verdana, sans-serif", note: 'Made for low vision. Every letter looks different' },
     { key: 'lexend',   label: 'Lexend',                family: "'Lexend', Verdana, sans-serif", note: 'Wide, even spacing designed for easier reading' },
@@ -260,7 +260,7 @@
     '<path d="M130 42h66q16 0 18-17l-6 0q-2 10-12 10h-58z"/><path d="M126 62q-6-8 4-8h86q10 0 8 8" fill="none" stroke-width="2.2"/><path d="M138 54v-10M170 54v-10M200 54v-10" fill="none"/>' +
     '<ellipse cx="206" cy="29" rx="10" ry="9"/><circle cx="162" cy="30" r="6"/><path d="M148 42q0-14 14-14t14 14z"/></g>' +
     '<path d="M156 25l6-12 7 11z" fill="#e0383e"/><circle cx="162" cy="13" r="2.6" fill="#fff"/><circle cx="85" cy="25" r="2.4" fill="#e0383e"/><circle cx="47" cy="31" r="2.4" fill="#e0383e"/></svg>';
-  // Seasonal logo: the same RustyWorks icon with a Halloween / Thanksgiving / Christmas
+  // Seasonal logo: the same Spinback icon with a Halloween / Thanksgiving / Christmas
   // look. Put these three files next to rustyworks-icon.svg in /media/.
   var LOGO_ORIG = /\/media\/rustyworks-icon\.svg(\?.*)?$/;
   var LOGO_FILE = {
@@ -269,9 +269,9 @@
     christmas:    '/media/rustyworks-icon-christmas.svg'
   };
   var TEXTS = {
-    halloween:    { pre: '\uD83E\uDD87', msg: 'Happy Halloween from RustyWorks \u2014 spooky season is live', post: '\uD83C\uDF83', font: 'Pirata+One' },
-    thanksgiving: { pre: '\uD83C\uDF42', msg: 'Happy Thanksgiving from RustyWorks \u2014 thankful for every server and player', post: '\uD83E\uDD83', font: 'Alfa+Slab+One' },
-    christmas:    { pre: '\uD83C\uDF84', msg: 'Merry Christmas from RustyWorks \u2014 happy holidays to our whole community', post: '\u2744\uFE0F', font: 'Mountains+of+Christmas:wght@700' }
+    halloween:    { pre: '\uD83E\uDD87', msg: 'Happy Halloween from Spinback \u2014 spooky season is live', post: '\uD83C\uDF83', font: 'Pirata+One' },
+    thanksgiving: { pre: '\uD83C\uDF42', msg: 'Happy Thanksgiving from Spinback \u2014 thankful for every server and player', post: '\uD83E\uDD83', font: 'Alfa+Slab+One' },
+    christmas:    { pre: '\uD83C\uDF84', msg: 'Merry Christmas from Spinback \u2014 happy holidays to our whole community', post: '\u2744\uFE0F', font: 'Mountains+of+Christmas:wght@700' }
   };
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -587,7 +587,7 @@
       appTheme(seasonState(settings), settings);
       appMeta('mobile-web-app-capable', 'yes');
       appMeta('apple-mobile-web-app-capable', 'yes');
-      appMeta('apple-mobile-web-app-title', 'RustyWorks');
+      appMeta('apple-mobile-web-app-title', 'Spinback');
       appMeta('apple-mobile-web-app-status-bar-style', 'black');
       if (appInstalled()) document.documentElement.setAttribute('data-app', '1');
     } catch (e) {}
@@ -634,7 +634,7 @@
   function appHelpSteps() {
     var p = appPlatform(), steps, note = '';
     if (p.os === 'ios') {
-      steps = ['Tap the <b>Share</b> button (the square with an arrow pointing up).', 'Scroll down and tap <b>Add to Home Screen</b>.', 'Tap <b>Add</b>. RustyWorks now opens from your home screen.'];
+      steps = ['Tap the <b>Share</b> button (the square with an arrow pointing up).', 'Scroll down and tap <b>Add to Home Screen</b>.', 'Tap <b>Add</b>. Spinback now opens from your home screen.'];
       if (p.br !== 'safari') note = 'No Add to Home Screen option? Open this page in <b>Safari</b> and try again.';
     } else if (p.os === 'android') {
       if (p.br === 'firefox') steps = ['Tap the <b>⋮</b> menu.', 'Tap <b>Install</b>.', 'Tap <b>Add</b>.'];
@@ -647,7 +647,7 @@
     } else if (p.br === 'edge') {
       steps = ['Click the <b>install</b> icon at the right end of the address bar, or open the <b>…</b> menu, then <b>Apps</b>.', 'Choose <b>Install this site as an app</b>.', 'Click <b>Install</b>.'];
     } else {
-      steps = ['Click the <b>install</b> icon (a screen with a down arrow) at the right end of the address bar, or open the <b>⋮</b> menu, then <b>Cast, save and share</b>.', 'Choose <b>Install page as app</b> (or <b>Install RustyWorks</b>).', 'Click <b>Install</b>.'];
+      steps = ['Click the <b>install</b> icon (a screen with a down arrow) at the right end of the address bar, or open the <b>⋮</b> menu, then <b>Cast, save and share</b>.', 'Choose <b>Install page as app</b> (or <b>Install Spinback</b>).', 'Click <b>Install</b>.'];
     }
     return { steps: steps, note: note };
   }
@@ -675,14 +675,14 @@
     x.focus();
   }
   function appHelp() {
-    if (appInstalled()) { appDialog('Already installed', '<p style="margin:0">RustyWorks is already installed on this device. Open it from your home screen or app list.</p>'); return; }
+    if (appInstalled()) { appDialog('Already installed', '<p style="margin:0">Spinback is already installed on this device. Open it from your home screen or app list.</p>'); return; }
     if (APP.evt) { appPrompt(); return; }
     var h = appHelpSteps(), html = '<ol style="margin:0 0 12px;padding-left:20px">';
     for (var i = 0; i < h.steps.length; i++) html += '<li style="margin:0 0 8px">' + h.steps[i] + '</li>';
     html += '</ol>';
     if (h.note) html += '<p style="margin:0 0 10px;opacity:.85">' + h.note + '</p>';
     html += '<p style="margin:0;opacity:.7;font-size:13px">Not seeing it? Make sure you are not in a private or incognito window.</p>';
-    appDialog('Get the RustyWorks app', html);
+    appDialog('Get the Spinback app', html);
   }
 
   function appShowPill(forceHint) {
@@ -692,7 +692,7 @@
     if (!forceHint && appDismissed()) return;
     var box = document.createElement('div');
     box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Install the RustyWorks app');
+    box.setAttribute('aria-label', 'Install the Spinback app');
     box.style.cssText = 'position:fixed;left:16px;right:16px;bottom:16px;max-width:360px;z-index:9000;display:flex;align-items:center;gap:12px;' +
       'padding:12px 14px;border-radius:14px;background:var(--panel,#1c1712);color:var(--text,#ece4da);border:1px solid var(--rust,#cf6a2e);' +
       'box-shadow:0 12px 34px rgba(0,0,0,.5);font:500 14px/1.35 var(--rw-font,"Chakra Petch",system-ui,sans-serif)';
@@ -701,8 +701,8 @@
     img.style.cssText = 'flex:none;border-radius:10px';
     var txt = document.createElement('div'); txt.style.cssText = 'flex:1;min-width:0';
     txt.innerHTML = ios
-      ? '<b>Get the RustyWorks app</b><br><span style="opacity:.8">Tap the Share button, then “Add to Home Screen”.</span>'
-      : '<b>Get the RustyWorks app</b><br><span style="opacity:.8">Open us from your home screen.</span>';
+      ? '<b>Get the Spinback app</b><br><span style="opacity:.8">Tap the Share button, then “Add to Home Screen”.</span>'
+      : '<b>Get the Spinback app</b><br><span style="opacity:.8">Open us from your home screen.</span>';
     box.appendChild(img); box.appendChild(txt);
     if (!ios) {
       var go = document.createElement('button'); go.type = 'button'; go.textContent = 'Install';
