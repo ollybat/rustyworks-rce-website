@@ -59,7 +59,7 @@
   function renderSignedOut() {
     if (!slot) return;
     slot.innerHTML = "";
-    var link = el(\'<a class="rw-auth-login" href="' + loginUrl() + '"><span class="rw-auth-login-ico">' + DISCORD_ICON + '</span><span>Login</span></a>\');
+    var link = el('<a class="rw-auth-login" href="' + loginUrl() + '"><span class="rw-auth-login-ico">' + DISCORD_ICON + '</span><span>Login</span></a>');
     slot.appendChild(link);
   }
 
@@ -70,12 +70,12 @@
     var avatar = user.avatar ? escapeHtml(user.avatar) : "/media/rustyworks-icon.svg";
 
     slot.innerHTML = "";
-    trigger = el(\'<button type="button" class="rw-account-trigger" aria-expanded="false" aria-haspopup="true"><img src="' + avatar + '" alt=""><span class="rw-account-name">' + name + '</span><span class="rw-account-chevron">' + CHEVRON + '</span></button>\');
+    trigger = el('<button type="button" class="rw-account-trigger" aria-expanded="false" aria-haspopup="true"><img src="' + avatar + '" alt=""><span class="rw-account-name">' + name + '</span><span class="rw-account-chevron">' + CHEVRON + '</span></button>');
     slot.appendChild(trigger);
 
     var levelLabel = state.role === "owner" ? "Server owner" : (state.role === "admin" ? "Administrator" : "Player");
     var levelClass = "rw-authlevel is-" + (state.role || "player");
-    menu = el(\'<div class="rw-account-menu" hidden><div class="rw-account-menu-identity"><small>Signed in with Discord</small><strong>' + name + '</strong></div><span class="' + levelClass + '"><span class="rw-al-dot"></span>' + levelLabel + '</span><a href="/dashboard">Dashboard</a><a href="/">Website</a><button type="button" data-rw-logout>Sign out</button></div>\');
+    menu = el('<div class="rw-account-menu" hidden><div class="rw-account-menu-identity"><small>Signed in with Discord</small><strong>' + name + '</strong></div><span class="' + levelClass + '"><span class="rw-al-dot"></span>' + levelLabel + '</span><a href="/dashboard">Dashboard</a><a href="/">Website</a><button type="button" data-rw-logout>Sign out</button></div>');
     slot.appendChild(menu);
 
     trigger.addEventListener("click", function (event) {
