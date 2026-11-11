@@ -498,8 +498,8 @@ async function authLogin(request, env) {
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("redirect_uri", url.origin + "/auth/callback");
   authorize.searchParams.set("scope", "identify guilds");
-
-[261 more lines in file. Use offset=501 to continue.]
+  authorize.searchParams.set("state", state);
+  authorize.searchParams.set("prompt", "none");
   const headers = new Headers();
   headers.append("set-cookie", cookieHeader("rw_oauth_state", state, 600));
   headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));

@@ -398,7 +398,6 @@ function updateAuthButtons() {
 
 // ════════════════════════════════════════════════════════════════════════════
 // MOBILE TABS
-// ════════════════════════════════════════════════════════════════════════════
 function setMobTab(tab) {
   const isMob = window.innerWidth <= 900;
   if (!isMob) return;
@@ -498,8 +497,8 @@ function renderItemGrid(items, isSearch=false) {
 function setupBrowserItem(div, item) {
   div.addEventListener('click', () => selectItem(item.v, item.l));
   div.addEventListener('dragstart', e => {
-
-[706 more lines in file. Use offset=501 to continue.]
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', JSON.stringify({src:'browser',v:item.v,l:item.l}));
   });
 }
 
@@ -799,7 +798,6 @@ function doImport() {
 // ════════════════════════════════════════════════════════════════════════════
 // SAVE / LOAD / MANAGE
 // ════════════════════════════════════════════════════════════════════════════
-async function saveKit() {
   if (!USER) { toast('Login to save kits.', true); window.location.href='../login.html'; return; }
   if (!kitHasItems()) { toast('Add items before saving.', true); return; }
   KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
@@ -1000,8 +998,8 @@ async function loadPresetKit(kit) {
 // ════════════════════════════════════════════════════════════════════════════
 // SCREENSHOT SYSTEM
 // ════════════════════════════════════════════════════════════════════════════
+let _activeCanvas = null;
 
-[204 more lines in file. Use offset=1003 to continue.]
 function openScreenshotModal() {
   if (!kitHasItems()) { toast('Add items to your kit before making a screenshot.', true); return; }
   document.getElementById('screenshotModal').style.display = 'flex';
@@ -1200,6 +1198,5 @@ async function copyScreenshotImage() {
       toast("Failed to copy image.", true);
     }
   }, "image/png");
-}
 
 init();
