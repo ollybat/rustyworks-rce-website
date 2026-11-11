@@ -1,0 +1,14 @@
+{
+  "note": "Skin catalogue for the Spinback Skin Store page. The page is finished and reads this file: every entry in skins[] is rendered with search, category filters, sorting and a detail sheet, and an entry only needs a name. Add entries as name, category, and optionally item, rarity, image (any URL or /media/... path), released and id. Nothing here is generated or guessed - an empty list is shown honestly as 'not published yet'.",
+  "updated": null,
+  "fields": {
+    "name": "the skin name shown on the card (required)",
+    "category": "weapon, clothing, building, decor, tool, vehicle ... used for the filter chips",
+    "item": "the in-game item the skin applies to",
+    "rarity": "short label shown in the corner of the card, e.g. Common or Rare",
+    "image": "square-ish preview image URL",
+    "released": "YYYY-MM-DD, used by the newest-first sort",
+    "id": "catalog or store id, shown in the detail sheet"
+  },
+  "skins": []
+}
