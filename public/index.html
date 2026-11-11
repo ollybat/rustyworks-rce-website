@@ -27,8 +27,10 @@
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="RustyWorks RCE - Free Rust Console Server Bot">
     <meta name="twitter:description" content="The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, games, killfeed and live automation. 100% free forever.">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"RustyWorks RCE","applicationCategory":"GameApplication","operatingSystem":"Discord","description":"The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, games, killfeed and live automation. 100% free forever.","url":"https://rustyworks-rce-j7ao5f.camelai.app/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}<\/script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"RustyWorks RCE","applicationCategory":"GameApplication","operatingSystem":"Discord","description":"The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, games, killfeed and live automation. 100% free forever.","url":"https://rustyworks-rce-j7ao5f.camelai.app/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/chakrapetch/v13/cIf6MapbsEk7TDLdtEz1BwkWn6pg.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYg.woff2">
     <!-- One less origin to talk to: the face list is served from here, the woff2 files still stream from fonts.gstatic.com. -->
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="style.css">
@@ -78,16 +80,10 @@
 
     <main id="main" tabindex="-1">
     <div class="rw-video-hero">
-      <video
-        class="rw-video-hero__video"
-        id="rwHeroVideo"
-        autoplay
-        muted
-        loop
-        playsinline
-        preload="auto">
-        <source src="/media/Website_Background.mp4" type="video/mp4">
-      </video>
+      <!-- Background video: the file (public/media/Website_Background.mp4) is not in the
+           repo, so the hero uses the stylesheet's gradient instead of asking for a file
+           that would 404 on every visit. Add the mp4 back and home.js will reveal it
+           automatically - it already hides the element when there is nothing to play. -->
       <div class="rw-video-hero__fade" id="rwHeroFade"></div>
       <div class="rw-video-hero__overlay"></div>
       <!-- FREE strip -->
@@ -654,4 +650,3 @@
     </div>
   </body>
 </html>
-
