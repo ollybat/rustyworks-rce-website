@@ -1,7 +1,10 @@
-# Everything is public except the owner-only dashboard and the sign-in plumbing.
+# Everything is public except the owner-only control panel and the sign-in
+# plumbing. The two studio tools are public, so they are named explicitly.
 User-agent: *
 Allow: /
-Disallow: /dashboard
+Allow: /dashboard/kitbuilder.html
+Allow: /dashboard/colortext.html
+Disallow: /dashboard/
 Disallow: /auth/
 Disallow: /api/
 

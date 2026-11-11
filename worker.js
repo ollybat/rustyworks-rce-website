@@ -33,6 +33,11 @@ const HAS_EXTENSION = /\.[a-z0-9]+$/i;
 /* The application id is public — it is in every invite link on the site — so it
    can carry a default. The client secret, guild id and session secret cannot. */
 const DEFAULT_CLIENT_ID = "1570023832717361213";
+
+/* Pages under /dashboard/ that are tools rather than the owner control panel.
+   The homepage advertises the Kit Studio and Colour Studio as no-login, so they
+   stay public; everything else in that tree is gated. */
+const PUBLIC_DASHBOARD_PAGES = new Set(["/dashboard/kitbuilder.html", "/dashboard/colortext.html"]);
 const NEXT_COOKIE = "rw_oauth_next";
 
 /* ---------- small helpers ---------- */
@@ -137,11 +142,22 @@ async function readSession(request, env) {
 
 /* Two headers that cost nothing and close the usual holes: stop the browser
    guessing a content type, and keep referrers tidy. */
-function withSecurityHeaders(response) {
+function withAssetHeaders(response, pathname) {
   const headers = new Headers(response.headers);
   headers.set("x-content-type-options", "nosniff");
   if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  if (response.status === 200 && pathname) headers.set("cache-control", cacheHint(pathname));
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+/* How long a browser may keep a file. Filenames are not hashed, so scripts and
+   stylesheets get a short window with revalidation (an edit still lands within a
+   minute) while pictures, fonts and video - which change rarely - get a day. */
+function cacheHint(pathname) {
+  if (/\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|mp4|webm)$/i.test(pathname)) return "public, max-age=86400";
+  if (/\.(css|js|webmanifest|xml|txt)$/i.test(pathname)) return "public, max-age=300, must-revalidate";
+  if (/\.html?$/i.test(pathname)) return "public, max-age=60, must-revalidate";
+  return "public, max-age=300";
 }
 
 /* ---------- the bot API proxy ---------- */
@@ -414,12 +430,16 @@ export default {
 
     /* The whole /dashboard/ tree is owner-only, not just its front page. */
     if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) {
+      /* Free tools first - they live under this path but are not the control panel. */
+      if (PUBLIC_DASHBOARD_PAGES.has(url.pathname)) {
+        return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
+      }
       if (!authConfigured(env)) return needsSetup(env);
       if (!(await readSession(request, env))) {
         return redirect("/auth/login?next=" + encodeURIComponent(url.pathname + url.search));
       }
       if (url.pathname === "/dashboard") return dashboard(request, env);
-      return env.ASSETS.fetch(request);
+      return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
     }
     if (url.pathname === "/auth/login") return authLogin(request, env);
     if (url.pathname === "/auth/callback") return authCallback(request, env);
@@ -427,7 +447,7 @@ export default {
     if (url.pathname === "/auth/me") return authMe(request, env);
 
     const assetResponse = await env.ASSETS.fetch(request);
-    if (assetResponse.status !== 404) return withSecurityHeaders(assetResponse);
+    if (assetResponse.status !== 404) return withAssetHeaders(assetResponse, url.pathname);
 
     const method = request.method.toUpperCase();
     const isPageRequest = (method === "GET" || method === "HEAD") &&
@@ -439,7 +459,7 @@ export default {
       if (!HAS_EXTENSION.test(url.pathname)) {
         const target = url.pathname === "/" ? "/index.html" : url.pathname.replace(/\/+$/, "") + ".html";
         const pretty = await env.ASSETS.fetch(new URL(target, request.url));
-        if (pretty.status !== 404) return withSecurityHeaders(pretty);
+        if (pretty.status !== 404) return withAssetHeaders(pretty, target);
       }
 
       /* Nothing there: the site's own 404 page, still answering 404. */
@@ -457,7 +477,6 @@ export default {
       }
     }
 
-    return withSecurityHeaders(assetResponse);
+    return withAssetHeaders(assetResponse, url.pathname);
   },
 };
-

@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/status.html</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/</loc></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/status.html</loc></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/rustservers.html</loc></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/rustskins.html</loc></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/dashboard/kitbuilder.html</loc></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/dashboard/colortext.html</loc></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/legal/privacy.html</loc></url>
+  <url><loc>https://rustyworks-rce-j7ao5f.camelai.app/legal/terms.html</loc></url>
 </urlset>
