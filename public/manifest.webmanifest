@@ -1,6 +1,6 @@
 {
-  "name": "RustyWorks RCE",
-  "short_name": "RustyWorks",
+  "name": "Spinback RCE",
+  "short_name": "Spinback",
   "description": "The all-in-one free Discord bot for Rust Console Edition servers.",
   "id": "/",
   "start_url": "/",
