@@ -32,7 +32,7 @@ const HAS_EXTENSION = /\.[a-z0-9]+$/i;
 
 /* The application id is public — it is in every invite link on the site — so it
    can carry a default. The client secret, guild id and session secret cannot. */
-const DEFAULT_CLIENT_ID = "1468652543012896854";
+const DEFAULT_CLIENT_ID = "1570023832717361213";
 const NEXT_COOKIE = "rw_oauth_next";
 
 /* ---------- small helpers ---------- */

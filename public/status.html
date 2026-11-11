@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <!-- Marks the page as scripted: reveal-on-scroll only hides content when this is set. -->
+    <script>document.documentElement.className += " js";</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Status — RustyWorks RCE</title>
+    <meta name="description" content="Live status for the RustyWorks RCE bot: uptime, linked players, connected servers and guilds, straight from the bot's API.">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- One less origin to talk to: the face list is served from here, the woff2 files still stream from fonts.gstatic.com. -->
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
+    <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
+    <link rel="apple-touch-icon" href="/media/rustyworks-icon.svg">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <!-- theme.js first (it sets the seasonal logo and device mode), then the rest. -->
+    <script src="/theme.js"></script>
+    <script src="/config.js" defer></script>
+    <script src="/apiHelper.js" defer></script>
+    <script src="/nav-auth.js" defer></script>
+    <script src="/status.js" defer></script>
+  </head>
+  <body>
+    <!-- Seasonal overlay layer: theme.js fills this with the pieces the stylesheet animates. -->
+    <div id="rw-fx" aria-hidden="true"></div>
+    <header>
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="status.html">Status</a>
+            <a
+              href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
+              target="_blank"
+              rel="noopener"
+              class="btn">
+              Add to Discord
+            </a>
+            <!-- Signed-in capsule or "Login" pill, drawn by nav-auth.js. -->
+            <div class="rw-auth" id="rwAuth"></div>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
+        </nav>
+      </div>
+    </header>
+
+    <section class="status-hero">
+      <div class="wrap">
+        <div class="status-dot">
+          <span class="dot unknown" id="statusDot"></span>
+          <span id="statusHeadline">Checking the bot…</span>
+        </div>
+        <h1 style="margin-top:18px">System <span class="accent">Status</span></h1>
+        <p>
+          Everything below is read live from the bot's own API — no caching, no estimates.
+          If the bot cannot be reached, this page says so instead of showing stale numbers.
+        </p>
+      </div>
+    </section>
+
+    <section style="padding-top:0">
+      <div class="wrap">
+        <div class="status-cards">
+          <div class="status-card">
+            <div class="big" id="statUsers">—</div>
+            <div class="lbl">Linked players</div>
+          </div>
+          <div class="status-card">
+            <div class="big" id="statServers">—</div>
+            <div class="lbl">Servers connected</div>
+          </div>
+          <div class="status-card">
+            <div class="big" id="statGuilds">—</div>
+            <div class="lbl">Guilds running the bot</div>
+          </div>
+          <div class="status-card">
+            <div class="big" id="statUptime">—</div>
+            <div class="lbl">Uptime, last 30 days</div>
+          </div>
+          <div class="status-card">
+            <div class="big" id="statVersion">—</div>
+            <div class="lbl">Bot version</div>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <h2 style="margin-bottom:16px">Services</h2>
+
+          <div class="entry">
+            <span class="pill-out" id="svcApiPill">Checking</span>
+            <div class="etext">
+              <strong>Bot API</strong> — status feed the bot publishes, called through this site so
+              browsers are never blocked by cross-origin rules.
+              <span id="svcApiDetail"></span>
+            </div>
+          </div>
+
+          <div class="entry">
+            <span class="pill-in" id="svcSitePill">Online</span>
+            <div class="etext">
+              <strong>Website</strong> — you are reading it, so this one is up by definition. The
+              live counters above come through the same origin.
+            </div>
+          </div>
+
+          <div class="entry">
+            <span class="pill-out" id="svcAuthPill">Unknown</span>
+            <div class="etext">
+              <strong>Dashboard sign-in</strong> — the owner-only dashboard at
+              <code class="u-ember">/dashboard</code>, opened with a Discord sign-in.
+              <span id="svcAuthDetail"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <h2 style="margin-bottom:10px">About these numbers</h2>
+          <p class="note">
+            Counters refresh every 30 seconds while the tab is open, and pause while it is in the
+            background. Everything shown is what the bot reported a moment before — this page keeps
+            no history of its own, and it never shows a number it did not just receive.
+          </p>
+          <div class="u-mt-18">
+            <button type="button" class="btn ghost" id="statusRefresh">↻ Refresh now</button>
+            <span class="count-pill" id="statusUpdated">Not checked yet</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="rustservers.html">Server Browser</a>
+            <a href="rustskins.html">Skin Store</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+          <div class="foot-col">
+            <h4>Legal</h4>
+            <a href="legal/privacy.html">Privacy Policy</a>
+            <a href="legal/terms.html">Terms of Service</a>
+          </div>
+        </div>
+        <div class="foot-bottom">© <span id="year"></span> RustyWorks RCE. Not affiliated with Facepunch Studios or Rust.</div>
+      </div>
+    </footer>
+  </body>
+</html>

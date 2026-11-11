@@ -17,11 +17,16 @@ public/
   nav-auth.js           Header account widget: "Login" pill, or the signed-in capsule
   login.html            Sign-in page for the owner-only dashboard
   login.js              Keeps that page's button honest about the current session
+  status.html           Live status page: uptime, counters, service rows
+  status.js             Fills it from /api/status and /auth/me (no invented numbers)
   home.js               Homepage behaviour: nav, partners panel, scroll reveal,
                         live counts, hero video
   manifest.webmanifest  Web app manifest (installable "add to home screen")
-  media/rustyworks-icon.svg  Site logo, favicon and app icon (name the stylesheet's
-                             seasonal rules expect)
+  media/fonts.css       @font-face list for Chakra Petch, Oswald and JetBrains Mono,
+                        served from here so pages contact one less origin
+  media/rustyworks-icon.svg      Site logo, favicon and app icon (name the stylesheet's
+                                 seasonal rules expect)
+  media/rustyworks-icon-christmas.svg  In-season logo (Santa hat), swapped in by theme.js
   robots.txt
 worker.js               Serves public/, proxies the bot API, and gates /dashboard
 scripts/build.mjs       Copies public/ + worker.js into build/
@@ -76,6 +81,12 @@ Four small, dependency-free files, all loaded with `defer`:
 The homepage works with scripting off: the scroll-reveal animation only hides content once
 the page has flagged itself as scripted, and the live counts keep the numbers in the markup
 if the API cannot be reached.
+
+## Pages
+
+The site is the homepage, `login.html`, `status.html` and the `/dashboard/` area. The
+Features, Commands, Docs, Updates and Partners pages were dropped, so nothing links to
+them: the navigation is Status, Add to Discord and the account widget.
 
 ## Bot and dashboard
 
