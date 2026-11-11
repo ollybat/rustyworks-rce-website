@@ -211,6 +211,11 @@
 .st-defs dd { color: var(--text-dim); font-size: 0.9rem; margin: 2px 0 0; }
 .st-updated { color: var(--text-dim); font-size: 0.8rem; margin-top: 14px; text-align: center; }
 
+@media (max-width: 760px) {
+  .st-verdict { grid-template-columns: auto 1fr; }
+  .st-verdict .vwhen { grid-column: 2; text-align: left; }
+}
+
 /* ---- light palette: the page's own colours, not the seasonal ones ----- */
 html[data-theme="light"] .st-banner { background: rgba(180, 40, 30, 0.07); color: var(--text); }
 html[data-theme="light"] .st-banner.is-warn { background: rgba(194, 65, 12, 0.08); }
@@ -233,4 +238,166 @@ html[data-theme="light"] .st-copied { color: #2f7d32; }
 @media (prefers-reduced-motion: reduce) {
   .st-fill, .st-tick { transition: none; }
   .dot.on { animation: none; }
+}
+
+
+/* ---- verdict card ----------------------------------------------------- */
+.st-verdict {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px 18px;
+  align-items: center;
+  background: linear-gradient(160deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin: 26px 0 0;
+}
+.st-verdict.is-warn { border-left-color: var(--ember); }
+.st-verdict.is-down { border-left-color: #e74c3c; }
+.st-verdict.is-unknown { border-left-color: var(--text-dim); }
+.st-verdict .vdot { width: 12px; height: 12px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+.st-verdict.is-warn .vdot { background: var(--ember); box-shadow: 0 0 12px var(--ember); }
+.st-verdict.is-down .vdot { background: #e74c3c; box-shadow: 0 0 12px #e74c3c; }
+.st-verdict.is-unknown .vdot { background: var(--text-dim); box-shadow: none; }
+.st-verdict h2 { font-size: 1.1rem; }
+.st-verdict .vreasons { color: var(--text-dim); font-size: 0.88rem; margin-top: 4px; }
+.st-verdict .vreasons ul { list-style: none; }
+.st-verdict .vreasons li::before { content: "\2013 "; color: var(--rust); }
+.st-verdict .vwhen { color: var(--text-dim); font-size: 0.8rem; text-align: right; white-space: nowrap; }
+
+/* ---- measured by this site -------------------------------------------- */
+.st-hstats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.st-hstat {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.st-hstat b { display: block; font-family: 'Oswald', sans-serif; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.st-hstat span { color: var(--text-dim); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 1px; }
+.st-toggle { display: inline-flex; gap: 6px; margin-left: auto; }
+.st-toggle button {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.st-toggle button[aria-pressed="true"] { color: var(--ember); border-color: var(--rust); }
+.st-panel-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+.st-hours { display: flex; gap: 3px; align-items: flex-end; height: 74px; margin: 18px 0 8px; }
+.st-hour { flex: 1 1 6px; min-width: 4px; border-radius: 3px 3px 0 0; background: var(--line); height: 12%; position: relative; }
+.st-hour.ok { background: linear-gradient(180deg, var(--green), rgba(108, 194, 74, 0.45)); }
+.st-hour.warn { background: linear-gradient(180deg, var(--ember), rgba(244, 162, 89, 0.4)); }
+.st-hour.bad { background: linear-gradient(180deg, #e74c3c, rgba(231, 76, 60, 0.4)); }
+.st-hour.none { background: repeating-linear-gradient(45deg, var(--line), var(--line) 3px, transparent 3px, transparent 6px); height: 8%; }
+.st-hour-axis { display: flex; justify-content: space-between; color: var(--text-dim); font-size: 0.72rem; }
+.st-incidents { list-style: none; display: grid; gap: 8px; margin-top: 8px; }
+.st-incidents li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-left: 2px solid #e74c3c;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.88rem;
+}
+.st-incidents li .it { font-variant-numeric: tabular-nums; color: var(--text); }
+.st-incidents li .id { color: var(--text-dim); }
+.st-incidents li .ic { font-variant-numeric: tabular-nums; color: #ec7063; white-space: nowrap; }
+
+/* ---- toned pills: a third state, between "in" and "out" --------------- */
+.pill-warn { display: inline-block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 3px 10px; border-radius: 20px; background: rgba(244, 162, 89, 0.15); color: var(--ember); }
+html[data-theme="light"] .pill-warn { color: #b45309; }
+
+/* ---- event log -------------------------------------------------------- */
+.st-events { list-style: none; display: grid; gap: 6px; margin-top: 12px; max-height: 260px; overflow: auto; }
+.st-events li { display: grid; grid-template-columns: 74px 1fr; gap: 12px; font-size: 0.86rem; color: var(--text-dim); }
+.st-events li time { font-variant-numeric: tabular-nums; color: var(--text); }
+.st-events li.is-warn .what { color: var(--ember); }
+.st-events li.is-bad .what { color: #ec7063; }
+.st-events li.is-good .what { color: var(--green); }
+.st-empty { color: var(--text-dim); font-size: 0.88rem; margin-top: 10px; }
+
+
+/* A rule that sets display beats the hidden attribute, so say it explicitly:
+   the bar must stay out of the way until the reader has scrolled. */
+.st-mini[hidden], .st-banner[hidden] { display: none !important; }
+
+/* ---- sticky mini bar -------------------------------------------------- */
+.st-mini {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 14px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(28, 23, 18, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 40px;
+  padding: 9px 16px;
+  font-size: 0.82rem;
+  max-width: calc(100vw - 24px);
+}
+html[data-theme="light"] .st-mini { background: rgba(255, 252, 249, 0.95); }
+.st-mini .dot { width: 10px; height: 10px; }
+.st-mini strong { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; }
+.st-mini .mwhen { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-mini button {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  color: var(--text-dim);
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.72rem;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.st-mini button:hover { color: var(--ember); border-color: var(--rust); }
+
+.st-tallies { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--text-dim); }
+.st-tallies i { font-style: normal; width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 6px; }
+.st-tallies .k-ok i { background: var(--green); }
+.st-tallies .k-mid i { background: var(--ember); }
+.st-tallies .k-slow i { background: #e74c3c; }
+.st-tallies .k-fail i { background: #7f2d24; }
+.st-keys { color: var(--text-dim); font-size: 0.78rem; margin-top: 14px; }
+.st-keys kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin: 0 2px;
+}
+
+/* ---- print: a clean one-pager for the notice board -------------------- */
+@media print {
+  .st-controls, .st-mini, .st-toggle, .st-keys, .skip-link, #rw-fx, header, footer { display: none !important; }
+  body { background: #fff !important; color: #111 !important; background-image: none; }
+  .panel-box, .st-kpi, .st-hstat, .st-svc-row, .st-verdict { border-color: #bbb !important; background: #fff !important; }
+  .st-raw { max-height: none; }
+  .st-banner { border-color: #c00 !important; }
+  a[href]::after { content: " (" attr(href) ")"; font-size: 0.72rem; color: #555; }
 }

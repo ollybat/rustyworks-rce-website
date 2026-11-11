@@ -88,17 +88,21 @@
         </div>
         <h1 style="margin-top:18px">System <span class="accent">Status</span></h1>
         <p>
-          Every number below is read live from the bot&rsquo;s own API, through this site. Nothing is
-          cached, averaged or guessed — and when the bot cannot be reached, this page says so instead
-          of quietly showing yesterday&rsquo;s figures.
+          Two measurements, both real: what the bot says about itself, and what this site and your
+          browser actually got back when they asked. Nothing here is averaged into existence, and when
+          something cannot be reached the page says so instead of showing yesterday&rsquo;s figures.
         </p>
         <div class="st-controls">
           <button type="button" class="st-btn" id="stRefresh">Refresh now</button>
           <button type="button" class="st-btn" id="stPause" aria-pressed="false" title="Stop or restart the automatic checks">Pause auto-refresh</button>
           <span class="st-next" id="stNext">Auto-refresh every 30 seconds</span>
           <button type="button" class="st-btn" id="stCopy">Copy summary</button>
+          <button type="button" class="st-btn" id="stNotify" aria-pressed="false" title="Only while this tab is open">Notify me if it drops</button>
           <button type="button" class="st-btn" id="stRawJump">Raw payload</button>
         </div>
+        <p class="st-keys">
+          Keyboard: <kbd>R</kbd> refresh · <kbd>P</kbd> pause · <kbd>C</kbd> copy summary · <kbd>N</kbd> notifications
+        </p>
       </div>
     </section>
 
@@ -107,6 +111,15 @@
         <div class="st-banner" id="stBanner" hidden>
           <strong id="stBannerTitle">Bot unreachable</strong>
           <p id="stBannerText"></p>
+        </div>
+
+        <div class="st-verdict" id="stVerdict">
+          <span class="vdot" aria-hidden="true"></span>
+          <div>
+            <h2 id="stVerdictTitle">Checking…</h2>
+            <div class="vreasons" id="stVerdictReasons">Waiting for the first answer.</div>
+          </div>
+          <div class="vwhen" id="stVerdictWhen">&nbsp;</div>
         </div>
 
         <div class="st-kpis" id="stKpis">
@@ -134,14 +147,55 @@
           </div>
         </div>
 
+        <div class="panel-box" id="stMonitorPanel">
+          <div class="st-panel-head">
+            <h2>Measured by this site</h2>
+            <div class="st-toggle" role="group" aria-label="Time range">
+              <button type="button" id="stRange24" aria-pressed="true">Last 24 hours</button>
+              <button type="button" id="stRange168" aria-pressed="false">Last 7 days</button>
+            </div>
+          </div>
+          <p class="note">
+            Every time anyone loads this page, the site records what the bot API answered and how long it
+            took — from the site, not from your browser. That is what is charted here. It is honest about
+            its own limits: samples exist only when somebody is looking, and a bar is drawn only from real
+            checks, never filled in.
+          </p>
+          <div class="st-hstats" id="stMonStats"></div>
+          <div class="st-hours" id="stMonBars" role="img" aria-label="Checks recorded per hour, coloured by whether they succeeded"></div>
+          <div class="st-hour-axis" id="stMonAxis"></div>
+          <div class="st-chart" id="stMonChart"></div>
+          <div class="st-legend" id="stMonLegend">Bar height is how many checks landed in that hour; green means every one answered, ember means some failed, red means it was down, hatched means nobody looked.</div>
+          <h3 style="margin:22px 0 0; font-size:0.95rem">Incidents recorded</h3>
+          <ul class="st-incidents" id="stMonIncidents"></ul>
+          <p class="st-empty" id="stMonEmpty"></p>
+          <p class="st-foot" id="stMonFoot" style="margin-top:14px"></p>
+        </div>
+
         <div class="panel-box">
           <h2 style="margin-bottom:6px">This visit, measured from your browser</h2>
           <p class="note" id="stSessionNote">Each bar is one real request this page made, timed by your own browser. It starts empty every visit on purpose: it is a live measurement, not history we keep.</p>
           <div class="st-strip" id="stStrip" role="img" aria-label="Response time for each check made during this visit"></div>
           <div class="st-session-stats" id="stSessionStats"></div>
           <div class="st-chart" id="stChart"></div>
-          <div class="st-legend">Response time per check, newest on the right. Green reads fast, ember is normal, red is slow.</div>
+          <div class="st-legend">Response time per check, newest on the right. Green reads fast, ember is normal, red is slow. Your connection is part of every number here.</div>
+          <div class="st-copy-row">
+            <span class="st-tallies" id="stTallies"></span>
+          </div>
+          <div class="st-copy-row">
+            <button type="button" class="st-btn" id="stCopyDiscord">Copy for Discord</button>
+            <button type="button" class="st-btn" id="stExportJson">Download visit log (JSON)</button>
+            <button type="button" class="st-btn" id="stExportCsv">Download visit log (CSV)</button>
+            <span class="st-copied" id="stExportNote" role="status" aria-live="polite"></span>
+          </div>
           <p class="st-updated" id="stUpdated">Waiting for the first check…</p>
+        </div>
+
+        <div class="panel-box">
+          <h2 style="margin-bottom:6px">What this page saw, while you watched</h2>
+          <p class="note">Only changes are listed, with the time they were noticed. The newest is at the top.</p>
+          <ul class="st-events" id="stEvents"></ul>
+          <p class="st-empty" id="stEventsEmpty">Nothing has changed since the page opened.</p>
         </div>
 
         <div class="panel-box">
@@ -151,6 +205,11 @@
               <span class="nm">Bot API</span>
               <span class="dt" id="svcApiDetail">The status feed the bot publishes, called through this site so your browser is never blocked by cross-origin rules.</span>
               <span class="mt"><span class="pill-out" id="svcApiPill">Checking</span></span>
+            </div>
+            <div class="st-svc-row">
+              <span class="nm">Status monitor</span>
+              <span class="dt" id="svcMonDetail">The recorder behind the &ldquo;measured by this site&rdquo; panel: one sample per check, kept for a week.</span>
+              <span class="mt"><span class="pill-out" id="svcMonPill">Checking</span></span>
             </div>
             <div class="st-svc-row">
               <span class="nm">Website</span>
@@ -176,6 +235,7 @@
           <div class="st-copy-row">
             <button type="button" class="st-btn" id="stCopyJson">Copy JSON</button>
             <a class="st-btn" href="/api/status" target="_blank" rel="noopener">Open the endpoint</a>
+            <a class="st-btn" href="/api/history?hours=24" target="_blank" rel="noopener">Open the history</a>
             <span class="st-copied" id="stCopyNote" role="status" aria-live="polite"></span>
           </div>
           <div class="st-raw"><pre id="stRaw" tabindex="0">No answer yet.</pre></div>
@@ -194,8 +254,10 @@
             <dd>The bot&rsquo;s own rolling figure for the last 30 days.</dd>
             <dt>API uptime, 30 days</dt>
             <dd>The same figure for the API that answers this page.</dd>
-            <dt>Response time</dt>
-            <dd>How long your browser waited for that answer. It depends on your connection as much as on the bot, so read the shape of the chart rather than any single spike.</dd>
+            <dt>Measured by this site</dt>
+            <dd>Checks the site itself made while people were reading it. The response time is from the site to the bot API, so it excludes your connection — the opposite of the visit chart below it. Fewer samples mean quieter days.</dd>
+            <dt>This visit</dt>
+            <dd>Requests your browser made while this tab was open. Response time here includes your connection, so read the shape rather than any single spike.</dd>
             <dt>Bot heartbeat</dt>
             <dd>The timestamp the bot last reported itself alive. If it stops moving, the bot is in trouble even when the API still answers.</dd>
           </dl>
@@ -204,6 +266,13 @@
       </div>
     </section>
     </main>
+
+    <div class="st-mini" id="stMini" hidden>
+      <span class="dot unknown" id="stMiniDot"></span>
+      <strong id="stMiniText">Checking…</strong>
+      <span class="mwhen" id="stMiniWhen"></span>
+      <button type="button" id="stMiniRefresh">Refresh</button>
+    </div>
 
     <footer>
       <div class="wrap">
