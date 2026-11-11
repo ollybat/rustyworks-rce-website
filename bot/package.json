@@ -1,0 +1,15 @@
+{
+  "name": "spinback-rce-bot",
+  "private": true,
+  "type": "module",
+  "description": "Spinback RCE Discord bot: gateway presence plus a signed interactions endpoint, served by one process on Railway.",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  }
+}
