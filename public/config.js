@@ -20,3 +20,9 @@ window.RW_BRAND = {
   tagline: 'The free all-in-one Discord bot for Rust Console Edition servers.',
   site: 'https://rustyworks-rce-j7ao5f.camelai.app'
 };
+
+/* The Kit Studio page calls API() and loads this file before its own script, so the helper
+   has to exist here as well as in apiHelper.js. */
+window.API = window.API || function () {
+  return String(window.RW_API || '').replace(/\/+$/, '');
+};

@@ -5,6 +5,9 @@
     return (window.RW_API || '').replace(/\/+$/, '');
   }
 
+  /* The Kit Studio page (written separately) calls API() for the bot API base. */
+  window.API = window.API || function () { return base(); };
+
   window.RWApi = {
     configured: function () { return !!base(); },
     url: function (path) {

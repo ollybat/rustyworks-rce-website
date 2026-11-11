@@ -129,7 +129,7 @@
   };
 
   function start() {
-    slot = document.getElementById("rwAuth");
+    slot = document.getElementById("rwAuth") || document.getElementById("rwAuthMount");
     window.RWAuth.ready = load();
   }
 
