@@ -20,7 +20,7 @@ if (!DISCORD_BOT_TOKEN || !DISCORD_APPLICATION_ID || !DISCORD_GUILD_ID) {
 
 const command = {
   name: "dashboard",
-  description: "Open your RustyWorks RCE dashboard (server owner only)",
+  description: "Open your Spinback RCE dashboard (server owner only)",
   type: 1,                          /* CHAT_INPUT */
   dm_permission: false,             /* never in DMs */
   contexts: [0],                    /* GUILD only — no user-install */

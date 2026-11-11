@@ -1,5 +1,5 @@
 /* ==========================================================================
-   RustyWorks RCE — Discord bot (interactions endpoint)
+   Spinback RCE — Discord bot (interactions endpoint)
    --------------------------------------------------------------------------
    One command: /dashboard. It replies privately with a link to the site's
    owner-only dashboard.
@@ -75,7 +75,7 @@ function isGuildOwner(interaction, env) {
 function dashboardReply(env) {
   const url = (env.SITE_URL || "").replace(/\/+$/, "") + "/dashboard";
   const content = [
-    "**RustyWorks RCE — dashboard**",
+    "**Spinback RCE — dashboard**",
     "This link is private to you and only works while signed in as the owner of this server.",
     url,
   ].join("\n");
