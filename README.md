@@ -27,7 +27,10 @@ public/
   media/rustyworks-icon.svg      Site logo, favicon and app icon (name the stylesheet's
                                  seasonal rules expect)
   media/rustyworks-icon-christmas.svg  In-season logo (Santa hat), swapped in by theme.js
-  robots.txt
+  robots.txt            Crawler rules: the dashboard, sign-in and API stay out
+  sitemap.xml           The two public pages, for search engines
+  404.html              Styled not-found page, served by the worker with a 404
+  notfound.js           Fills the year and names the path that missed
 worker.js               Serves public/, proxies the bot API, and gates /dashboard
 scripts/build.mjs       Copies public/ + worker.js into build/
 bot/
@@ -87,6 +90,27 @@ if the API cannot be reached.
 The site is the homepage, `login.html`, `status.html` and the `/dashboard/` area. The
 Features, Commands, Docs, Updates and Partners pages were dropped, so nothing links to
 them: the navigation is Status, Add to Discord and the account widget.
+
+## How the site behaves
+
+- **Pretty URLs** — `/status` serves `status.html`, `/` serves `index.html`, so a
+  link copied out of the address bar stays tidy.
+- **A real 404** — anything that looks like a page but does not exist gets the
+  site's own 404 page and an honest 404 status, never a blank page or a bounce
+  back to the homepage.
+- **Light and dark** — the stylesheet has always carried a full light palette
+  under `html[data-theme="light"]`; `theme.js` now puts a switch in the
+  navigation. Dark is what a first time visitor gets, the choice is remembered,
+  and a tiny inline script in each page's `<head>` applies it before first paint
+  so there is no flash of the wrong palette.
+- **Keyboard and screen readers** — a skip link on every page, a `<main>`
+  landmark, `aria-current` on the navigation item you are on, and the live
+  counters announce themselves politely as they change.
+- **Search engines** — per-page titles and descriptions, canonical URLs, Open
+  Graph and Twitter cards, `SoftwareApplication` structured data on the
+  homepage, plus `robots.txt` and `sitemap.xml`.
+- **Headers** — asset responses carry `x-content-type-options: nosniff` and a
+  referrer policy; the dashboard and sign-in pages are `noindex`.
 
 ## Bot and dashboard
 
