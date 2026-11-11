@@ -1,5 +1,5 @@
 /* ==========================================================================
-   RustyWorks RCE — site worker
+   Spinback RCE — site worker
    --------------------------------------------------------------------------
    Three jobs, in this order:
 
@@ -430,7 +430,7 @@ function needsSetup(env) {
   return html(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard not configured</title><link rel="stylesheet" href="/style.css"></head>
-<body><header><div class="wrap"><nav><a href="/" class="logo">RustyWorks<span class="accent">RCE</span></a></nav></div></header>
+<body><header><div class="wrap"><nav><a href="/" class="logo">Spinback<span class="accent">RCE</span></a></nav></div></header>
 <section class="page-hero"><div class="wrap"><h1>Dashboard needs a few secrets</h1>
 <p>Set <code>DISCORD_CLIENT_SECRET</code>, <code>DISCORD_GUILD_ID</code> and
 <code>SESSION_SECRET</code> on this Worker, then reload. Until then the dashboard stays closed —
@@ -584,14 +584,14 @@ async function dashboard(request, env) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <title>Dashboard — RustyWorks RCE</title>
+  <title>Dashboard — Spinback RCE</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header>
     <div class="wrap">
       <nav>
-        <a href="/" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+        <a href="/" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
         <div class="nav-links">
           <a href="/">Website</a>
           <a href="/auth/logout" class="btn ghost sm">Sign out</a>
