@@ -411,6 +411,7 @@
           });
           html += '</div>';
           if (s.image) html += '<img src="' + esc(s.image) + '" alt="' + esc(s.name) + '" style="width:100%;border-radius:14px;margin-top:14px">';
+          if (s.link) html += '<a class="btn sm" href="' + esc(s.link) + '" target="_blank" rel="noopener" style="margin-top:16px;display:inline-block">Official store page</a>';
           sheet(s.name, html);
         });
         grid.appendChild(card);
