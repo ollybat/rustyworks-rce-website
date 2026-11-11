@@ -39,6 +39,7 @@
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="/status.css">
     <link rel="stylesheet" href="sections.css">
     <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
     <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
@@ -87,78 +88,118 @@
         </div>
         <h1 style="margin-top:18px">System <span class="accent">Status</span></h1>
         <p>
-          Everything below is read live from the bot's own API — no caching, no estimates.
-          If the bot cannot be reached, this page says so instead of showing stale numbers.
+          Every number below is read live from the bot&rsquo;s own API, through this site. Nothing is
+          cached, averaged or guessed — and when the bot cannot be reached, this page says so instead
+          of quietly showing yesterday&rsquo;s figures.
         </p>
+        <div class="st-controls">
+          <button type="button" class="st-btn" id="stRefresh">Refresh now</button>
+          <button type="button" class="st-btn" id="stPause" aria-pressed="false" title="Stop or restart the automatic checks">Pause auto-refresh</button>
+          <span class="st-next" id="stNext">Auto-refresh every 30 seconds</span>
+          <button type="button" class="st-btn" id="stCopy">Copy summary</button>
+          <button type="button" class="st-btn" id="stRawJump">Raw payload</button>
+        </div>
       </div>
     </section>
 
     <section style="padding-top:0">
       <div class="wrap">
-        <div class="status-cards">
-          <div class="status-card">
-            <div class="big" id="statUsers">—</div>
-            <div class="lbl">Linked players</div>
+        <div class="st-banner" id="stBanner" hidden>
+          <strong id="stBannerTitle">Bot unreachable</strong>
+          <p id="stBannerText"></p>
+        </div>
+
+        <div class="st-kpis" id="stKpis">
+          <div class="st-kpi"><div class="v" id="statUsers">—</div><div class="lbl">Linked players</div><div class="s" id="subUsers">waiting for the first check</div></div>
+          <div class="st-kpi"><div class="v" id="statServers">—</div><div class="lbl">Servers connected</div><div class="s" id="subServers">waiting for the first check</div></div>
+          <div class="st-kpi"><div class="v" id="statGuilds">—</div><div class="lbl">Guilds running the bot</div><div class="s" id="subGuilds">waiting for the first check</div></div>
+          <div class="st-kpi"><div class="v" id="statUptime">—</div><div class="lbl">Bot uptime, 30 days</div><div class="s" id="subUptime">waiting for the first check</div></div>
+          <div class="st-kpi"><div class="v" id="statApiUptime">—</div><div class="lbl">API uptime, 30 days</div><div class="s" id="subApiUptime">waiting for the first check</div></div>
+        </div>
+
+        <div class="panel-box">
+          <h2 style="margin-bottom:6px">Availability the bot reports</h2>
+          <p class="note">A rolling 30-day figure, published by the API itself. The rough downtime line is worked out from that percentage — it is arithmetic on their number, not a measurement of ours.</p>
+          <div class="st-rows" style="margin-top:18px">
+            <div class="st-row">
+              <div class="st-row-top"><b>Bot uptime</b><span id="stBotUptimeText">—</span></div>
+              <div class="st-track"><div class="st-fill" id="stBotFill"></div></div>
+              <div class="st-foot" id="stBotFoot"></div>
+            </div>
+            <div class="st-row">
+              <div class="st-row-top"><b>API uptime</b><span id="stApiUptimeText">—</span></div>
+              <div class="st-track"><div class="st-fill" id="stApiFill"></div></div>
+              <div class="st-foot" id="stApiFoot"></div>
+            </div>
           </div>
-          <div class="status-card">
-            <div class="big" id="statServers">—</div>
-            <div class="lbl">Servers connected</div>
-          </div>
-          <div class="status-card">
-            <div class="big" id="statGuilds">—</div>
-            <div class="lbl">Guilds running the bot</div>
-          </div>
-          <div class="status-card">
-            <div class="big" id="statUptime">—</div>
-            <div class="lbl">Uptime, last 30 days</div>
-          </div>
-          <div class="status-card">
-            <div class="big" id="statVersion">—</div>
-            <div class="lbl">Bot version</div>
-          </div>
+        </div>
+
+        <div class="panel-box">
+          <h2 style="margin-bottom:6px">This visit, measured from your browser</h2>
+          <p class="note" id="stSessionNote">Each bar is one real request this page made, timed by your own browser. It starts empty every visit on purpose: it is a live measurement, not history we keep.</p>
+          <div class="st-strip" id="stStrip" role="img" aria-label="Response time for each check made during this visit"></div>
+          <div class="st-session-stats" id="stSessionStats"></div>
+          <div class="st-chart" id="stChart"></div>
+          <div class="st-legend">Response time per check, newest on the right. Green reads fast, ember is normal, red is slow.</div>
+          <p class="st-updated" id="stUpdated">Waiting for the first check…</p>
         </div>
 
         <div class="panel-box">
           <h2 style="margin-bottom:16px">Services</h2>
-
-          <div class="entry">
-            <span class="pill-out" id="svcApiPill">Checking</span>
-            <div class="etext">
-              <strong>Bot API</strong> — status feed the bot publishes, called through this site so
-              browsers are never blocked by cross-origin rules.
-              <span id="svcApiDetail"></span>
+          <div class="st-svc">
+            <div class="st-svc-row">
+              <span class="nm">Bot API</span>
+              <span class="dt" id="svcApiDetail">The status feed the bot publishes, called through this site so your browser is never blocked by cross-origin rules.</span>
+              <span class="mt"><span class="pill-out" id="svcApiPill">Checking</span></span>
             </div>
-          </div>
-
-          <div class="entry">
-            <span class="pill-in" id="svcSitePill">Online</span>
-            <div class="etext">
-              <strong>Website</strong> — you are reading it, so this one is up by definition. The
-              live counters above come through the same origin.
+            <div class="st-svc-row">
+              <span class="nm">Website</span>
+              <span class="dt">You are reading it, so this one is up by definition. The page and its assets come from the same origin as the counters.</span>
+              <span class="mt"><span class="pill-in" id="svcSitePill">Online</span></span>
             </div>
-          </div>
-
-          <div class="entry">
-            <span class="pill-out" id="svcAuthPill">Unknown</span>
-            <div class="etext">
-              <strong>Dashboard sign-in</strong> — the owner-only dashboard at
-              <code class="u-ember">/dashboard</code>, opened with a Discord sign-in.
-              <span id="svcAuthDetail"></span>
+            <div class="st-svc-row">
+              <span class="nm">Bot heartbeat</span>
+              <span class="dt" id="svcBeatDetail">The last time the bot told the API it was alive.</span>
+              <span class="mt"><span class="pill-out" id="svcBeatPill">Checking</span></span>
+            </div>
+            <div class="st-svc-row">
+              <span class="nm">Dashboard sign-in</span>
+              <span class="dt" id="svcAuthDetail">The owner-only dashboard at <code class="u-ember">/dashboard</code>, opened with a Discord sign-in.</span>
+              <span class="mt"><span class="pill-out" id="svcAuthPill">Unknown</span></span>
             </div>
           </div>
         </div>
 
-        <div class="panel-box">
-          <h2 style="margin-bottom:10px">About these numbers</h2>
-          <p class="note">
-            Counters refresh every 30 seconds while the tab is open, and pause while it is in the
-            background. Everything shown is what the bot reported a moment before — this page keeps
-            no history of its own, and it never shows a number it did not just receive.
-          </p>
-          <div class="u-mt-18">
-            <button type="button" class="btn ghost" id="statusRefresh">↻ Refresh now</button>
-            <span class="count-pill" id="statusUpdated" role="status" aria-live="polite">Not checked yet</span>
+        <div class="panel-box" id="stRawPanel">
+          <h2 style="margin-bottom:6px">Raw payload</h2>
+          <p class="note">Exactly what <code class="u-ember">/api/status</code> answered, so you can check every figure above against its source.</p>
+          <div class="st-copy-row">
+            <button type="button" class="st-btn" id="stCopyJson">Copy JSON</button>
+            <a class="st-btn" href="/api/status" target="_blank" rel="noopener">Open the endpoint</a>
+            <span class="st-copied" id="stCopyNote" role="status" aria-live="polite"></span>
           </div>
+          <div class="st-raw"><pre id="stRaw" tabindex="0">No answer yet.</pre></div>
+        </div>
+
+        <div class="panel-box">
+          <h2 style="margin-bottom:10px">What each line means</h2>
+          <dl class="st-defs">
+            <dt>Linked players</dt>
+            <dd>Players who have linked a Rust Console account to the bot, counted by the bot.</dd>
+            <dt>Servers connected</dt>
+            <dd>Game servers the bot is currently paired with.</dd>
+            <dt>Guilds running the bot</dt>
+            <dd>Discord servers the bot has been added to.</dd>
+            <dt>Bot uptime, 30 days</dt>
+            <dd>The bot&rsquo;s own rolling figure for the last 30 days.</dd>
+            <dt>API uptime, 30 days</dt>
+            <dd>The same figure for the API that answers this page.</dd>
+            <dt>Response time</dt>
+            <dd>How long your browser waited for that answer. It depends on your connection as much as on the bot, so read the shape of the chart rather than any single spike.</dd>
+            <dt>Bot heartbeat</dt>
+            <dd>The timestamp the bot last reported itself alive. If it stops moving, the bot is in trouble even when the API still answers.</dd>
+          </dl>
+          <p class="note" style="margin-top:16px">No analytics, no accounts, no cookies on this page. Reload it and the visit strip starts again from nothing.</p>
         </div>
       </div>
     </section>
