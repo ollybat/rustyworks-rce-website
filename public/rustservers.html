@@ -7,7 +7,7 @@
          before the first paint, so there is never a flash of the wrong palette. */
       document.documentElement.className += " js";
       try {
-        var rwTheme = localStorage.getItem("rw-theme");
+        var rwTheme = localStorage.getItem("spinback-theme");
         if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
       } catch (e) {}
     </script>
@@ -38,21 +38,24 @@
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/ui-extras.css">
     <link rel="stylesheet" href="/sections.css">
-    <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
-    <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0b0704">
     <script src="/theme.js"></script>
+    <script src="/config.js"></script>
     <script src="/nav-auth.js" defer></script>
-  </head>
+    <link rel="stylesheet" href="/theme-spinback.css">
+  <link rel="stylesheet" href="/motion.css">
+</head>
   <body>
     <div id="rw-fx" aria-hidden="true"></div>
     <a class="skip-link" href="#main">Skip to content</a>
     <header>
       <div class="wrap">
         <nav>
-          <a href="/index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+          <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
           <div class="nav-links" id="navLinks">
             <a href="/status.html">Status</a>
             <a href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands" target="_blank" rel="noopener" class="btn">Add to Discord</a>
@@ -106,7 +109,7 @@
       <div class="wrap">
         <div class="foot-grid">
           <div class="foot-col foot-brand">
-            <a href="/index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
+            <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
             <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
           </div>
           <div class="foot-col">
@@ -131,5 +134,6 @@
       </div>
     </footer>
     <script src="/page.js" defer></script>
-  </body>
+  <script src="/motion.js" defer></script>
+</body>
 </html>
