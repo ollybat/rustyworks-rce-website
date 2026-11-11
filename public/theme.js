@@ -45,6 +45,97 @@
   }
   if (isStandalone()) root.setAttribute('data-app', '');
 
+  /* ---------- seasonal themes ---------- */
+  /* The stylesheet keys the whole seasonal look off <html data-season="…"> and
+     draws its moving parts inside #rw-fx; this decides which season is on and
+     fills that layer.
+
+     Christmas ships an icon variant, so it can switch the logo. Halloween and
+     Thanksgiving are fully styled in the CSS but they swap the logo for
+     media/rustyworks-icon-<season>.svg — add those two files to the list below
+     and they light up as well. */
+  /* from/to are [month, day]; a window that crosses new year wraps around. */
+  var SEASONS = [
+    { name: 'christmas', from: [11, 1], to: [1, 6], icon: '/media/rustyworks-icon-christmas.svg' }
+  ];
+
+  function inSeason(now, season) {
+    var month = now.getMonth() + 1, day = now.getDate();
+    var here = month * 100 + day, first = season.from[0] * 100 + season.from[1], last = season.to[0] * 100 + season.to[1];
+    /* A season that runs over new year (December into January) wraps around. */
+    return first <= last ? (here >= first && here <= last) : (here >= first || here <= last);
+  }
+
+  /* ?season=christmas previews a season, ?season=off turns them off. */
+  function requestedSeason() {
+    var asked = /[?&]season=([a-z]+)/i.exec(window.location.search);
+    return asked ? asked[1].toLowerCase() : null;
+  }
+
+  function currentSeason() {
+    var asked = requestedSeason();
+    if (asked === 'off' || asked === 'none') return null;
+    if (asked) return SEASONS.filter(function (s) { return s.name === asked; })[0] || null;
+    var now = new Date();
+    return SEASONS.filter(function (s) { return inSeason(now, s); })[0] || null;
+  }
+
+  var season = currentSeason();
+
+  function applySeason() {
+    if (!season) return;
+    root.setAttribute('data-season', season.name);
+
+    /* Swap the logo for the seasonal icon; the stylesheet sizes it a little
+       larger so the hat is not clipped. */
+    if (season.icon) {
+      document.querySelectorAll('img[src$="/media/rustyworks-icon.svg"]').forEach(function (img) { img.src = season.icon; });
+    }
+
+    /* Keep the browser/status-bar colour in step with the seasonal palette. */
+    var bg = getComputedStyle(root).getPropertyValue('--bg').trim();
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (bg && meta) meta.setAttribute('content', bg);
+  }
+
+  /* The moving pieces: the stylesheet animates .xm-flake / .xm-star / .xm-spark
+     etc. by reading custom properties, so the layer only supplies elements and
+     random values. Skipped entirely when the visitor asked for less motion or
+     the device was flagged as low-powered. */
+  function buildSeasonFx() {
+    var layer = document.getElementById('rw-fx');
+    if (!layer || !season) return;
+    /* Nothing moving for someone who asked for less motion; a light dusting
+       rather than a blizzard on hardware that was flagged as low-powered. */
+    if (root.hasAttribute('data-reduce-motion')) return;
+
+    var rnd = function (min, max) { return (min + Math.random() * (max - min)).toFixed(2); };
+    var full = season.name === 'christmas' ? 26 : 18;
+    var count = root.hasAttribute('data-lowdevice') ? Math.round(full / 3) : full;
+
+    for (var i = 0; i < count; i++) {
+      var flake = document.createElement('span');
+      flake.className = 'xm-flake' + (i % 3 === 0 ? ' b' : '');
+      flake.style.setProperty('--x', rnd(0, 100) + 'vw');
+      flake.style.setProperty('--sz', rnd(3, 9) + 'px');
+      flake.style.setProperty('--o', rnd(0.35, 0.9));
+      flake.style.setProperty('--dur', rnd(9, 22) + 's');
+      flake.style.setProperty('--del', rnd(0, 14) + 's');
+      flake.style.setProperty('--dx', (Math.random() < 0.5 ? '-' : '') + rnd(10, 60) + 'px');
+      layer.appendChild(flake);
+    }
+  }
+
+  /* <html> exists right now, but the logo and the overlay layer live in the
+     body, so those wait for the DOM. */
+  applySeason();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { applySeason(); buildSeasonFx(); });
+  } else {
+    applySeason();
+    buildSeasonFx();
+  }
+
   /* ---------- install prompt ---------- */
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault();
@@ -60,6 +151,8 @@
 
   window.RWTheme = {
     isStandalone: isStandalone,
+    season: season ? season.name : null,
+    hasFxLayer: !!document.getElementById('rw-fx'),
     install: {
       /* Returns a promise resolving to true when the browser prompt was used. */
       help: function () {

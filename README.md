@@ -21,8 +21,13 @@ public/
   media/rustyworks-icon.svg  Site logo, favicon and app icon (name the stylesheet's
                              seasonal rules expect)
   robots.txt
-worker.js               Serves public/ as static assets
+worker.js               Serves public/, proxies the bot API, and gates /dashboard
 scripts/build.mjs       Copies public/ + worker.js into build/
+bot/
+  interactions-worker.js  The Discord bot: one /dashboard command, owner-only
+  register-commands.mjs   Registers that command inside the single guild
+docs/
+  DISCORD-DASHBOARD.md    Setup, secrets and how the owner-only rules are enforced
 ```
 
 ## Local development
@@ -69,6 +74,22 @@ Four small, dependency-free files, all loaded with `defer`:
 The homepage works with scripting off: the scroll-reveal animation only hides content once
 the page has flagged itself as scripted, and the live counts keep the numbers in the markup
 if the API cannot be reached.
+
+## Bot and dashboard
+
+One Discord server, one owner, one command — `/dashboard`, which replies privately
+with a link to this site's dashboard.
+
+| Rule | Enforced by |
+| --- | --- |
+| Nobody but the owner sees the command | Registered guild-scoped with `default_member_permissions: "0"`, so Discord hides it from everyone who is not an administrator — and the owner always is one. |
+| Nobody but the owner can run it | The bot compares `interaction.member.user.id` with `DISCORD_GUILD_OWNER_ID` and answers with an empty response otherwise. |
+| One server only | The command is registered in one guild, `dm_permission: false`, `contexts: [0]`, and interactions from any other guild are ignored. |
+| Only the owner can open the page | `/dashboard` requires a signed session created by a Discord sign-in, and only for the account Discord flags `owner: true` on that guild; no account means no page. |
+
+Setup steps, required secrets and the research behind those choices are in
+[docs/DISCORD-DASHBOARD.md](docs/DISCORD-DASHBOARD.md). The dashboard fails closed:
+with no secrets set it answers 503 and the rest of the site carries on.
 
 ## Configuration
 
