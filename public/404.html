@@ -10,11 +10,13 @@
         var rwTheme = localStorage.getItem("rw-theme");
         if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
       } catch (e) {}
-    <\/script>
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Page not found - RustyWorks RCE</title>
     <meta name="robots" content="noindex">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/chakrapetch/v13/cIf6MapbsEk7TDLdtEz1BwkWn6pg.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYg.woff2">
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/ui-extras.css">
@@ -23,9 +25,9 @@
     <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
     <link rel="apple-touch-icon" href="/media/rustyworks-icon.svg">
     <meta name="theme-color" content="#0b0704">
-    <script src="/theme.js"><\/script>
-    <script src="/nav-auth.js" defer><\/script>
-    <script src="/notfound.js" defer><\/script>
+    <script src="/theme.js"></script>
+    <script src="/nav-auth.js" defer></script>
+    <script src="/notfound.js" defer></script>
   </head>
   <body>
     <div id="rw-fx" aria-hidden="true"></div>
