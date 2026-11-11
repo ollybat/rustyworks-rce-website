@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <script>
+      /* Marks the page as scripted, and applies the saved light/dark choice
+         before the first paint, so there is never a flash of the wrong palette. */
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("rw-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Privacy Policy - RustyWorks RCE</title>
+    <meta name="description" content="What the RustyWorks RCE website stores: one session cookie for the dashboard, public status numbers, and nothing else.">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://rustyworks-rce-j7ao5f.camelai.app/legal/privacy.html">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="/sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
+    <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
+    <link rel="apple-touch-icon" href="/media/rustyworks-icon.svg">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <script src="/theme.js"></script>
+    <script src="/nav-auth.js" defer></script>
+  </head>
+  <body>
+    <div id="rw-fx" aria-hidden="true"></div>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header>
+      <div class="wrap">
+        <nav>
+          <a href="/index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks" width="34" height="34">RustyWorks<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="/status.html">Status</a>
+            <a href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands" target="_blank" rel="noopener" class="btn">Add to Discord</a>
+            <div class="rw-auth" id="rwAuth"></div>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section class="page-hero">
+        <div class="wrap">
+          <span class="tag">Legal</span>
+          <h1>Privacy <span class="accent">Policy</span></h1>
+          <p>This site is deliberately boring about data. Here is everything it does.</p>
+        </div>
+      </section>
+      <section style="padding-top:0">
+        <div class="wrap">
+          <div class="panel-box">
+            <h2>What this website keeps</h2>
+            <p class="note" style="margin-top:10px">These pages are plain files. They do not track you, run analytics, or build a profile of you.</p>
+            <ul class="ks-list" style="margin-top:12px">
+              <li><strong>No tracking cookies.</strong> Nothing is set unless you sign in to the dashboard.</li>
+              <li><strong>The dashboard session.</strong> Signing in sets <code class="u-ember">rw_session</code>, an HttpOnly cookie holding your Discord user id, username, guild id and an expiry, signed with a server-side secret. It lasts 7 days and signing out clears it.</li>
+              <li><strong>Sign-in plumbing.</strong> Mid sign-in, two short-lived cookies (<code class="u-ember">rw_oauth_state</code> and <code class="u-ember">rw_oauth_next</code>, 10 minutes) stop forged callbacks and remember where to send you back.</li>
+              <li><strong>Live counters.</strong> The homepage and status page ask the bot API for public numbers - players, servers, guilds, uptime. No identifiers are sent with those requests.</li>
+              <li><strong>Host logs.</strong> Like any website, the hosting platform keeps access logs (IP address, user agent) for security and abuse prevention.</li>
+              <li><strong>What signing in asks Discord for.</strong> The <code class="u-ember">identify</code> scope (username, display name, avatar) and the <code class="u-ember">guilds</code> scope (which servers you are in, and which you own). Nothing else - no email, no messages, and nothing is ever posted to your account.</li>
+            </ul>
+            <div class="u-mt-18"><a href="/status.html" class="btn ghost">See what the site reports</a></div>
+          </div>
+          <div class="panel-box">
+            <h2>Your data, your call</h2>
+            <p class="note" style="margin-top:10px">Sessions are signed with a secret this server holds, so there is no user database here at all: nothing about visitors is stored server-side.</p>
+            <p class="note" style="margin-top:10px">Questions, or want a session ended? Ask in the support server. Rotating the signing secret logs everybody out at once.</p>
+            <div class="u-mt-18"><a href="https://discord.gg/NFRkb9NYNd" class="btn ghost" target="_blank" rel="noopener">Ask in the support server</a></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="/index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="/rustservers.html">Server Browser</a>
+            <a href="/rustskins.html">Skin Store</a>
+            <a href="/dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="/dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="/status.html">Status</a>
+          </div>
+          <div class="foot-col">
+            <h4>Legal</h4>
+            <a href="/legal/privacy.html">Privacy Policy</a>
+            <a href="/legal/terms.html">Terms of Service</a>
+          </div>
+        </div>
+        <div class="foot-bottom">&#169; <span id="year"></span> RustyWorks RCE. Not affiliated with Facepunch Studios or Rust.</div>
+      </div>
+    </footer>
+    <script src="/page.js" defer></script>
+  </body>
+</html>
