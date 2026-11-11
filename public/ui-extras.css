@@ -37,3 +37,43 @@ html[data-theme="light"] .rw-theme-toggle .rw-tg-sun { display: none; }
 html[data-theme="light"] .rw-theme-toggle .rw-tg-moon { display: block; }
 html[data-reduce-motion="1"] .rw-theme-toggle { transition: none; }
 
+
+/* ==================================================================
+   LIGHT MODE LOADS LAST, ON PURPOSE
+   ------------------------------------------------------------------
+   The seasonal palettes in style.css (html[data-season="christmas"] …) come
+   after the light palette and have the same specificity, so in season they
+   would win and the switch would appear to do nothing. These two rules carry
+   one more selector than the seasonal ones, so a visitor who picks light gets
+   a light Christmas - same layout, same falling snow, light palette.
+   ================================================================== */
+html[data-theme="light"],
+html[data-theme="light"][data-season] {
+  --bg:        #fdf8f3;
+  --bg-2:      #ffffff;
+  --panel:     #ffffff;
+  --panel-2:   #fff4ea;
+  --rust:      #e2571c;
+  --rust-2:    #ff7d33;
+  --ember:     #c2410c;
+  --steel:     #2563eb;
+  --text:      #1b1310;
+  --text-dim:  #6d5a4e;
+  --line:      #f0ddca;
+  --green:     #15803d;
+  --btn-text:    #ffffff;
+  --glass:       rgba(255, 255, 255, 0.82);
+  --glass-solid: rgba(255, 255, 255, 0.9);
+  --overlay:     rgba(255, 255, 255, 0.72);
+  --hover-tint:  rgba(226, 87, 28, 0.06);
+  --shadow-key:  rgba(226, 87, 28, 0.28);
+  --shadow-soft: rgba(120, 80, 50, 0.16);
+  --menu-bg:     #ffffff;
+  color-scheme: light;
+}
+
+/* White snow is invisible on a light background; this keeps the same shapes
+   and motion in a colour that can be seen. */
+html[data-theme="light"] .xm-flake {
+  background: radial-gradient(circle, #5b8db8 0, rgba(91, 141, 184, 0.65) 45%, rgba(91, 141, 184, 0) 72%);
+}
