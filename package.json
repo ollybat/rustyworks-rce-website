@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "node ./scripts/build.mjs",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "check:brand": "node ./scripts/check-brand.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.97.0"

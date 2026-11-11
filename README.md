@@ -1,6 +1,6 @@
-# RustyWorks RCE — website
+# Spinback RCE — website
 
-Static marketing site for **RustyWorks RCE**, the free Discord bot for Rust Console
+Static marketing site for **Spinback RCE**, the free Discord bot for Rust Console
 Edition servers. Plain HTML, CSS and browser JavaScript — no build step beyond copying
 `public/` into the deployable bundle.
 
@@ -163,9 +163,37 @@ verified to be behaviour-identical to the originals (same rules, same order, sam
 declarations). `index.html`, `apiHelper.js`, `nav-auth.js` and `theme.js` in this repo are
 still earlier rebuilt copies, so the project is deliberately not deployed in this state.
 
+## The name
+
+The product is **Spinback RCE**, short form **Spinback**. It appears in page titles and
+meta tags, the header wordmark and footer, the legal pages, the docs, the `/dashboard`
+command description and its reply, the web app manifest and the social preview card.
+
+Anything a script has to print - the Discord summary, the copied status line, exported
+file names, notifications - reads `window.RW_BRAND` from `public/config.js` instead of
+hard-coding it, so changing the name there covers the dynamic half of the site. The
+static half lives in the markup, and `npm run check:brand` fails if the old name is left
+in any of it.
+
+Some things deliberately keep the old spelling, because they are plumbing rather than
+copy and renaming them would cost the live URL or break references:
+
+- the deployed host `rustyworks-rce-j7ao5f.camelai.app`, and the canonical, `og:url` and
+  `og:image` URLs built from it;
+- the Worker name and the `STATUS_LOG` bucket name in `wrangler.jsonc`, and the npm
+  package name (a lockfile rewrite for no visible gain);
+- the icon files under `public/media/` (`rustyworks-icon.svg` and its seasonal
+  siblings), which `style.css` and `theme.js` match on by file name;
+- internal identifiers such as the `rw_` CSS and `localStorage` prefixes and the
+  `rw_session` cookie.
+
+The bot's own API still reports its previous name in the `version` field it returns,
+because that string comes from the bot's backend rather than this repository. The status
+page prints it exactly as reported, so the panel and the bot agree even while the backend
+name is unchanged.
 ## Notes
 
-Images, fonts and the logo are original assets. RustyWorks RCE is not affiliated with
+Images, fonts and the logo are original assets. Spinback RCE is not affiliated with
 Facepunch Studios or Rust.
 
 ## Social cards and app icons
