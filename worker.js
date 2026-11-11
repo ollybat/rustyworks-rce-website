@@ -412,6 +412,44 @@ async function proxyApi(request, env, ctx) {
   }
 }
 
+/* ---------- Kit Studio item data ---------- */
+
+/* The Kit Studio page keeps its item list and its item icons on the main site. Serving them
+   from here means one copy of that data instead of a few hundred PNGs duplicated into this
+   repository, and the edge cache asks the origin once per file. Names are checked against a
+   strict pattern so a crafted path can never reach somewhere else. */
+const KIT_ORIGIN = "https://rustyworksrce.xyz";
+const KIT_ICON = /^\/media\/kitbuilder\/[a-z0-9._-]{1,64}\.png$/i;
+
+async function kitAsset(url, ctx) {
+  const allowed = url.pathname === "/media/entitys/entities.json" || KIT_ICON.test(url.pathname);
+  if (!allowed) return new Response("not found", { status: 404, headers: { "cache-control": "no-store" } });
+
+  try {
+    /* This runtime has no edge-cache API, so the response carries a long cache-control
+       and browsers keep the copy instead of asking for every icon again. */
+    const upstream = await fetch(KIT_ORIGIN + url.pathname, {
+      headers: {
+        "user-agent": "SpinbackRCE-KitStudio/1.0 (+https://rustyworks-rce-j7ao5f.camelai.app)",
+        accept: "*/*"
+      }
+    });
+    if (!upstream.ok) {
+      return new Response(upstream.status === 404 ? "not found" : "upstream error", {
+        status: upstream.status,
+        headers: { "cache-control": "no-store" }
+      });
+    }
+    const headers = new Headers();
+    headers.set("content-type", upstream.headers.get("content-type") || "application/octet-stream");
+    headers.set("cache-control", "public, max-age=86400");
+    headers.set("access-control-allow-origin", "*");
+    return new Response(upstream.body, { status: 200, headers: headers });
+  } catch (error) {
+    return new Response("upstream unreachable", { status: 502, headers: { "cache-control": "no-store" } });
+  }
+}
+
 /* ---------- Discord sign-in ---------- */
 
 function clientId(env) {
@@ -460,8 +498,8 @@ async function authLogin(request, env) {
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("redirect_uri", url.origin + "/auth/callback");
   authorize.searchParams.set("scope", "identify guilds");
-  authorize.searchParams.set("state", state);
-  authorize.searchParams.set("prompt", "none");
+
+[261 more lines in file. Use offset=501 to continue.]
   const headers = new Headers();
   headers.append("set-cookie", cookieHeader("rw_oauth_state", state, 600));
   headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));
@@ -653,6 +691,7 @@ export default {
 
     /* Answers "did my settings land?" with booleans only - never a secret value. Handy
        right after setting values on the Worker, and the dashboard page can point at it. */
+    if (url.pathname === "/media/entitys/entities.json" || url.pathname.startsWith("/media/kitbuilder/")) return kitAsset(url, ctx);
     if (url.pathname === "/api/config-check") {
       return json({
         app: "spinback-rce",
