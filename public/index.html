@@ -3,16 +3,36 @@
   <head>
     <meta charset="UTF-8">
     <!-- Marks the page as scripted: the reveal animation only hides content when this is set. -->
-    <script>document.documentElement.className += " js";</script>
+    <script>
+      /* Marks the page as scripted, and applies the saved light/dark choice
+         before the first paint, so there is never a flash of the wrong palette. */
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("rw-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>RustyWorks RCE — Free Rust Console Server Bot</title>
     <meta
       name="description"
       content="The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, gambling, killfeed and more. 100% free forever.">
+    <link rel="canonical" href="https://rustyworks-rce-j7ao5f.camelai.app/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="RustyWorks RCE">
+    <meta property="og:title" content="RustyWorks RCE - Free Rust Console Server Bot">
+    <meta property="og:description" content="The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, games, killfeed and live automation. 100% free forever.">
+    <meta property="og:url" content="https://rustyworks-rce-j7ao5f.camelai.app/">
+    <meta property="og:image" content="https://rustyworks-rce-j7ao5f.camelai.app/media/rustyworks-icon.svg">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="RustyWorks RCE - Free Rust Console Server Bot">
+    <meta name="twitter:description" content="The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, games, killfeed and live automation. 100% free forever.">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"RustyWorks RCE","applicationCategory":"GameApplication","operatingSystem":"Discord","description":"The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, games, killfeed and live automation. 100% free forever.","url":"https://rustyworks-rce-j7ao5f.camelai.app/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}<\/script>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- One less origin to talk to: the face list is served from here, the woff2 files still stream from fonts.gstatic.com. -->
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
     <link rel="stylesheet" href="sections.css">
     <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
     <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
@@ -34,10 +54,11 @@
   <body>
     <!-- Seasonal overlay layer: theme.js fills this with the moving pieces the stylesheet animates. -->
     <div id="rw-fx" aria-hidden="true"></div>
+    <a class="skip-link" href="#main">Skip to content</a>
     <header>
       <div class="wrap">
         <nav>
-          <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+          <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks" width="34" height="34">RustyWorks<span class="accent">RCE</span></a>
           <div class="nav-links" id="navLinks">
             <a href="status.html">Status</a>
             <a
@@ -54,6 +75,8 @@
         </nav>
       </div>
     </header>
+
+    <main id="main" tabindex="-1">
     <div class="rw-video-hero">
       <video
         class="rw-video-hero__video"
@@ -551,11 +574,12 @@
       </div>
     </section>
     <!-- ============ FOOTER ============ -->
+    </main>
     <footer>
       <div class="wrap">
         <div class="foot-grid">
           <div class="foot-col foot-brand">
-            <a href="#" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+            <a href="#" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks" width="34" height="34">RustyWorks<span class="accent">RCE</span></a>
             <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
           </div>
           <div class="foot-col">
@@ -630,3 +654,4 @@
     </div>
   </body>
 </html>
+
