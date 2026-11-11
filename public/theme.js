@@ -136,6 +136,87 @@
     buildSeasonFx();
   }
 
+  /* ---------- light / dark ---------- */
+  /* The stylesheet ships a complete light palette under html[data-theme="light"].
+     Which one a visitor gets: their own saved choice, otherwise the system
+     setting. Every page's <head> applies the same choice before first paint, so
+     nobody sees a flash of the wrong palette. */
+  var THEME_KEY = 'rw-theme';
+  var systemLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)');
+
+  function storedTheme() {
+    try {
+      var saved = window.localStorage.getItem(THEME_KEY);
+      return saved === 'light' || saved === 'dark' ? saved : null;
+    } catch (e) {
+      return null; /* private mode, or storage turned off */
+    }
+  }
+
+  /* RustyWorks is designed dark, so that is what a first-time visitor gets and
+     what the owner sees. To follow the operating system instead, swap the
+     fallback below for: (systemLight && systemLight.matches ? 'light' : 'dark').
+     Either way the switch in the navigation wins, and it is remembered. */
+  function currentTheme() {
+    return storedTheme() || 'dark';
+  }
+
+  function applyTheme(name) {
+    /* Dark is the stylesheet's default, so it is the absence of the attribute. */
+    if (name === 'light') root.setAttribute('data-theme', 'light');
+    else root.removeAttribute('data-theme');
+
+    /* Keep the browser / status-bar colour in step with the palette we just set. */
+    var meta = document.querySelector('meta[name="theme-color"]');
+    var bg = getComputedStyle(root).getPropertyValue('--bg').trim();
+    if (meta && bg) meta.setAttribute('content', bg);
+
+    var button = document.getElementById('rwThemeToggle');
+    if (button) {
+      var next = name === 'light' ? 'dark' : 'light';
+      button.setAttribute('aria-pressed', name === 'light' ? 'true' : 'false');
+      button.setAttribute('aria-label', 'Switch to the ' + next + ' theme');
+      button.setAttribute('title', 'Switch to the ' + next + ' theme');
+    }
+  }
+
+  function setTheme(name) {
+    try { window.localStorage.setItem(THEME_KEY, name); } catch (e) {}
+    applyTheme(name);
+  }
+
+  applyTheme(currentTheme());
+
+  /* The switch sits in the navigation. It is an option, not a requirement, so a
+     page without that slot simply goes without it. */
+  function buildThemeToggle() {
+    if (document.getElementById('rwThemeToggle')) return;
+    var slot = document.getElementById('navLinks');
+    if (!slot) return;
+
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'rwThemeToggle';
+    button.className = 'rw-theme-toggle';
+    button.innerHTML =
+      '<svg class="rw-tg-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>' +
+      '<svg class="rw-tg-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.4A8.4 8.4 0 0 1 9.6 4a8.6 8.6 0 1 0 10.4 10.4Z"/></svg>';
+
+    button.addEventListener('click', function () {
+      setTheme(currentTheme() === 'light' ? 'dark' : 'light');
+    });
+
+    /* Just before the account widget, so the two sit together on the right. */
+    var account = document.getElementById('rwAuth');
+    if (account && account.parentNode === slot) slot.insertBefore(button, account);
+    else slot.appendChild(button);
+
+    applyTheme(currentTheme());
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildThemeToggle);
+  else buildThemeToggle();
+
   /* ---------- install prompt ---------- */
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault();
@@ -151,6 +232,9 @@
 
   window.RWTheme = {
     isStandalone: isStandalone,
+    theme: currentTheme,
+    setTheme: setTheme,
+    toggleTheme: function () { setTheme(currentTheme() === 'light' ? 'dark' : 'light'); },
     season: season ? season.name : null,
     hasFxLayer: !!document.getElementById('rw-fx'),
     install: {
