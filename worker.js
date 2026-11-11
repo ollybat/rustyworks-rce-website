@@ -400,7 +400,7 @@ async function proxyApi(request, env, ctx) {
     return new Response(body, {
       status: upstream.status,
       headers: {
-        "content-type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
+        "content-type": source.headers.get("content-type") || "application/json; charset=utf-8",
         "cache-control": "public, max-age=60",
         "access-control-allow-origin": "*",
       },
@@ -436,7 +436,7 @@ const KIT_ALIASES = [
   [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/rustyworks-app-$1.png"]
 ];
 
-async function kitAsset(url, ctx) {
+async function kitAsset(url, ctx, env) {
   const allowed = KIT_PATHS.some((shape) => shape.test(url.pathname));
   if (!allowed) return new Response("not found", { status: 404, headers: { "cache-control": "no-store" } });
 
@@ -474,22 +474,36 @@ async function kitAsset(url, ctx) {
         accept: "*/*"
       }
     });
+    /* Second source for item art: if the upstream site is down or missing the file, the same
+       shortname is served by a public item database, so the studio keeps its icons. */
+    let source = upstream;
     if (!upstream.ok) {
-      return new Response(upstream.status === 404 ? "not found" : "upstream error", {
-        status: upstream.status,
-        headers: { "cache-control": "no-store" }
-      });
+      const icon = /^\/media\/kitbuilder\/([a-z0-9._-]{1,64})\.png$/i.exec(url.pathname);
+      if (icon) {
+        try {
+          const spare = await fetch("https://rustlabs.com/img/items180/" + icon[1].toLowerCase() + ".png", {
+            headers: { accept: "image/png", "user-agent": "SpinbackRCE-KitStudio/1.0" }
+          });
+          if (spare.ok) source = spare;
+        } catch (error) {}
+      }
+      if (!source.ok) {
+        return new Response(source.status === 404 ? "not found" : "upstream error", {
+          status: source.status,
+          headers: { "cache-control": "no-store" }
+        });
+      }
     }
     const headers = new Headers();
-    headers.set("content-type", upstream.headers.get("content-type") || "application/octet-stream");
+    headers.set("content-type", source.headers.get("content-type") || "application/octet-stream");
     headers.set("cache-control", "public, max-age=86400");
     headers.set("access-control-allow-origin", "*");
     if (env.STATUS_LOG && CACHEABLE) {
-      ctx.waitUntil(env.STATUS_LOG.put(key, upstream.clone().body, {
+      ctx.waitUntil(env.STATUS_LOG.put(key, source.clone().body, {
         httpMetadata: { contentType: headers.get("content-type") || "application/octet-stream" }
       }).catch(() => {}));
     }
-    return new Response(upstream.body, { status: 200, headers: headers });
+    return new Response(source.body, { status: 200, headers: headers });
   } catch (error) {
     return new Response("upstream unreachable", { status: 502, headers: { "cache-control": "no-store" } });
   }
@@ -809,13 +823,13 @@ export default {
       const upstreamPath = url.pathname === "/data/entities.json"
         ? "/media/entitys/entities.json"
         : url.pathname.replace("/data/presets/", "/media/kitbuilder/presets/");
-      return kitAsset(new URL(KIT_ORIGIN + upstreamPath), ctx);
+      return kitAsset(new URL(KIT_ORIGIN + upstreamPath), ctx, env);
     }
 
     if (url.pathname === "/media/entitys/entities.json"
       || url.pathname.startsWith("/media/kitbuilder/")
       || url.pathname.startsWith("/media/spinback-")) {
-      return kitAsset(url, ctx);
+      return kitAsset(url, ctx, env);
     }
     if (url.pathname === "/api/config-check") {
       return json({
