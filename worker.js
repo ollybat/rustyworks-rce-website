@@ -537,14 +537,14 @@ async function needsSetup(env, request) {
     + '</ol>'
     + '<p class="muted">Server id watched by this dashboard: <code>' + escapeHtml(env.DISCORD_GUILD_ID || "not set")
     + '</code>. The bot command replies privately with a link to this page.</p></div>'
-    + '<div class="panel-box"><h2 style="margin-bottom:8px">Live from the bot right now <span class="pill">' + state + '</span></h2>'
+    + '<div class="panel-box"><h2 style="margin-bottom:8px">Live from the bot</h2>'
     + '<div class="status-cards">'
     + card(stats ? stats.users : "-", "Linked players")
     + card(stats ? stats.servers : "-", "Servers")
     + card(stats ? stats.guilds : "-", "Guilds")
     + card(live && live.uptime30d ? live.uptime30d + "%" : "-", "30-day uptime")
     + '</div>'
-    + '<p style="margin-top:12px">Version <code>' + escapeHtml(live && live.version ? live.version : "unknown")
+    + '<p style="margin-top:12px">Right now: <b>' + escapeHtml(state) + '</b> - version <code>' + escapeHtml(live && live.version ? live.version : "unknown")
     + '</code>. These are the same public numbers as the status page - not sign-in data.</p></div>'
     + '</div></section>'
     + '<footer><div class="wrap"><p class="muted">Spinback RCE - owner console preview.</p></div></footer>'
