@@ -102,3 +102,44 @@ DISCORD_BOT_TOKEN=… DISCORD_APPLICATION_ID=… DISCORD_GUILD_ID=… node bot/r
 - `media/rustyworks-icon-halloween.svg` and `media/rustyworks-icon-thanksgiving.svg` —
   the stylesheet swaps the logo for these in season. Christmas is live; add the other two
   and they can be switched on in `theme.js`.
+
+
+## What goes where
+
+Two different things read Discord values, and mixing them up is the usual reason a
+dashboard stalls at the final step.
+
+### The website (the app serving this site)
+
+| Name | Value | State |
+| --- | --- | --- |
+| DISCORD_CLIENT_ID | 1570023832717361213 | optional - the application id is public and already the default |
+| DISCORD_CLIENT_SECRET | Discord app -> OAuth2 -> Reset Secret | required |
+| SESSION_SECRET | any long random string | required |
+| DISCORD_GUILD_ID | 1553825462315257868 | set |
+| BOT_API_ORIGIN | your own bot API address | set once your API exists |
+
+The redirect URI registered on the Discord application must be exactly:
+
+    https://spinback-j7ao5f.camelai.app/auth/callback
+
+The Worker builds that address from the request origin, so it matches by construction on
+this domain - and it will not match on any other domain without a second entry there.
+
+### The bot's interactions endpoint
+
+| Name | Value |
+| --- | --- |
+| DISCORD_PUBLIC_KEY | fe395110ba5053c6d6bc84f7c20cb069b391e6159b0160f8115f861823cbeac3 |
+| DISCORD_GUILD_ID | 1553825462315257868 |
+| DISCORD_GUILD_OWNER_ID | your own Discord user id |
+| SITE_URL | https://spinback-j7ao5f.camelai.app |
+
+The public key is not a secret: Discord signs each request with it and the endpoint uses it
+to prove the request really came from Discord. Keep it in the bot's environment rather than
+in a file, so a redeployed copy still points at the same application.
+
+### While a required value is missing
+
+The dashboard stays closed and says so, with the checklist at /dashboard. Nothing else on
+the site is affected and no private data is exposed while it waits.
