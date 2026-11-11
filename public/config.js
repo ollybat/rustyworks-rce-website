@@ -18,7 +18,7 @@ window.RW_BRAND = {
   name: 'Spinback RCE',
   short: 'Spinback',
   tagline: 'The free all-in-one Discord bot for Rust Console Edition servers.',
-  site: 'https://rustyworks-rce-j7ao5f.camelai.app'
+  site: 'https://spinback-j7ao5f.camelai.app'
 };
 
 /* The Kit Studio page calls API() and loads this file before its own script, so the helper

@@ -419,10 +419,18 @@ async function proxyApi(request, env, ctx) {
    repository, and the edge cache asks the origin once per file. Names are checked against a
    strict pattern so a crafted path can never reach somewhere else. */
 const KIT_ORIGIN = "https://rustyworksrce.xyz";
-const KIT_ICON = /^\/media\/kitbuilder\/[a-z0-9._-]{1,64}\.png$/i;
+/* Only these exact shapes are passed through: the console item list, one icon per item,
+   the kit presets the studio loads, and the seasonal/app icons the theme swaps in. */
+const KIT_PATHS = [
+  /^\/media\/entitys\/entities\.json$/i,
+  /^\/media\/kitbuilder\/[a-z0-9._-]{1,64}\.png$/i,
+  /^\/media\/kitbuilder\/presets\/[a-z0-9._-]{1,32}\.json$/i,
+  /^\/media\/rustyworks-icon-(?:halloween|thanksgiving)\.svg$/i,
+  /^\/media\/rustyworks-app-(?:192|512)\.png$/i
+];
 
 async function kitAsset(url, ctx) {
-  const allowed = url.pathname === "/media/entitys/entities.json" || KIT_ICON.test(url.pathname);
+  const allowed = KIT_PATHS.some((shape) => shape.test(url.pathname));
   if (!allowed) return new Response("not found", { status: 404, headers: { "cache-control": "no-store" } });
 
   try {
@@ -468,16 +476,79 @@ function safeNext(value) {
   return path;
 }
 
-function needsSetup(env) {
-  return html(`<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard not configured</title><link rel="stylesheet" href="/style.css"></head>
-<body><header><div class="wrap"><nav><a href="/" class="logo">Spinback<span class="accent">RCE</span></a></nav></div></header>
-<section class="page-hero"><div class="wrap"><h1>Dashboard needs a few secrets</h1>
-<p>Set <code>DISCORD_CLIENT_SECRET</code>, <code>DISCORD_GUILD_ID</code> and
-<code>SESSION_SECRET</code> on this Worker, then reload. Until then the dashboard stays closed —
-the rest of the site works normally.</p>
-<p><a class="btn" href="/">Back to the site</a></p></div></section></body></html>`, 503);
+async function needsSetup(env, request) {
+  /* The owner console while the last two values are still missing. It shows exactly what is
+     configured and what is not, plus the public live numbers, so the page is useful before
+     sign-in exists - and it exposes nothing private: no session is read or issued here. */
+  const origin = new URL(request.url).origin;
+  const checklist = [
+    ["DISCORD_CLIENT_ID", Boolean(clientId(env))],
+    ["DISCORD_CLIENT_SECRET", Boolean(env.DISCORD_CLIENT_SECRET)],
+    ["DISCORD_GUILD_ID", Boolean(env.DISCORD_GUILD_ID)],
+    ["SESSION_SECRET", Boolean(env.SESSION_SECRET)],
+    ["Status storage", Boolean(env.STATUS_LOG)]
+  ];
+  let live = null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const response = await fetch(API_BASE + "/api/status", {
+      headers: { accept: "application/json" },
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (response.ok) live = await response.json();
+  } catch (error) {
+    live = null;
+  }
+  const stats = live && live.stats ? live.stats : null;
+  const row = (item) => '<li class="setup-row"><span class="setup-name"><code>' + escapeHtml(item[0]) + '</code></span>'
+    + '<span class="setup-state" style="' + (item[1] ? 'color:#7ee0a1' : 'color:#e8a33d') + '">'
+    + (item[1] ? 'set' : 'missing') + '</span></li>';
+  const card = (value, label) => '<div class="status-card"><div class="big">' + escapeHtml(value)
+    + '</div><div class="lbl">' + escapeHtml(label) + '</div></div>';
+  const state = live && live.online ? 'live' : 'unknown';
+
+  return html('<!doctype html>'
+    + '<html lang="en"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">'
+    + '<meta name="robots" content="noindex">'
+    + '<title>Owner console - Spinback RCE</title>'
+    + '<link rel="stylesheet" href="/style.css">'
+    + '<link rel="stylesheet" href="/status.css">'
+    + '<link rel="stylesheet" href="/ui-extras.css"></head>'
+    + '<body><header><div class="wrap"><nav>'
+    + '<a href="/" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>'
+    + '<div class="nav-links"><a href="/">Website</a><a href="/status">Status</a>'
+    + '<a href="/dashboard/kitbuilder">Kit Studio</a></div></nav></div></header>'
+    + '<section class="page-hero"><div class="wrap">'
+    + '<h1>Owner console</h1>'
+    + '<p>One step from live. Sign-in opens here for the owner of one Discord server and nobody else; '
+    + 'until the values below are set, this page stays a setup checklist.</p></div></section>'
+    + '<section style="padding-top:0"><div class="wrap">'
+    + '<div class="panel-box"><h2 style="margin-bottom:8px">What is left</h2>'
+    + '<ul class="setup-list">' + checklist.map(row).join('') + '</ul>'
+    + '<p style="margin-top:14px">Add this redirect URI to the Discord application (OAuth2 section), exactly as written:</p>'
+    + '<p><code class="setup-uri">' + escapeHtml(origin + '/auth/callback') + '</code></p>'
+    + '<ol class="setup-steps">'
+    + '<li>Open the Discord application <code>1570023832717361213</code> and add the redirect URI above.</li>'
+    + '<li>Add <code>DISCORD_CLIENT_SECRET</code> (from that same OAuth2 page) and <code>SESSION_SECRET</code> (any long random string) as values on this app.</li>'
+    + '<li>Reload this page: the checklist above turns green and the sign-in button appears.</li>'
+    + '</ol>'
+    + '<p class="muted">Server id watched by this dashboard: <code>' + escapeHtml(env.DISCORD_GUILD_ID || "not set")
+    + '</code>. The bot command replies privately with a link to this page.</p></div>'
+    + '<div class="panel-box"><h2 style="margin-bottom:8px">Live from the bot right now <span class="pill">' + state + '</span></h2>'
+    + '<div class="status-cards">'
+    + card(stats ? stats.users : "-", "Linked players")
+    + card(stats ? stats.servers : "-", "Servers")
+    + card(stats ? stats.guilds : "-", "Guilds")
+    + card(live && live.uptime30d ? live.uptime30d + "%" : "-", "30-day uptime")
+    + '</div>'
+    + '<p style="margin-top:12px">Version <code>' + escapeHtml(live && live.version ? live.version : "unknown")
+    + '</code>. These are the same public numbers as the status page - not sign-in data.</p></div>'
+    + '</div></section>'
+    + '<footer><div class="wrap"><p class="muted">Spinback RCE - owner console preview.</p></div></footer>'
+    + '</body></html>', 200);
 }
 
 function redirect(location, headers = {}) {
@@ -485,7 +556,7 @@ function redirect(location, headers = {}) {
 }
 
 async function authLogin(request, env) {
-  if (!authConfigured(env)) return needsSetup(env);
+  if (!authConfigured(env)) return needsSetup(env, request);
   const url = new URL(request.url);
   const next = safeNext(url.searchParams.get("next"));
 
@@ -507,7 +578,7 @@ async function authLogin(request, env) {
 }
 
 async function authCallback(request, env) {
-  if (!authConfigured(env)) return needsSetup(env);
+  if (!authConfigured(env)) return needsSetup(env, request);
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -599,7 +670,7 @@ function avatarUrl(session) {
 }
 
 async function dashboard(request, env) {
-  if (!authConfigured(env)) return needsSetup(env);
+  if (!authConfigured(env)) return needsSetup(env, request);
 
   const session = await readSession(request, env);
   if (!session) return redirect("/auth/login");
@@ -691,7 +762,13 @@ export default {
 
     /* Answers "did my settings land?" with booleans only - never a secret value. Handy
        right after setting values on the Worker, and the dashboard page can point at it. */
-    if (url.pathname === "/media/entitys/entities.json" || url.pathname.startsWith("/media/kitbuilder/")) return kitAsset(url, ctx);
+    /* Everything under /media/ that the studio or the theme pulls from the operators site goes
+       through kitAsset, which validates the exact path shape before fetching anything. */
+    if (url.pathname === "/media/entitys/entities.json"
+      || url.pathname.startsWith("/media/kitbuilder/")
+      || url.pathname.startsWith("/media/rustyworks-")) {
+      return kitAsset(url, ctx);
+    }
     if (url.pathname === "/api/config-check") {
       return json({
         app: "spinback-rce",
@@ -712,7 +789,7 @@ export default {
       if (PUBLIC_DASHBOARD_PAGES.has(url.pathname)) {
         return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
       }
-      if (!authConfigured(env)) return needsSetup(env);
+      if (!authConfigured(env)) return needsSetup(env, request);
       if (!(await readSession(request, env))) {
         return redirect("/auth/login?next=" + encodeURIComponent(url.pathname + url.search));
       }
