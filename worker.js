@@ -145,6 +145,9 @@ async function readSession(request, env) {
 function withAssetHeaders(response, pathname) {
   const headers = new Headers(response.headers);
   headers.set("x-content-type-options", "nosniff");
+  /* A cached service worker script can pin an old version of the site on a phone, so it
+     is always revalidated, and it manages the whole site rather than just its own folder. */
+  if (pathname === "/sw.js") headers.set("service-worker-allowed", "/");
   if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
   if (response.status === 200 && pathname) headers.set("cache-control", cacheHint(pathname));
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
@@ -154,6 +157,7 @@ function withAssetHeaders(response, pathname) {
    stylesheets get a short window with revalidation (an edit still lands within a
    minute) while pictures, fonts and video - which change rarely - get a day. */
 function cacheHint(pathname) {
+  if (pathname === "/sw.js") return "no-cache";
   if (/\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|mp4|webm)$/i.test(pathname)) return "public, max-age=86400";
   if (/\.(css|js|webmanifest|xml|txt)$/i.test(pathname)) return "public, max-age=300, must-revalidate";
   if (/\.html?$/i.test(pathname)) return "public, max-age=60, must-revalidate";
