@@ -229,3 +229,37 @@ incident runs, and the status page draws its "Measured by this site" panel from 
 Two limits the page states rather than hides: samples only exist while somebody is
 looking at the site, and the response time recorded is from the Worker to the bot API -
 not from the visitor's browser, which is measured separately by the visit strip.
+
+## Kit Studio
+
+`public/dashboard/kitbuilder.html` is a real tool rather than a placeholder. It builds the
+console commands a Rust Console Edition server wants, using the syntax from the official
+community-server documentation (feature guide: Kit Management):
+
+    kit add "Kit name" "item" amount condition Container
+
+Everything runs in the browser. The picker reads `public/data/items.json`, which holds the
+catalogue: `src: "db"` entries were read from a public RUST item database - the reference
+the RCE server docs point at for item names - and carry a documented stack size, while
+`src: "core"` entries were added by us from widely known item names and carry none. The page
+says which is which next to the kit, so nobody mistakes one for the other. RCE runs an older
+build than the PC game and we could only read part of that database, so the picker also
+accepts any item name typed by hand.
+
+The tool warns when an amount exceeds the documented stack size, when more than six items go
+on the belt (a hotbar holds six), and when a kit line uses one of our own names. Kits are
+kept in `localStorage` under `rw-kitstudio-v1`, export and import as JSON, and download as a
+text file of ready-to-paste commands. Nothing is sent anywhere.
+
+## Offline, and installable
+
+`public/sw.js` is the service worker. It caches the pictures, the fonts, the offline page and
+the app icons, and it never caches pages, sign-ins or API answers, so a visitor always sees
+the live site. `public/offline.html` is what a phone shows when the network is gone; its
+styles are inline on purpose, because nothing on that page may need the network.
+
+Bump `VERSION` in `sw.js` whenever the cached files must be replaced on every device. The
+Worker serves `/sw.js` with `no-cache` and `Service-Worker-Allowed: /`, so an old worker
+cannot pin an old site on a phone. `public/media/icon-512.png` (with a base64 companion for
+this text-only repository) gives Android the 512px icon it wants before it offers an
+install, alongside the existing 192px icon.
