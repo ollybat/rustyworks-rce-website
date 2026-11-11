@@ -440,6 +440,26 @@ async function kitAsset(url, ctx) {
   const allowed = KIT_PATHS.some((shape) => shape.test(url.pathname));
   if (!allowed) return new Response("not found", { status: 404, headers: { "cache-control": "no-store" } });
 
+  /* Every studio asset we fetch once is kept in our own storage, so a bad day at the
+     upstream site cannot empty the studio: the copy we already hold keeps serving. */
+  const CACHEABLE = url.pathname === "/media/entitys/entities.json"
+    || url.pathname.startsWith("/media/kitbuilder/")
+    || url.pathname.startsWith("/data/");
+  const key = "kitasset" + url.pathname;
+  if (env.STATUS_LOG && CACHEABLE) {
+    try {
+      const held = await env.STATUS_LOG.get(key);
+      if (held) {
+        const headers = new Headers();
+        headers.set("content-type", (held.httpMetadata && held.httpMetadata.contentType) || "application/octet-stream");
+        headers.set("cache-control", "public, max-age=86400");
+        headers.set("access-control-allow-origin", "*");
+        headers.set("x-spinback-source", "own-storage");
+        return new Response(held.body, { status: 200, headers: headers });
+      }
+    } catch (error) {}
+  }
+
   try {
     /* This runtime has no edge-cache API, so the response carries a long cache-control
        and browsers keep the copy instead of asking for every icon again. */
@@ -464,6 +484,11 @@ async function kitAsset(url, ctx) {
     headers.set("content-type", upstream.headers.get("content-type") || "application/octet-stream");
     headers.set("cache-control", "public, max-age=86400");
     headers.set("access-control-allow-origin", "*");
+    if (env.STATUS_LOG && CACHEABLE) {
+      ctx.waitUntil(env.STATUS_LOG.put(key, upstream.clone().body, {
+        httpMetadata: { contentType: headers.get("content-type") || "application/octet-stream" }
+      }).catch(() => {}));
+    }
     return new Response(upstream.body, { status: 200, headers: headers });
   } catch (error) {
     return new Response("upstream unreachable", { status: 502, headers: { "cache-control": "no-store" } });
@@ -776,6 +801,17 @@ export default {
        right after setting values on the Worker, and the dashboard page can point at it. */
     /* Everything under /media/ that the studio or the theme pulls from the operators site goes
        through kitAsset, which validates the exact path shape before fetching anything. */
+    /* Studio data lives in our own project; if a copy is missing it is proxied from the
+       upstream site so the studio never breaks on a half-finished data move. */
+    if (url.pathname === "/data/entities.json" || url.pathname.startsWith("/data/presets/")) {
+      const local = await env.ASSETS.fetch(request);
+      if (local.status === 200) return withAssetHeaders(local, url.pathname);
+      const upstreamPath = url.pathname === "/data/entities.json"
+        ? "/media/entitys/entities.json"
+        : url.pathname.replace("/data/presets/", "/media/kitbuilder/presets/");
+      return kitAsset(new URL(KIT_ORIGIN + upstreamPath), ctx);
+    }
+
     if (url.pathname === "/media/entitys/entities.json"
       || url.pathname.startsWith("/media/kitbuilder/")
       || url.pathname.startsWith("/media/spinback-")) {

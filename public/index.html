@@ -8,7 +8,7 @@
          before the first paint, so there is never a flash of the wrong palette. */
       document.documentElement.className += " js";
       try {
-        var rwTheme = localStorage.getItem("rw-theme");
+        var rwTheme = localStorage.getItem("spinback-theme");
         if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
       } catch (e) {}
     </script>
@@ -44,8 +44,8 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="/ui-extras.css">
     <link rel="stylesheet" href="sections.css">
-    <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
-    <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <!-- Colours the browser / status bar chrome on phones and the installed app. -->
@@ -60,7 +60,9 @@
     <script src="/apiHelper.js" defer></script>
     <script src="/nav-auth.js" defer></script>
     <script src="/home.js" defer></script>
-  </head>
+    <link rel="stylesheet" href="/theme-spinback.css">
+  <link rel="stylesheet" href="/motion.css">
+</head>
   <body>
     <!-- Seasonal overlay layer: theme.js fills this with the moving pieces the stylesheet animates. -->
     <div id="rw-fx" aria-hidden="true"></div>
@@ -68,7 +70,7 @@
     <header>
       <div class="wrap">
         <nav>
-          <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
           <div class="nav-links" id="navLinks">
             <a href="status.html">Status</a>
             <a
@@ -140,25 +142,7 @@
                 decoding="async">
             </picture>
           </div>
-          <div class="stats">
-            <div class="stat reveal">
-              <div class="num">44+</div>
-              <div class="lbl">Feature Modules</div>
-            </div>
-            <div class="stat reveal">
-              <div class="num" id="statUsers">818+</div>
-              <div class="lbl">Linked Players</div>
-            </div>
-            <div class="stat reveal">
-              <div class="num" id="statServers">36</div>
-              <div class="lbl">Servers Connected</div>
-            </div>
-            <div class="stat reveal">
-              <div class="num u-stat-free">FREE</div>
-              <div class="lbl">Always &amp; Forever</div>
-            </div>
           </div>
-        </div>
       </section>
       <!-- ============ 3-CTA STRIP ============ -->
       <section class="u-strip-space">
@@ -595,7 +579,7 @@
       <div class="wrap">
         <div class="foot-grid">
           <div class="foot-col foot-brand">
-            <a href="#" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+            <a href="#" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
             <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
           </div>
           <div class="foot-col">
@@ -668,5 +652,7 @@
         </div>
       </div>
     </div>
-  </body>
+  <script src="/motion.js" defer><\/script>
+<script src="/motion.js" defer></script>
+</body>
 </html>
