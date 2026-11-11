@@ -3,10 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "node bot/server.mjs",
     "dev": "wrangler dev",
     "build": "node ./scripts/build.mjs",
     "deploy": "wrangler deploy",
     "check:brand": "node ./scripts/check-brand.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "devDependencies": {
     "wrangler": "^4.97.0"
