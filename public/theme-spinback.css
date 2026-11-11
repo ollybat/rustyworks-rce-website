@@ -1,0 +1,62 @@
+/* ==========================================================================
+   Spinback RCE theme - light blue
+   Loaded after the site stylesheet, so it only re-colours the shared tokens:
+   no layout rules are repeated and style.css stays untouched.
+   Dark base with light blue accents; the light/dark toggle switches bases.
+   ========================================================================== */
+
+:root {
+  --bg:      #060b13;
+  --bg-2:    #0c1420;
+  --panel:   #101a28;
+  --panel-2: #152232;
+  --rust:    #4aa8e0;
+  --rust-2:  #7fd1f7;
+  --ember:   #a8e4ff;
+  --steel:   #8fb0cc;
+  --text:    #e9f3fc;
+  --text-dim:#93a9bd;
+  --line:    #1d2c3e;
+  --green:   #63d2a4;
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(74, 168, 224, 0.22), transparent 55%),
+    radial-gradient(circle at 88% 100%, rgba(127, 209, 247, 0.10), transparent 42%);
+}
+
+/* Light mode: a pale blue-tinted page rather than plain white. */
+html[data-theme="light"] {
+  --bg:      #eef6fd;
+  --bg-2:    #e2eef9;
+  --panel:   #ffffff;
+  --panel-2: #f3f9ff;
+  --rust:    #1f7fb8;
+  --rust-2:  #2b95d0;
+  --ember:   #0f5f8f;
+  --steel:   #5b7794;
+  --text:    #0d2233;
+  --text-dim:#4c6478;
+  --line:    #cfe2f1;
+  --green:   #1f8f63;
+}
+html[data-theme="light"] body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(74, 168, 224, 0.16), transparent 55%),
+    radial-gradient(circle at 88% 100%, rgba(31, 127, 184, 0.08), transparent 42%);
+}
+
+/* Keep the seasonal art readable against the cooler base. */
+::selection { background: rgba(127, 209, 247, 0.28); }
+a:hover, a:focus-visible { color: var(--rust-2); }
+ + 
+
+/* Filled buttons carry dark ink; make sure the lighter blue fill keeps that contrast. */
+.btn:not(.ghost):not(.danger) { color: #04121c; font-weight: 700; }
+.btn:not(.ghost):not(.danger):hover { box-shadow: 0 10px 28px rgba(74, 168, 224, 0.5); }
+.btn.ghost:hover { border-color: var(--rust-2); color: var(--rust-2); }
+html[data-theme="light"] .btn:not(.ghost):not(.danger) { color: #04121c; }
+html[data-theme="light"] .btn.ghost { color: var(--text); border-color: var(--line); } + 

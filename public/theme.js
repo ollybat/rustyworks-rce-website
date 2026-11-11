@@ -100,6 +100,16 @@
   function validFont(k) { for (var i = 0; i < FONTS.length; i++) if (FONTS[i].key === k) return k; return 'default'; }
   function validSize(k) { for (var i = 0; i < SIZES.length; i++) if (SIZES[i].key === k) return k; return 'default'; }
 
+  /* One-time carry-over: the preference used to live under the old brand's key. */
+  try {
+    var migrated = localStorage.getItem('spinback-theme-migrated');
+    if (!migrated) {
+      var old = localStorage.getItem('rw-theme');
+      if (old && !localStorage.getItem('spinback-theme')) localStorage.setItem('spinback-theme', old);
+      localStorage.setItem('spinback-theme-migrated', '1');
+    }
+  } catch (e) {}
+
   function read() {
     var out = {};
     for (var k in DEFAULTS) out[k] = DEFAULTS[k];
@@ -264,9 +274,9 @@
   // look. Put these three files next to rustyworks-icon.svg in /media/.
   var LOGO_ORIG = /\/media\/rustyworks-icon\.svg(\?.*)?$/;
   var LOGO_FILE = {
-    halloween:    '/media/rustyworks-icon-halloween.svg',
-    thanksgiving: '/media/rustyworks-icon-thanksgiving.svg',
-    christmas:    '/media/rustyworks-icon-christmas.svg'
+    halloween:    '/media/spinback-icon-halloween.svg',
+    thanksgiving: '/media/spinback-icon-thanksgiving.svg',
+    christmas:    '/media/spinback-icon-christmas.svg'
   };
   var TEXTS = {
     halloween:    { pre: '\uD83E\uDD87', msg: 'Happy Halloween from Spinback \u2014 spooky season is live', post: '\uD83C\uDF83', font: 'Pirata+One' },
@@ -697,7 +707,7 @@
       'padding:12px 14px;border-radius:14px;background:var(--panel,#1c1712);color:var(--text,#ece4da);border:1px solid var(--rust,#cf6a2e);' +
       'box-shadow:0 12px 34px rgba(0,0,0,.5);font:500 14px/1.35 var(--rw-font,"Chakra Petch",system-ui,sans-serif)';
     var img = document.createElement('img');
-    img.src = '/media/rustyworks-app-192.png'; img.alt = ''; img.width = 40; img.height = 40;
+    img.src = '/media/spinback-app-192.png'; img.alt = ''; img.width = 40; img.height = 40;
     img.style.cssText = 'flex:none;border-radius:10px';
     var txt = document.createElement('div'); txt.style.cssText = 'flex:1;min-width:0';
     txt.innerHTML = ios

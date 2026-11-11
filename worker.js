@@ -26,7 +26,7 @@
 const API_BASE = "https://api.rustyworksrce.xyz";
 const API_TIMEOUT_MS = 8000;
 const DISCORD_API = "https://discord.com/api/v10";
-const SESSION_COOKIE = "rw_session";
+const SESSION_COOKIE = "spinback_session";
 const SESSION_DAYS = 7;
 const HAS_EXTENSION = /\.[a-z0-9]+$/i;
 
@@ -38,7 +38,7 @@ const DEFAULT_CLIENT_ID = "1570023832717361213";
    The homepage advertises the Kit Studio and Colour Studio as no-login, so they
    stay public; everything else in that tree is gated. */
 const PUBLIC_DASHBOARD_PAGES = new Set(["/dashboard/kitbuilder.html", "/dashboard/colortext.html"]);
-const NEXT_COOKIE = "rw_oauth_next";
+const NEXT_COOKIE = "spinback_oauth_next";
 
 /* ---------- small helpers ---------- */
 
@@ -425,8 +425,15 @@ const KIT_PATHS = [
   /^\/media\/entitys\/entities\.json$/i,
   /^\/media\/kitbuilder\/[a-z0-9._-]{1,64}\.png$/i,
   /^\/media\/kitbuilder\/presets\/[a-z0-9._-]{1,32}\.json$/i,
-  /^\/media\/rustyworks-icon-(?:halloween|thanksgiving)\.svg$/i,
-  /^\/media\/rustyworks-app-(?:192|512)\.png$/i
+  /^\/media\/spinback-icon-(?:halloween|thanksgiving)\.svg$/i,
+  /^\/media\/spinback-app-(?:192|512)\.png$/i
+];
+
+/* Our public URLs carry the Spinback names; the artwork itself still lives at the
+   operator paths, so these shapes are rewritten before the upstream request. */
+const KIT_ALIASES = [
+  [/^\/media\/spinback-icon-(halloween|thanksgiving)\.svg$/i, "/media/rustyworks-icon-$1.svg"],
+  [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/rustyworks-app-$1.png"]
 ];
 
 async function kitAsset(url, ctx) {
@@ -436,9 +443,14 @@ async function kitAsset(url, ctx) {
   try {
     /* This runtime has no edge-cache API, so the response carries a long cache-control
        and browsers keep the copy instead of asking for every icon again. */
-    const upstream = await fetch(KIT_ORIGIN + url.pathname, {
+    /* Public path -> operator path, carrying the captured name across ($1). */
+    const alias = KIT_ALIASES.find((a) => a[0].test(url.pathname));
+    const upstreamPath = alias
+      ? url.pathname.replace(alias[0], (whole, captured) => alias[1].replace("$1", captured))
+      : url.pathname;
+    const upstream = await fetch(KIT_ORIGIN + upstreamPath, {
       headers: {
-        "user-agent": "SpinbackRCE-KitStudio/1.0 (+https://rustyworks-rce-j7ao5f.camelai.app)",
+        "user-agent": "SpinbackRCE-KitStudio/1.0 (+https://spinback-j7ao5f.camelai.app)",
         accept: "*/*"
       }
     });
@@ -518,7 +530,7 @@ async function needsSetup(env, request) {
     + '<link rel="stylesheet" href="/status.css">'
     + '<link rel="stylesheet" href="/ui-extras.css"></head>'
     + '<body><header><div class="wrap"><nav>'
-    + '<a href="/" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>'
+    + '<a href="/" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>'
     + '<div class="nav-links"><a href="/">Website</a><a href="/status">Status</a>'
     + '<a href="/dashboard/kitbuilder">Kit Studio</a></div></nav></div></header>'
     + '<section class="page-hero"><div class="wrap">'
@@ -572,7 +584,7 @@ async function authLogin(request, env) {
   authorize.searchParams.set("state", state);
   authorize.searchParams.set("prompt", "none");
   const headers = new Headers();
-  headers.append("set-cookie", cookieHeader("rw_oauth_state", state, 600));
+  headers.append("set-cookie", cookieHeader("spinback_oauth_state", state, 600));
   headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));
   return redirect(authorize.toString(), headers);
 }
@@ -582,7 +594,7 @@ async function authCallback(request, env) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const expectedState = cookies(request).rw_oauth_state;
+  const expectedState = cookies(request).spinback_oauth_state;
 
   if (url.searchParams.get("error")) return html("<p>Discord refused the sign-in. <a href=\"/dashboard\">Try again</a>.</p>", 400);
   if (!code || !state || !expectedState || !sameString(state, expectedState)) {
@@ -704,7 +716,7 @@ async function dashboard(request, env) {
   <header>
     <div class="wrap">
       <nav>
-        <a href="/" class="logo"><img src="/media/rustyworks-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
+        <a href="/" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
         <div class="nav-links">
           <a href="/">Website</a>
           <a href="/auth/logout" class="btn ghost sm">Sign out</a>
@@ -766,7 +778,7 @@ export default {
        through kitAsset, which validates the exact path shape before fetching anything. */
     if (url.pathname === "/media/entitys/entities.json"
       || url.pathname.startsWith("/media/kitbuilder/")
-      || url.pathname.startsWith("/media/rustyworks-")) {
+      || url.pathname.startsWith("/media/spinback-")) {
       return kitAsset(url, ctx);
     }
     if (url.pathname === "/api/config-check") {

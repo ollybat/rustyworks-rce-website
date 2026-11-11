@@ -5,16 +5,16 @@
 
 /* Base URL of the bot's HTTP API. Every page reads this one value, so if the
    API ever moves, change it here only. */
-window.RW_API = 'https://api.rustyworksrce.xyz';
+window.SPINBACK_API = 'https://api.rustyworksrce.xyz';
 
 /* Trim a trailing slash so page code can append '/api/...' safely. */
-window.RW_API = window.RW_API.replace(/\/+$/, '');
+window.SPINBACK_API = window.SPINBACK_API.replace(/\/+$/, '');
 
 /* What the product is called, in one place. Pages carry the name in their own
    markup (titles and copy are static, which is what search engines want), but
    anything a script prints - summaries, downloads, exported files - reads it
    here, so a rename only has to be made once. */
-window.RW_BRAND = {
+window.SPINBACK_BRAND = {
   name: 'Spinback RCE',
   short: 'Spinback',
   tagline: 'The free all-in-one Discord bot for Rust Console Edition servers.',
@@ -24,5 +24,5 @@ window.RW_BRAND = {
 /* The Kit Studio page calls API() and loads this file before its own script, so the helper
    has to exist here as well as in apiHelper.js. */
 window.API = window.API || function () {
-  return String(window.RW_API || '').replace(/\/+$/, '');
+  return String(window.SPINBACK_API || '').replace(/\/+$/, '');
 };

@@ -14,9 +14,9 @@
   if (window.__rwNavAuthLoaded) return;
   window.__rwNavAuthLoaded = true;
 
-  var CACHE_KEY = 'rw_me_cache_v1';
+  var CACHE_KEY = 'spinback_me_cache_v1';
   var CACHE_TTL = 60 * 1000;
-  var API = window.RW_API || '';
+  var API = window.SPINBACK_API || '';
 
   function esc(s) {
     return String(s == null ? '' : s)
