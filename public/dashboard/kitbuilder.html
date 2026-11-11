@@ -898,8 +898,8 @@ function renderItemGrid(items, isSearch=false) {
     const div = document.createElement('div');
     div.className = 'bi' + (SEL?.v === item.v ? ' selected' : '');
     div.dataset.v = item.v;
-    div.dataset.l = item.l;
-    div.draggable = true;
+
+[767 more lines in file. Use offset=901 to continue.]
 
     const lbl = document.createElement('span');
     lbl.className = 'bi-lbl';
@@ -907,5 +907,761 @@ function renderItemGrid(items, isSearch=false) {
 
     if (imgOK[item.v] === false) {
       // Known missing — show letter placeholder so item is still usable
+      const ph = document.createElement('div');
+      ph.className = 'bi-ph';
+      ph.textContent = item.l.slice(0,3).toUpperCase();
+      div.appendChild(ph);
+      div.appendChild(lbl);
+      setupBrowserItem(div, item);
+      grid.appendChild(div);
+      return;
+    }
 
-[Showing lines 1-909 of 1667. Use offset=910 to continue.]
+    if (imgOK[item.v] === true) {
+      // Known good — render immediately
+      const img = document.createElement('img');
+      img.className = 'bi-img'; img.alt = ''; img.draggable = false;
+      img.src = `/media/kitbuilder/${item.v}.png`;
+      div.appendChild(img);
+      div.appendChild(lbl);
+      setupBrowserItem(div, item);
+      grid.appendChild(div);
+      return;
+    }
+
+    // Unknown — add to grid right away with just the label, then
+    // swap in the image (or placeholder) once the load attempt resolves
+    div.appendChild(lbl);
+    setupBrowserItem(div, item);
+    grid.appendChild(div); // visible immediately — no more invisible items
+
+    const img = document.createElement('img');
+    img.className = 'bi-img'; img.alt = ''; img.draggable = false;
+    img.onload = () => {
+      imgOK[item.v] = true;
+      div.insertBefore(img, lbl); // slide image in above the label
+    };
+    img.onerror = () => {
+      imgOK[item.v] = false;
+      const ph = document.createElement('div');
+      ph.className = 'bi-ph';
+      ph.textContent = item.l.slice(0,3).toUpperCase();
+      div.insertBefore(ph, lbl); // slide placeholder in above the label
+    };
+    img.src = `/media/kitbuilder/${item.v}.png`;
+  });
+}
+
+function setupBrowserItem(div, item) {
+  div.addEventListener('click', () => selectItem(item.v, item.l));
+  div.addEventListener('dragstart', e => {
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', JSON.stringify({src:'browser',v:item.v,l:item.l}));
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ITEM SELECTION
+// ════════════════════════════════════════════════════════════════════════════
+function selectItem(v, l) {
+  if (SEL?.v === v) { clearSel(); return; }
+  SEL = {v, l};
+  document.querySelectorAll('.bi').forEach(el => el.classList.toggle('selected', el.dataset.v===v));
+  const bar = document.getElementById('selBar');
+  bar.classList.add('active');
+  document.getElementById('selName').textContent = l;
+  const img = document.getElementById('selImg');
+  img.src = `/media/kitbuilder/${v}.png`;
+  img.style.opacity = '';
+  // On mobile, auto-switch to inventory
+  if (window.innerWidth <= 900) setMobTab('inventory');
+}
+
+function clearSel() {
+  SEL = null;
+  document.querySelectorAll('.bi').forEach(el => el.classList.remove('selected'));
+  document.getElementById('selBar').classList.remove('active');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SLOT RENDERING
+// ════════════════════════════════════════════════════════════════════════════
+function buildAllSlots() {
+  buildSlotGrid('wearGrid', 'wear', 7, 'wear-slot');
+  buildSlotGrid('mainGrid', 'main', 24, 'main-slot');
+  buildSlotGrid('beltGrid', 'belt', 6, 'belt-slot');
+}
+
+function buildSlotGrid(gridId, pos, count, cls) {
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const slot = document.createElement('div');
+    slot.id = `slot_${pos}_${i}`;
+    slot.className = `slot ${cls}`;
+    slot.dataset.pos = pos;
+    slot.dataset.idx = i;
+    // Click
+    slot.addEventListener('click', e => { e.stopPropagation(); onSlotClick(pos, i); });
+    // DnD drop target
+    slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('drag-over'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+    slot.addEventListener('drop', e => { e.preventDefault(); slot.classList.remove('drag-over'); onSlotDrop(e, pos, i); });
+    renderSlot(pos, i);
+    grid.appendChild(slot);
+  }
+}
+
+function renderSlot(pos, idx) {
+  const slot = document.getElementById(`slot_${pos}_${idx}`);
+  if (!slot) return;
+  const item = KIT[pos][idx];
+  slot.classList.toggle('filled', !!item);
+  if (!item) {
+    slot.innerHTML = '<div class="slot-plus">+</div>';
+    return;
+  }
+  const imgSrc = `/media/kitbuilder/${item.v}.png`;
+  slot.innerHTML = `
+    <img class="slot-img" src="${imgSrc}" alt="" onerror="this.style.display='none'">
+    <span class="slot-qty">×${fmtNum(item.qty)}</span>
+    <button class="slot-rm" onclick="removeSlot(event,'${pos}',${idx})">✕</button>`;
+}
+
+function renderAllSlots() {
+  for (let i=0;i<7;i++) renderSlot('wear',i);
+  for (let i=0;i<24;i++) renderSlot('main',i);
+  for (let i=0;i<6;i++) renderSlot('belt',i);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SLOT INTERACTIONS
+// ════════════════════════════════════════════════════════════════════════════
+function onSlotClick(pos, idx) {
+  closeQP();
+  const existing = KIT[pos][idx];
+  if (existing) { openQP(pos, idx); return; }
+  // Empty slot — place selected item
+  if (!SEL) return;
+  if (pos === 'wear' && !WEARABLE.has(SEL.v)) { toast('That item can\'t go in Wear slots.', true); return; }
+  openQtyDialog(pos, idx);
+}
+
+// Click to place: open small qty confirm
+function openQtyDialog(pos, idx) {
+  openQP(pos, idx, true); // new = true
+}
+
+function onSlotDrop(e, pos, idx) {
+  const raw = e.dataTransfer.getData('text/plain');
+  if (!raw) return;
+  let data;
+  try { data = JSON.parse(raw); } catch { return; }
+
+  if (data.src === 'browser') {
+    const item = data;
+    if (pos === 'wear' && !WEARABLE.has(item.v)) { toast('That item can\'t go in Wear slots.', true); return; }
+    const existing = KIT[pos][idx];
+    KIT[pos][idx] = { v: item.v, l: item.l, qty: 1 };
+    renderSlot(pos, idx);
+    updateOutput();
+    if (!existing) toast(`${item.l} added to ${pos}`);
+  } else if (data.src === 'slot') {
+    const from = data;
+    if (pos === 'wear' && KIT[from.pos][from.idx] && !WEARABLE.has(KIT[from.pos][from.idx].v)) {
+      toast('That item can\'t go in Wear slots.', true); return;
+    }
+    const tmp = KIT[pos][idx];
+    KIT[pos][idx] = KIT[from.pos][from.idx];
+    KIT[from.pos][from.idx] = tmp;
+    renderSlot(pos, idx);
+    renderSlot(from.pos, from.idx);
+    updateOutput();
+  }
+}
+
+function removeSlot(e, pos, idx) {
+  e.stopPropagation();
+  KIT[pos][idx] = null;
+  renderSlot(pos, idx);
+  updateOutput();
+}
+
+// Make filled slots draggable (called after render)
+document.addEventListener('dragstart', e => {
+  const slot = e.target.closest('.slot.filled');
+  if (!slot) return;
+  const {pos, idx} = slot.dataset;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', JSON.stringify({src:'slot',pos,idx:Number(idx)}));
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// QTY POPOVER
+// ════════════════════════════════════════════════════════════════════════════
+function openQP(pos, idx, isNew=false) {
+  const item = KIT[pos][idx];
+  QP = {pos, idx, isNew};
+  const pop = document.getElementById('qtyPop');
+  document.getElementById('qpName').textContent = item ? item.l : (SEL?.l || '');
+  document.getElementById('qpVal').value = item ? item.qty : 1;
+  pop.style.display = 'block';
+  // Position near slot
+  const slot = document.getElementById(`slot_${pos}_${idx}`);
+  if (slot) {
+    const r = slot.getBoundingClientRect();
+    const pw = pop.offsetWidth || 180;
+    let left = r.left + r.width/2 - pw/2;
+    let top  = r.bottom + 6;
+    // Keep within viewport
+    left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+    if (r.bottom + 160 > window.innerHeight) top = r.top - 160;
+    pop.style.left = left + 'px';
+    pop.style.top  = top  + 'px';
+  }
+  setTimeout(() => document.getElementById('qpVal').select(), 50);
+}
+
+function closeQP() {
+  QP = null;
+  document.getElementById('qtyPop').style.display = 'none';
+}
+
+function qpAdj(d) {
+  const inp = document.getElementById('qpVal');
+  inp.value = Math.max(1, (parseInt(inp.value)||1) + d);
+}
+
+function qpSave() {
+  if (!QP) return;
+  const {pos, idx, isNew} = QP;
+  const qty = Math.max(1, parseInt(document.getElementById('qpVal').value)||1);
+  if (isNew) {
+    if (!SEL) { closeQP(); return; }
+    KIT[pos][idx] = { v: SEL.v, l: SEL.l, qty };
+  } else {
+    if (KIT[pos][idx]) KIT[pos][idx].qty = qty;
+  }
+  renderSlot(pos, idx);
+  updateOutput();
+  closeQP();
+}
+
+function qpRemove() {
+  if (!QP) return;
+  KIT[QP.pos][QP.idx] = null;
+  renderSlot(QP.pos, QP.idx);
+  updateOutput();
+  closeQP();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMMANDS GENERATION
+// ════════════════════════════════════════════════════════════════════════════
+function buildCommands(name) {
+  const cmds = [`kit remove "${name}"`, `kit add "${name}"`];
+  KIT.wear.forEach(item => { if (item) cmds.push(`kit add "${name}" ${item.v} ${item.qty} 1 wear`); });
+  KIT.main.forEach(item => { if (item) cmds.push(`kit add "${name}" ${item.v} ${item.qty} 1 main`); });
+  KIT.belt.forEach(item => { if (item) cmds.push(`kit add "${name}" ${item.v} ${item.qty} 1 belt`); });
+  return cmds;
+}
+
+function updateOutput() {
+  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
+  if (!kitHasItems()) { document.getElementById('cmdOutput').value = ''; return; }
+  document.getElementById('cmdOutput').value = buildCommands(KIT.name).join('\n');
+}
+
+async function incrementGenerated() {
+  if (!API()) return;
+  try {
+    const d = await fetch(`${API()}/api/kitbuilder/generate`,{method:'POST',credentials:'include'}).then(r=>r.json());
+    if (d.generated) document.getElementById('stGen').textContent = fmtNum(d.generated);
+  } catch {}
+}
+
+async function doAction(type) {
+  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
+  if (!kitHasItems()) { toast('Add some items to the kit first.', true); return; }
+  const cmds = buildCommands(KIT.name);
+  if (type === 'commands') {
+    const text = cmds.join('\n');
+    await copyText(text);
+    toast('📋 RCON commands copied!');
+  } else {
+    const code = safeB64Enc(cmds.join('\n'));
+    await copyText(code);
+    document.getElementById('cmdOutput').value = code;
+    toast('⚡ Install code copied!');
+  }
+  incrementGenerated();
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return; } catch {}
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.cssText='position:fixed;top:-9999px';
+  document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
+async function clearAll() {
+  if (kitHasItems() && !(await openConfirm('Clear All Items?', 'Clear all items and reset the kit?', 'Yes, Clear All', 'danger'))) return;
+  KIT.wear.fill(null); KIT.main.fill(null); KIT.belt.fill(null);
+  document.getElementById('kitName').value = '';
+  renderAllSlots(); updateOutput(); clearSel();
+  toast('Kit cleared.');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// IMPORT
+// ════════════════════════════════════════════════════════════════════════════
+function openImportModal() { document.getElementById('importTa').value=''; document.getElementById('importModal').style.display='flex'; }
+
+function doImport() {
+  const raw = document.getElementById('importTa').value.trim();
+  if (!raw) { toast('Paste a code or commands first.', true); return; }
+  let text = raw;
+  // Try Base64 decode
+  try {
+    const dec = safeB64Dec(raw);
+    if (dec.toLowerCase().includes('kit ')) text = dec;
+  } catch {}
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  // Clear current
+  KIT.wear.fill(null); KIT.main.fill(null); KIT.belt.fill(null);
+  // Parse kit name
+  for (const line of lines) {
+    const m = line.match(/^kit\s+add\s+"?([^"\s]+)"?\s+"?([^"\s]+)"?\s+(\d+)(?:\s+\d+)?\s+(wear|main|belt)/i);
+    if (!m) continue;
+    const [,,shortname,qtyStr,posRaw] = m;
+    const qty = Math.max(1, parseInt(qtyStr)||1);
+    const pos = posRaw.toLowerCase();
+    if (!['wear','main','belt'].includes(pos)) continue;
+    // Find first empty slot
+    const arr = KIT[pos];
+    const emptyIdx = arr.findIndex(s=>!s);
+    if (emptyIdx === -1) continue;
+    // Check wear constraint
+    if (pos === 'wear' && !WEARABLE.has(shortname)) continue;
+    // Find label
+    let label = shortname;
+    for (const [,items] of Object.entries(CATS)) { const it = items.find(i=>i.v===shortname); if(it){label=it.l;break;} }
+    arr[emptyIdx] = {v:shortname,l:label,qty};
+  }
+  renderAllSlots(); updateOutput(); closeModal('importModal');
+  toast('✅ Kit imported!');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SAVE / LOAD / MANAGE
+// ════════════════════════════════════════════════════════════════════════════
+async function saveKit() {
+  if (!USER) { toast('Login to save kits.', true); window.location.href='../login.html'; return; }
+  if (!kitHasItems()) { toast('Add items before saving.', true); return; }
+  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
+  try {
+    const data = {wear:KIT.wear,main:KIT.main,belt:KIT.belt};
+    const d = await fetch(`${API()}/api/kitbuilder/kits`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({kit_name:KIT.name,kit_data:data})}).then(r=>r.json());
+    if (d.ok) {
+      toast(`💾 "${KIT.name}" saved!`);
+      loadStats();
+    } else { toast(d.error||'Save failed.',true); }
+  } catch(e){ toast('Error: '+e.message,true); }
+}
+
+async function openLoadModal() {
+  MANAGE_MODE = 'load';
+  document.getElementById('listModalTitle').textContent = '📂 Load Kit';
+  document.getElementById('listModal').style.display = 'flex';
+  await fetchKitList();
+}
+
+async function openManageModal() {
+  MANAGE_MODE = 'manage';
+  document.getElementById('listModalTitle').textContent = '🗂️ Manage Kits';
+  document.getElementById('listModal').style.display = 'flex';
+  await fetchKitList();
+}
+
+async function fetchKitList() {
+  const body = document.getElementById('listModalBody');
+  if (!USER) { body.innerHTML = '<p style="color:var(--text-dim);font-size:.88rem;">Login to save and manage kits. <a href="../login.html" style="color:var(--ember);">Login →</a></p>'; return; }
+  body.textContent = 'Loading…';
+  try {
+    const d = await fetch(`${API()}/api/kitbuilder/kits`,{credentials:'include'}).then(r=>r.json());
+    const kits = d.kits||[];
+    if (!kits.length) { body.innerHTML='<p style="color:var(--text-dim);font-size:.88rem;">No saved kits yet. Build one and click 💾 Save Kit!</p>'; return; }
+    body.innerHTML = kits.map(k=>{
+      const date = new Date(k.created_at*1000).toLocaleDateString();
+      const isLoad = MANAGE_MODE==='load';
+      return `<div class="sk-row">
+        <span class="sk-name">🎒 ${esc(k.kit_name)}</span>
+        <span class="sk-date">${date}</span>
+        ${isLoad?`<button class="btn sm" onclick="loadKit(${k.id})">📂 Load</button>`:
+                  `<button class="btn sm danger" onclick="deleteKit(${k.id})">🗑️ Delete</button>`}
+      </div>`;
+    }).join('');
+  } catch(e){ body.innerHTML='<p style="color:#e74c3c;">Error loading kits: '+esc(e.message)+'</p>'; }
+}
+
+async function loadKit(id) {
+  try {
+    const d = await fetch(`${API()}/api/kitbuilder/kits`,{credentials:'include'}).then(r=>r.json());
+    const kit = d.kits?.find(k=>k.id===id);
+    if (!kit) { toast('Kit not found.',true); return; }
+    KIT.wear = (kit.data.wear||[]).map(s=>s?{v:s.v||s.shortname,l:s.l||s.label||s.v||s.shortname,qty:s.qty||1}:null);
+    while(KIT.wear.length<7) KIT.wear.push(null);
+    KIT.main = (kit.data.main||[]).map(s=>s?{v:s.v||s.shortname,l:s.l||s.label||s.v||s.shortname,qty:s.qty||1}:null);
+    while(KIT.main.length<24) KIT.main.push(null);
+    KIT.belt = (kit.data.belt||[]).map(s=>s?{v:s.v||s.shortname,l:s.l||s.label||s.v||s.shortname,qty:s.qty||1}:null);
+    while(KIT.belt.length<6) KIT.belt.push(null);
+    document.getElementById('kitName').value = kit.kit_name;
+    renderAllSlots(); updateOutput(); closeModal('listModal');
+    toast(`✅ Loaded "${kit.kit_name}"`);
+  } catch(e){ toast('Error: '+e.message,true); }
+}
+
+async function deleteKit(id) {
+  if (!(await openConfirm('Delete Kit?', 'Delete this saved kit? This cannot be undone.', 'Yes, Delete', 'danger'))) return;
+  try {
+    const d = await fetch(`${API()}/api/kitbuilder/kits/${id}`,{method:'DELETE',credentials:'include'}).then(r=>r.json());
+    if (d.ok) { toast('Kit deleted.'); loadStats(); fetchKitList(); }
+    else toast(d.error||'Delete failed.',true);
+  } catch(e){ toast('Error: '+e.message,true); }
+}
+
+function togglePresetPanel() {
+  const f = document.getElementById('presetFields');
+  const open = f.classList.toggle('show');
+  document.getElementById('presetIco').textContent = open ? '✕' : '＋';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRESETS SYSTEM
+// ════════════════════════════════════════════════════════════════════════════
+const PRESET_FILES = [
+  { id: "vanilla", label: "Vanilla", path: "/media/kitbuilder/presets/vanilla.json" },
+  { id: "2x", label: "2x", path: "/media/kitbuilder/presets/2x.json" },
+  { id: "3x", label: "3x", path: "/media/kitbuilder/presets/3x.json" },
+  { id: "6x", label: "6x", path: "/media/kitbuilder/presets/6x.json" },
+  { id: "supermodded", label: "Super Modded", path: "/media/kitbuilder/presets/supermodded.json" },
+];
+const _presetCache = new Map();
+
+function setupServerPresets() {
+  const select = document.getElementById("presetMultiplierSelect");
+  if (!select) return;
+
+  PRESET_FILES.forEach(group => {
+    const option = document.createElement("option");
+    option.value = group.id;
+    option.textContent = group.label;
+    select.appendChild(option);
+  });
+
+  select.addEventListener("change", async (e) => {
+    const groupId = e.target.value;
+    const note = document.getElementById("presetNote");
+    const list = document.getElementById("presetBtnList");
+
+    if (!groupId) {
+      note.textContent = "Pick a server type to load a built-in loadout.";
+      list.innerHTML = "";
+      return;
+    }
+
+    const meta = PRESET_FILES.find(g => g.id === groupId);
+    note.textContent = `Loading ${meta.label} loadouts...`;
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">Fetching...</div>';
+
+    const kits = await fetchPresetData(meta);
+    if (!kits || !kits.length) {
+      note.textContent = `No loadouts found for ${meta.label}.`;
+      list.innerHTML = "";
+      return;
+    }
+
+    note.textContent = `${kits.length} ${meta.label} loadouts available.`;
+    list.innerHTML = "";
+
+    kits.forEach(kit => {
+      const btn = document.createElement("button");
+      btn.className = "preset-btn";
+      btn.innerHTML = `<strong>${esc(kit.name)}</strong> <span>${kit.items.length} items</span>`;
+      btn.onclick = () => loadPresetKit(kit);
+      list.appendChild(btn);
+    });
+  });
+}
+
+async function fetchPresetData(meta) {
+  if (_presetCache.has(meta.id)) return _presetCache.get(meta.id);
+  try {
+    const res = await fetch(meta.path, { cache: "no-cache" });
+    if (!res.ok) throw new Error("Load failed");
+    const data = await res.json();
+    const kits = (data.kits || []).map((k, i) => ({
+      name: k.name || `Preset ${i+1}`,
+      items: (k.items || []).map(item => {
+        let slot = String(item.slot || "main").trim().toLowerCase();
+        if (slot === "inventory") slot = "main";
+        return {
+          shortname: String(item.shortname).toLowerCase(),
+          quantity: Math.max(1, Number(item.amount) || 1),
+          container: slot
+        };
+      })
+    }));
+    _presetCache.set(meta.id, kits);
+    return kits;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+async function loadPresetKit(kit) {
+  if (kitHasItems() && !(await openConfirm('Overwrite Kit?', 'This will overwrite your current kit. Continue?', 'Yes, Overwrite', 'danger'))) return;
+  
+  // Clear slots
+  KIT.wear.fill(null); KIT.main.fill(null); KIT.belt.fill(null);
+  document.getElementById('kitName').value = kit.name;
+
+  const nextIdx = { wear: 0, main: 0, belt: 0 };
+  let placed = 0;
+
+  kit.items.forEach(entry => {
+    const pos = entry.container;
+    if (!KIT[pos] || nextIdx[pos] >= KIT[pos].length) return;
+    if (pos === "wear" && !WEARABLE.has(entry.shortname)) return; // Enforcement
+
+    // Resolve human label for UI
+    let label = entry.shortname;
+    for (const [, items] of Object.entries(CATS)) {
+      const found = items.find(i => i.v === entry.shortname);
+      if (found) { label = found.l; break; }
+    }
+    if (label === entry.shortname) label = toLabel(entry.shortname); // fallback
+
+    KIT[pos][nextIdx[pos]] = { v: entry.shortname, l: label, qty: entry.quantity };
+    nextIdx[pos]++;
+    placed++;
+  });
+
+  renderAllSlots();
+  updateOutput();
+  toast(`✅ Loaded ${kit.name} (${placed} items)`);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SCREENSHOT SYSTEM
+// ════════════════════════════════════════════════════════════════════════════
+let _activeCanvas = null;
+
+function openScreenshotModal() {
+  if (!kitHasItems()) { toast('Add items to your kit before making a screenshot.', true); return; }
+  document.getElementById('screenshotModal').style.display = 'flex';
+  generateScreenshotCanvas();
+}
+
+async function generateScreenshotCanvas() {
+  const status = document.getElementById('ssStatus');
+  const img = document.getElementById('ssImg');
+  const btnD = document.getElementById('ssDownloadBtn');
+  const btnC = document.getElementById('ssCopyBtn');
+
+  status.hidden = false; img.hidden = true; btnD.disabled = true; btnC.disabled = true;
+  _activeCanvas = null;
+
+  try {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    
+    const width = 1400;
+    const padding = 35;
+    const gap = 12;
+    const headingHeight = 75;
+    const sectionGap = 30;
+
+    const sections = [
+      { key: "wear", title: "GEAR", cols: 7, slots: KIT.wear },
+      { key: "main", title: "INVENTORY", cols: 6, slots: KIT.main },
+      { key: "belt", title: "BELT", cols: 6, slots: KIT.belt }
+    ].map(s => ({
+      ...s,
+      rows: Math.ceil(s.slots.length / s.cols),
+      cellSize: Math.floor((width - padding * 2 - gap * (s.cols - 1)) / s.cols)
+    }));
+    
+    const height = padding + sections.reduce((total, sec) => {
+      return total + headingHeight + sec.rows * sec.cellSize + (sec.rows - 1) * gap + sectionGap;
+    }, 0) - sectionGap + padding;
+
+    canvas.width = width; canvas.height = height;
+
+    // High-End Rust UI Background
+    const bg = ctx.createLinearGradient(0, 0, 0, height);
+    bg.addColorStop(0, "#191a18"); 
+    bg.addColorStop(1, "#10100f");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    // Subtle dark overlay behind slots
+    ctx.fillStyle = "rgba(0,0,0,0.15)";
+    ctx.fillRect(15, 15, width - 30, height - 30);
+
+    let y = padding;
+    
+    for (const sec of sections) {
+      // Draw Header
+      ctx.save();
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+      ctx.shadowBlur = 6; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 3;
+      ctx.font = "900 56px 'Oswald', Impact, sans-serif";
+      ctx.textBaseline = "top";
+      ctx.fillText(sec.title, padding, y);
+      ctx.restore();
+      
+      y += headingHeight;
+
+      // Draw Slots
+      for (let i = 0; i < sec.slots.length; i++) {
+        const col = i % sec.cols;
+        const row = Math.floor(i / sec.cols);
+        const x = padding + col * (sec.cellSize + gap);
+        const cellY = y + row * (sec.cellSize + gap);
+        
+        await drawScreenshotSlot(ctx, x, cellY, sec.cellSize, sec.slots[i], sec.key);
+      }
+      y += sec.rows * sec.cellSize + (sec.rows - 1) * gap + sectionGap;
+    }
+
+    _activeCanvas = canvas;
+    img.src = canvas.toDataURL("image/png");
+    img.hidden = false; status.hidden = true;
+    btnD.disabled = false; btnC.disabled = false;
+
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Error building screenshot.";
+  }
+}
+
+async function drawScreenshotSlot(ctx, x, y, size, itemData, keyType) {
+  ctx.save();
+  
+  // Base Slot Background
+  ctx.fillStyle = "rgba(38, 36, 34, 0.95)"; 
+  ctx.fillRect(x, y, size, size);
+  
+  // Inner subtle gradient/shadow
+  const slotGrad = ctx.createLinearGradient(x, y, x, y + size);
+  slotGrad.addColorStop(0, "rgba(255, 255, 255, 0.05)");
+  slotGrad.addColorStop(1, "rgba(0, 0, 0, 0.5)");
+  ctx.fillStyle = slotGrad;
+  ctx.fillRect(x, y, size, size);
+
+  // Border based on slot type
+  let bColor = "rgba(255, 255, 255, 0.08)"; // default empty
+  if (itemData) {
+    bColor = keyType === 'wear' ? "rgba(207, 106, 46, 0.6)" : 
+             keyType === 'belt' ? "rgba(231, 76, 60, 0.5)" : 
+             "rgba(52, 152, 219, 0.4)";
+  }
+  ctx.strokeStyle = bColor;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1.5, y + 1.5, size - 3, size - 3);
+
+  if (itemData) {
+    // Condition Bar (Green)
+    ctx.fillStyle = "#8cc83d";
+    ctx.fillRect(x + 3, y + 3, size - 6, 8);
+
+    // Image
+    const image = await loadCanvasImage(`/media/kitbuilder/${itemData.v}.png`);
+    if (image) {
+      const imageMax = size * 0.72;
+      const imageRatio = image.naturalWidth / image.naturalHeight;
+      let drawWidth = imageMax, drawHeight = imageMax;
+      
+      if (imageRatio > 1) drawHeight = drawWidth / imageRatio;
+      else drawWidth = drawHeight * imageRatio;
+      
+      const imageX = x + (size - drawWidth) / 2;
+      const imageY = y + 12 + (size * 0.8 - drawHeight) / 2;
+      
+      // Crisp drop shadow for the item
+      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+      ctx.shadowBlur = 12; ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 6;
+      ctx.drawImage(image, imageX, imageY, drawWidth, drawHeight);
+      ctx.shadowColor = "transparent"; // reset
+    }
+
+    // Text
+    const text = `x${fmtNum(itemData.qty)}`;
+    let fontSize = Math.max(20, Math.floor(size * 0.22));
+    ctx.font = `800 ${fontSize}px 'Arial', sans-serif`;
+    
+    ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.9)"; 
+    ctx.fillStyle = "#ffffff";
+    
+    ctx.strokeText(text, x + size - 8, y + size - 6);
+    ctx.fillText(text, x + size - 8, y + size - 6);
+  }
+  ctx.restore();
+}
+
+function loadCanvasImage(src) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = "Anonymous"; // Prevents Canvas taint issues
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+function downloadScreenshotImage() {
+  if (!_activeCanvas) return;
+  _activeCanvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const name = document.getElementById('kitName').value || 'custom-kit';
+    link.download = `${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-screenshot.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast('💾 Image downloaded!');
+  }, "image/png");
+}
+
+async function copyScreenshotImage() {
+  if (!_activeCanvas) return;
+  if (!navigator.clipboard || !window.ClipboardItem) {
+    toast("Image copy not supported in this browser. Use Download.", true); return;
+  }
+  _activeCanvas.toBlob(async (blob) => {
+    if (!blob) return;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      toast("📋 Image copied to clipboard!");
+    } catch (err) {
+      console.error(err);
+      toast("Failed to copy image.", true);
+    }
+  }, "image/png");
+}
+
+init();
+</script>
+<script src="/apiHelper.js"></script>
+<script src="/nav-auth.js"></script>
+</body>
+</html>
