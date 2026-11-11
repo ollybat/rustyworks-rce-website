@@ -1,5 +1,5 @@
 /* ==========================================================================
-   RustyWorks RCE — homepage behaviour
+   Spinback RCE — homepage behaviour
    --------------------------------------------------------------------------
    The homepage ships markup and styles; everything interactive lives here so
    index.html stays readable and this file can be cached on its own.
