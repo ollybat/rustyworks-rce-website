@@ -154,9 +154,15 @@
         "</span></li>";
     }).join("");
     empty.hidden = state.lines.length > 0;
+    refreshOutput();
+  }
+
+  /* Redraw only the parts that change when a number is edited: rebuilding the rows would
+     take the focus out of the field being typed into, and a copy made straight after
+     typing must already contain the new amount. */
+  function refreshOutput() {
     el("ksLinesCount").textContent = state.lines.length + (state.lines.length === 1 ? " line" : " lines");
-    var text = commandsText();
-    el("ksCommands").textContent = text || "# Add items on the left and the commands appear here.";
+    el("ksCommands").textContent = commandsText() || "# Add items on the left and the commands appear here.";
     var warn = warnings();
     var warnNote = el("ksWarn");
     warnNote.hidden = !warn.length;
@@ -263,6 +269,15 @@
     });
     el("ksMore").addEventListener("click", function () { state.shown += PAGE; renderResults(); });
     el("ksAddManual").addEventListener("click", manualAdd);
+    /* Amounts change on every keystroke, so they are read live; condition and container
+       are read when the field is committed. */
+    el("ksLines").addEventListener("input", function (e) {
+      if (e.target.getAttribute("data-f") !== "amount") return;
+      var j = parseInt(e.target.getAttribute("data-i"), 10);
+      if (isNaN(j) || !state.lines[j]) return;
+      state.lines[j].amount = Math.max(1, parseInt(e.target.value, 10) || 1);
+      refreshOutput();
+    });
     el("ksLines").addEventListener("change", function (e) {
       var i = parseInt(e.target.getAttribute("data-i"), 10);
       var f = e.target.getAttribute("data-f");
