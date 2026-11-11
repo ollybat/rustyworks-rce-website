@@ -19,8 +19,8 @@
   var TIMEOUT_MS = 6000;
   var STRIP_MAX = 40;
   var EVENT_MAX = 40;
-  var BRAND = (window.RW_BRAND && window.RW_BRAND.name) || "Spinback RCE";
-  var SITE = (window.RW_BRAND && window.RW_BRAND.site) || "https://spinback-j7ao5f.camelai.app";
+  var BRAND = (window.SPINBACK_BRAND && window.SPINBACK_BRAND.name) || "Spinback RCE";
+  var SITE = (window.SPINBACK_BRAND && window.SPINBACK_BRAND.site) || "https://spinback-j7ao5f.camelai.app";
   var PAUSE_KEY = "rw-status-paused";
   var NOTIFY_KEY = "rw-status-notify";
   /* How often to check, depending on what the last answer said: a quiet system
@@ -854,4 +854,35 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
+})();
+
+
+/* --------------------------------------------------------------------------
+   The state the site is actually in: no API of its own is connected yet.
+
+   The status page must not look broken, and it must not borrow another bot's
+   numbers, so this one check turns the honest 503 into a plain sentence with
+   the single thing that fixes it. It removes itself the moment an API answers.
+   -------------------------------------------------------------------------- */
+(function () {
+  "use strict";
+  fetch("/api/status", { headers: { accept: "application/json" } }).then(function (response) {
+    if (response.status !== 503) return null;
+    return response.json().catch(function () { return null; });
+  }).then(function (data) {
+    if (!data || data.reason !== "not_connected") return;
+    if (document.getElementById("sb-api-notice")) return;
+    var main = document.querySelector("main") || document.body;
+    var box = document.createElement("div");
+    box.id = "sb-api-notice";
+    box.setAttribute("role", "status");
+    box.style.cssText = "margin:18px 0;padding:16px 18px;border:1px solid rgba(127,209,247,.45);border-radius:14px;" +
+      "background:rgba(127,209,247,.09);font-size:15px;line-height:1.55";
+    box.innerHTML = "<strong>No bot API is connected yet.</strong> " +
+      "Every measurement below belongs to this website and this browser, so the page still works. " +
+      "The panels that describe the bot stay empty until you point the site at your own API - " +
+      "set the address in <code>config.js</code> and the <code>BOT_API_ORIGIN</code> value on the app, " +
+      "and everything here fills in by itself.";
+    main.insertBefore(box, main.firstChild);
+  }).catch(function () {});
 })();

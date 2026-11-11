@@ -5,7 +5,11 @@
 
 /* Base URL of the bot's HTTP API. Every page reads this one value, so if the
    API ever moves, change it here only. */
-window.SPINBACK_API = 'https://api.rustyworksrce.xyz';
+/* Your bot's HTTP API - the one running next to the bot on Railway. Paste its address
+   here and every page starts reading your own bot.
+   While this is blank the site stays honestly disconnected: it says the data source is
+   not connected rather than borrowing numbers from somebody else's API. */
+window.SPINBACK_API = '';
 
 /* Trim a trailing slash so page code can append '/api/...' safely. */
 window.SPINBACK_API = window.SPINBACK_API.replace(/\/+$/, '');

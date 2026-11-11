@@ -23,7 +23,12 @@
    site is unaffected.
    ========================================================================== */
 
-const API_BASE = "https://api.rustyworksrce.xyz";
+/* Your bot's API address, set as BOT_API_ORIGIN on this app. It is deliberately not
+   defaulted to anything: the site must never quietly read a third party's API and
+   present its numbers as yours. Empty means "not connected", and it says so. */
+function botApiBase(env) {
+  return ((env && env.BOT_API_ORIGIN) || "").replace(/\/+$/, "");
+}
 const API_TIMEOUT_MS = 8000;
 const DISCORD_API = "https://discord.com/api/v10";
 const SESSION_COOKIE = "spinback_session";
@@ -368,10 +373,20 @@ async function proxyApi(request, env, ctx) {
   const requestUrl = new URL(request.url);
   const watching = requestUrl.pathname === "/api/status";
   const started = Date.now();
+  const base = botApiBase(env);
+  if (!base) {
+    /* No API of your own is connected yet. Answering truthfully keeps the status page
+       from reporting somebody else's uptime as yours. */
+    return json({
+      connected: false,
+      reason: "not_connected",
+      message: "No bot API is connected yet. Set BOT_API_ORIGIN on this app to your bot's address."
+    }, 503);
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
-    const upstream = await fetch(API_BASE + requestUrl.pathname + requestUrl.search, {
+    const upstream = await fetch(base + requestUrl.pathname + requestUrl.search, {
       method: request.method === "HEAD" ? "GET" : request.method,
       headers: { accept: "application/json" },
       signal: controller.signal,
