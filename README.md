@@ -14,7 +14,9 @@ public/
   config.js             Runtime config (the bot API base URL)
   theme.js              Theme engine, seasons, "add to home screen"
   apiHelper.js          Small JSON helper for the bot API
-  nav-auth.js           Session/auth helper used by the signed-in links
+  nav-auth.js           Header account widget: "Login" pill, or the signed-in capsule
+  login.html            Sign-in page for the owner-only dashboard
+  login.js              Keeps that page's button honest about the current session
   home.js               Homepage behaviour: nav, partners panel, scroll reveal,
                         live counts, hero video
   manifest.webmanifest  Web app manifest (installable "add to home screen")

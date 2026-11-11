@@ -16,7 +16,9 @@
                     extension-less paths.
 
    Required environment (set as Worker secrets — see docs/DISCORD-DASHBOARD.md):
-     DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_GUILD_ID, SESSION_SECRET
+     DISCORD_CLIENT_SECRET, DISCORD_GUILD_ID, SESSION_SECRET
+   (DISCORD_CLIENT_ID is optional — the application id is public and defaults
+   to the bot's own id.)
    Without them /dashboard answers 503 instead of guessing; the rest of the
    site is unaffected.
    ========================================================================== */
@@ -27,6 +29,11 @@ const DISCORD_API = "https://discord.com/api/v10";
 const SESSION_COOKIE = "rw_session";
 const SESSION_DAYS = 7;
 const HAS_EXTENSION = /\.[a-z0-9]+$/i;
+
+/* The application id is public — it is in every invite link on the site — so it
+   can carry a default. The client secret, guild id and session secret cannot. */
+const DEFAULT_CLIENT_ID = "1468652543012896854";
+const NEXT_COOKIE = "rw_oauth_next";
 
 /* ---------- small helpers ---------- */
 
@@ -157,8 +164,20 @@ async function proxyApi(request) {
 
 /* ---------- Discord sign-in ---------- */
 
+function clientId(env) {
+  return env.DISCORD_CLIENT_ID || DEFAULT_CLIENT_ID;
+}
+
 function authConfigured(env) {
-  return Boolean(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET && env.DISCORD_GUILD_ID && env.SESSION_SECRET);
+  return Boolean(clientId(env) && env.DISCORD_CLIENT_SECRET && env.DISCORD_GUILD_ID && env.SESSION_SECRET);
+}
+
+/* Only same-site paths are ever accepted as a post-sign-in destination, so a
+   crafted ?next= cannot bounce somebody off to another host. */
+function safeNext(value) {
+  const path = String(value == null ? "" : value);
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.includes("://")) return "/dashboard";
+  return path;
 }
 
 function needsSetup(env) {
@@ -167,7 +186,7 @@ function needsSetup(env) {
 <title>Dashboard not configured</title><link rel="stylesheet" href="/style.css"></head>
 <body><header><div class="wrap"><nav><a href="/" class="logo">RustyWorks<span class="accent">RCE</span></a></nav></div></header>
 <section class="page-hero"><div class="wrap"><h1>Dashboard needs a few secrets</h1>
-<p>Set <code>DISCORD_CLIENT_ID</code>, <code>DISCORD_CLIENT_SECRET</code>, <code>DISCORD_GUILD_ID</code> and
+<p>Set <code>DISCORD_CLIENT_SECRET</code>, <code>DISCORD_GUILD_ID</code> and
 <code>SESSION_SECRET</code> on this Worker, then reload. Until then the dashboard stays closed —
 the rest of the site works normally.</p>
 <p><a class="btn" href="/">Back to the site</a></p></div></section></body></html>`, 503);
@@ -180,17 +199,23 @@ function redirect(location, headers = {}) {
 async function authLogin(request, env) {
   if (!authConfigured(env)) return needsSetup(env);
   const url = new URL(request.url);
+  const next = safeNext(url.searchParams.get("next"));
+
+  /* Already signed in? Go straight where they were headed. */
+  if (await readSession(request, env)) return redirect(next);
+
   const state = randomToken(16);
   const authorize = new URL("https://discord.com/oauth2/authorize");
-  authorize.searchParams.set("client_id", env.DISCORD_CLIENT_ID);
+  authorize.searchParams.set("client_id", clientId(env));
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("redirect_uri", url.origin + "/auth/callback");
   authorize.searchParams.set("scope", "identify guilds");
   authorize.searchParams.set("state", state);
   authorize.searchParams.set("prompt", "none");
-  return redirect(authorize.toString(), {
-    "set-cookie": cookieHeader("rw_oauth_state", state, 600),
-  });
+  const headers = new Headers();
+  headers.append("set-cookie", cookieHeader("rw_oauth_state", state, 600));
+  headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));
+  return redirect(authorize.toString(), headers);
 }
 
 async function authCallback(request, env) {
@@ -209,7 +234,7 @@ async function authCallback(request, env) {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: env.DISCORD_CLIENT_ID,
+      client_id: clientId(env),
       client_secret: env.DISCORD_CLIENT_SECRET,
       grant_type: "authorization_code",
       code,
@@ -232,14 +257,9 @@ async function authCallback(request, env) {
 
   /* owner === true is only set for guilds the signed-in account owns, which is
      exactly the rule for this dashboard. */
-  if (!guild || guild.owner !== true) {
-    return html(`<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Not your dashboard</title>
-<link rel="stylesheet" href="/style.css"></head><body>
-<section class="page-hero"><div class="wrap"><h1>This dashboard is owner-only</h1>
-<p>You signed in as <strong>${escapeHtml(user.username)}</strong>, which is not the owner of the server this bot runs for.</p>
-<p><a class="btn" href="/">Back to the site</a></p></div></section></body></html>`, 403);
-  }
+  /* Signed in, but not the owner of the one guild this bot serves. The login
+     page explains what that means; no session cookie is handed out. */
+  if (!guild || guild.owner !== true) return redirect("/login.html?denied=1");
 
   const session = {
     userId: user.id,
@@ -251,13 +271,35 @@ async function authCallback(request, env) {
     exp: Date.now() + SESSION_DAYS * 86400000,
   };
 
-  return redirect("/dashboard", {
-    "set-cookie": cookieHeader(SESSION_COOKIE, await signSession(session, env.SESSION_SECRET), SESSION_DAYS * 86400),
-  });
+  const sessionHeaders = new Headers();
+  sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, await signSession(session, env.SESSION_SECRET), SESSION_DAYS * 86400));
+  sessionHeaders.append("set-cookie", cookieHeader(NEXT_COOKIE, "", 0));
+  return redirect(safeNext(cookies(request)[NEXT_COOKIE]), sessionHeaders);
 }
 
-function authLogout() {
-  return redirect("/", { "set-cookie": cookieHeader(SESSION_COOKIE, "", 0) });
+function authLogout(request) {
+  const next = safeNext(new URL(request.url).searchParams.get("next"));
+  return redirect(next === "/dashboard" ? "/" : next, { "set-cookie": cookieHeader(SESSION_COOKIE, "", 0) });
+}
+
+/* Read by nav-auth.js (the header capsule) and login.html. Never carries
+   anything the signed-in person does not already own. */
+async function authMe(request, env) {
+  if (!authConfigured(env)) return json({ authenticated: false, configured: false }, 200);
+  const session = await readSession(request, env);
+  if (!session) return json({ authenticated: false, configured: true }, 200);
+  return json({
+    authenticated: true,
+    configured: true,
+    user: {
+      id: session.userId,
+      username: session.username,
+      name: session.globalName || session.username,
+      avatar: avatarUrl(session),
+    },
+    guild: { id: session.guildId, name: session.guildName },
+    role: "owner",
+  }, 200);
 }
 
 /* ---------- the owner-only dashboard ---------- */
@@ -361,10 +403,19 @@ export default {
 
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request);
 
-    if (url.pathname === "/dashboard") return dashboard(request, env);
+    /* The whole /dashboard/ tree is owner-only, not just its front page. */
+    if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) {
+      if (!authConfigured(env)) return needsSetup(env);
+      if (!(await readSession(request, env))) {
+        return redirect("/auth/login?next=" + encodeURIComponent(url.pathname + url.search));
+      }
+      if (url.pathname === "/dashboard") return dashboard(request, env);
+      return env.ASSETS.fetch(request);
+    }
     if (url.pathname === "/auth/login") return authLogin(request, env);
     if (url.pathname === "/auth/callback") return authCallback(request, env);
-    if (url.pathname === "/auth/logout") return authLogout();
+    if (url.pathname === "/auth/logout") return authLogout(request);
+    if (url.pathname === "/auth/me") return authMe(request, env);
 
     const assetResponse = await env.ASSETS.fetch(request);
     if (assetResponse.status !== 404) return assetResponse;

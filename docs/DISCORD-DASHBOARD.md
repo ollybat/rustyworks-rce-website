@@ -22,14 +22,29 @@ The website and the bot share one rule set: **one server, one owner, one command
 ## 2. Site worker secrets
 
 ```bash
-npx wrangler secret put DISCORD_CLIENT_ID       # Application ID
 npx wrangler secret put DISCORD_CLIENT_SECRET   # OAuth2 client secret
 npx wrangler secret put DISCORD_GUILD_ID        # the single server's ID
 npx wrangler secret put SESSION_SECRET          # openssl rand -hex 32
 ```
 
-Until all four exist, `/dashboard` answers 503 with an explanation and the rest of
-the site is unaffected — it fails closed rather than guessing.
+`DISCORD_CLIENT_ID` is optional: the application id is public (it is in every invite
+link on the site), so the Worker defaults to the bot's own id. Set it only if the
+site is ever pointed at a different Discord application.
+
+Until those three exist, `/dashboard` and `/dashboard/*` answer 503 with an
+explanation and the rest of the site is unaffected — it fails closed rather than
+guessing.
+
+### Routes the site adds
+
+| Route | Purpose |
+| --- | --- |
+| `/login.html` | The sign-in page. Reads `?next=`, calls `/auth/me` and swaps the button for "Continue as …" when a session already exists. |
+| `/auth/login?next=` | Starts the Discord round trip; `next` is kept in a short-lived cookie and must be a same-site path. |
+| `/auth/callback` | Exchanges the code, reads `/users/@me` and `/users/@me/guilds`, and only sets a session when that guild entry says `owner: true`. Anyone else is sent back to `/login.html?denied=1`. |
+| `/auth/me` | Small JSON view of the current session, used by `nav-auth.js` and the login page. |
+| `/auth/logout?next=` | Clears the cookie and returns to the site. |
+| `/dashboard`, `/dashboard/*` | The owner-only area — the whole tree, not just the front page. |
 
 ## 3. Bot worker
 
@@ -58,6 +73,8 @@ DISCORD_BOT_TOKEN=… DISCORD_APPLICATION_ID=… DISCORD_GUILD_ID=… node bot/r
 - Opening the link without signing in → Discord sign-in, then straight to the dashboard.
 - Signing in with an account that is not the owner → "This dashboard is owner-only" (403).
 - `GET /auth/logout` → session cleared, `/dashboard` asks for sign-in again.
+- A deeper link such as `/dashboard/colortext.html`, opened while signed out, comes back
+  to that same page after signing in (that is what `?next=` is for).
 - Any interaction carrying another `guild_id` gets an empty response.
 
 ## 5. Where the rules come from
