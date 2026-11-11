@@ -160,10 +160,184 @@ function cacheHint(pathname) {
   return "public, max-age=300";
 }
 
+/* ---------- the status monitor ----------
+
+   Every check this site proxies is a free measurement, so it is kept. Samples
+   land in hourly objects in R2 ({"t": ms, "ms": response time, "ok": bool,
+   "users": n, ...}) and /api/history turns them back into hours, totals and
+   incidents for the status page.
+
+   Two honest limits, both shown on the page: samples only exist while somebody
+   is looking at the site, and the response time is measured from this Worker to
+   the bot API - not from the visitor's browser. */
+
+const MONITOR_PREFIX = "history/";
+const MONITOR_SAMPLE_GAP_MS = 20000;   /* ignore refresh-spamming */
+const MONITOR_KEEP_MS = 8 * 24 * 3600 * 1000;
+const MONITOR_MAX_PER_HOUR = 240;
+
+function hourStamp(at) {
+  const d = new Date(at);
+  const pad = (n) => String(n).padStart(2, "0");
+  return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) + "-" + pad(d.getUTCHours());
+}
+
+async function recordSample(env, sample) {
+  const bucket = env.STATUS_LOG;
+  if (!bucket) return;
+  const key = MONITOR_PREFIX + hourStamp(sample.t) + ".json";
+  let list = [];
+  try {
+    const existing = await bucket.get(key);
+    if (existing) {
+      const parsed = await existing.json();
+      if (Array.isArray(parsed)) list = parsed;
+    }
+  } catch (error) {
+    list = [];
+  }
+  const last = list[list.length - 1];
+  if (last && sample.t - last.t < MONITOR_SAMPLE_GAP_MS) return;
+  list.push(sample);
+  if (list.length > MONITOR_MAX_PER_HOUR) list = list.slice(-MONITOR_MAX_PER_HOUR);
+  await bucket.put(key, JSON.stringify(list), { httpMetadata: { contentType: "application/json" } });
+}
+
+/* Old buckets go out with the tide; done rarely, and never on the request path. */
+async function trimSamples(env) {
+  const bucket = env.STATUS_LOG;
+  if (!bucket || Math.random() > 0.02) return;
+  const cutoff = hourStamp(Date.now() - MONITOR_KEEP_MS);
+  try {
+    const listed = await bucket.list({ prefix: MONITOR_PREFIX, limit: 1000 });
+    const stale = listed.objects.filter((object) => object.key.slice(MONITOR_PREFIX.length, MONITOR_PREFIX.length + 13) < cutoff);
+    if (stale.length) await bucket.delete(stale.map((object) => object.key));
+  } catch (error) {
+    /* Trimming is housekeeping: never let it break a status check. */
+  }
+}
+
+function percentile(values, fraction) {
+  if (!values.length) return null;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.floor(sorted.length * fraction));
+  return sorted[index];
+}
+
+function round(value, digits) {
+  const factor = Math.pow(10, digits || 0);
+  return Math.round(value * factor) / factor;
+}
+
+/* A run of failed checks, allowing for the gaps between visitors. */
+function findIncidents(samples) {
+  const incidents = [];
+  let run = null;
+  for (const sample of samples) {
+    if (sample.ok) {
+      if (run) { incidents.push(run); run = null; }
+      continue;
+    }
+    if (run && sample.t - run.to < 10 * 60 * 1000) {
+      run.to = sample.t;
+      run.checks += 1;
+    } else {
+      if (run) incidents.push(run);
+      run = { from: sample.t, to: sample.t, checks: 1 };
+    }
+  }
+  if (run) incidents.push(run);
+  return incidents.slice(-10).reverse();
+}
+
+async function readHistory(env, hours) {
+  const bucket = env.STATUS_LOG;
+  const now = Date.now();
+  const from = Math.floor(now / 3600000) * 3600000 - (hours - 1) * 3600000;
+  const samples = [];
+  const buckets = [];
+  for (let at = from; at <= now; at += 3600000) {
+    let list = [];
+    try {
+      const object = await bucket.get(MONITOR_PREFIX + hourStamp(at) + ".json");
+      if (object) {
+        const parsed = await object.json();
+        if (Array.isArray(parsed)) list = parsed.filter((entry) => entry && typeof entry.t === "number");
+      }
+    } catch (error) {
+      list = [];
+    }
+    const ok = list.filter((entry) => entry.ok);
+    const latencies = ok.map((entry) => entry.ms).filter((ms) => typeof ms === "number");
+    const latest = list[list.length - 1] || null;
+    buckets.push({
+      at,
+      checks: list.length,
+      failures: list.length - ok.length,
+      avgMs: latencies.length ? Math.round(latencies.reduce((total, ms) => total + ms, 0) / latencies.length) : null,
+      maxMs: latencies.length ? Math.max.apply(null, latencies) : null,
+      users: latest && typeof latest.users === "number" ? latest.users : null,
+      servers: latest && typeof latest.servers === "number" ? latest.servers : null,
+      guilds: latest && typeof latest.guilds === "number" ? latest.guilds : null,
+    });
+    for (const entry of list) samples.push(entry);
+  }
+  samples.sort((a, b) => a.t - b.t);
+  const failed = samples.filter((entry) => !entry.ok).length;
+  const latencies = samples.filter((entry) => entry.ok && typeof entry.ms === "number").map((entry) => entry.ms);
+
+  let monitoringSince = null;
+  try {
+    const first = await bucket.list({ prefix: MONITOR_PREFIX, limit: 1 });
+    if (first.objects.length) monitoringSince = first.objects[0].uploaded ? first.objects[0].uploaded.getTime() : null;
+  } catch (error) {
+    monitoringSince = null;
+  }
+
+  return {
+    available: true,
+    hours,
+    generatedAt: now,
+    monitoringSince,
+    totals: {
+      checks: samples.length,
+      failures: failed,
+      uptimePct: samples.length ? round((samples.length - failed) / samples.length * 100, 3) : null,
+      avgMs: latencies.length ? Math.round(latencies.reduce((total, ms) => total + ms, 0) / latencies.length) : null,
+      p95Ms: percentile(latencies, 0.95),
+      maxMs: latencies.length ? Math.max.apply(null, latencies) : null,
+    },
+    buckets,
+    incidents: findIncidents(samples),
+  };
+}
+
+async function statusHistory(request, env) {
+  const url = new URL(request.url);
+  const hours = Math.min(168, Math.max(1, Number(url.searchParams.get("hours")) || 24));
+  if (!env.STATUS_LOG) {
+    return json({ available: false, reason: "no_storage" }, 200);
+  }
+  try {
+    const data = await readHistory(env, hours);
+    return new Response(JSON.stringify(data), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "public, max-age=30",
+        "access-control-allow-origin": "*",
+      },
+    });
+  } catch (error) {
+    return json({ available: false, reason: "read_failed" }, 200);
+  }
+}
+
 /* ---------- the bot API proxy ---------- */
 
-async function proxyApi(request) {
+async function proxyApi(request, env, ctx) {
   const requestUrl = new URL(request.url);
+  const watching = requestUrl.pathname === "/api/status";
+  const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
@@ -172,7 +346,28 @@ async function proxyApi(request) {
       headers: { accept: "application/json" },
       signal: controller.signal,
     });
-    return new Response(request.method === "HEAD" ? null : await upstream.arrayBuffer(), {
+    const body = request.method === "HEAD" ? null : await upstream.text();
+    /* A status check is a measurement whether or not anybody asked for one. */
+    if (watching && env && ctx && request.method !== "HEAD") {
+      let stats = {};
+      try {
+        const parsed = JSON.parse(body || "{}");
+        stats = parsed.stats || {};
+        ctx.waitUntil(recordSample(env, {
+          t: Date.now(),
+          ms: Date.now() - started,
+          ok: upstream.ok,
+          online: parsed.online !== false,
+          users: typeof stats.users === "number" ? stats.users : null,
+          servers: typeof stats.servers === "number" ? stats.servers : null,
+          guilds: typeof stats.guilds === "number" ? stats.guilds : null,
+        }));
+      } catch (error) {
+        ctx.waitUntil(recordSample(env, { t: Date.now(), ms: Date.now() - started, ok: false }));
+      }
+      ctx.waitUntil(trimSamples(env));
+    }
+    return new Response(body, {
       status: upstream.status,
       headers: {
         "content-type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
@@ -423,10 +618,11 @@ async function dashboard(request, env) {
 /* ---------- entry point ---------- */
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request);
+    if (url.pathname === "/api/history") return statusHistory(request, env);
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
     /* The whole /dashboard/ tree is owner-only, not just its front page. */
     if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) {
