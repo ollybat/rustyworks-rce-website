@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 34" width="34" height="34" role="img" aria-labelledby="rwMarkTitle">
-  <title id="rwMarkTitle">RustyWorks RCE</title>
+  <title id="rwMarkTitle">Spinback RCE</title>
 
   <!-- Hexagonal badge: dark outer body, then the ember overlay and the R mark. -->
   <path fill="#060200" d="M 24.140625 2.390625 C 28.757812 5.007812 31.308594 8.429688 32.773438 13.480469 C 33.378906 18.589844 32.742188 22.667969 29.71875 26.929688 C 27.3125 29.847656 23.976562 32.265625 20.1875 32.9375 C 14.972656 33.402344 10.644531 32.640625 6.476562 29.351562 C 3.011719 26.109375 1.097656 22.121094 0.898438 17.367188 C 1.050781 12.367188 2.777344 8.277344 6.375 4.78125 C 11.832031 0.839844 17.785156 -0.570312 24.140625 2.390625 Z"/>
