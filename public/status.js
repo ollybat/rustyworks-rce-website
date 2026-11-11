@@ -20,7 +20,7 @@
   var STRIP_MAX = 40;
   var EVENT_MAX = 40;
   var BRAND = (window.RW_BRAND && window.RW_BRAND.name) || "Spinback RCE";
-  var SITE = (window.RW_BRAND && window.RW_BRAND.site) || "https://rustyworks-rce-j7ao5f.camelai.app";
+  var SITE = (window.RW_BRAND && window.RW_BRAND.site) || "https://spinback-j7ao5f.camelai.app";
   var PAUSE_KEY = "rw-status-paused";
   var NOTIFY_KEY = "rw-status-notify";
   /* How often to check, depending on what the last answer said: a quiet system
