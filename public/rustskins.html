@@ -73,7 +73,7 @@
         <div class="wrap">
           <span class="sp-kicker" data-sp-reveal>Skin store and catalogue</span>
           <h1 data-sp-reveal style="--sp-i:1">Everything you <span class="accent">spawn</span>, searchable.</h1>
-          <p data-sp-reveal style="--sp-i:2">Every item Spinback RCE knows about, in one searchable grid: filter by group, sort by stack size, open any item for its short name, id and where that entry came from. The skin catalogue below feeds off the very same page.</p>
+          <p data-sp-reveal style="--sp-i:2">Two complete catalogues on one page. Every product on the official Rust Console store, expanded into the individual skins inside each pack, with each product's own art and a link to its store page. And every item Spinback RCE knows about, with its real in-game icon, group, stack size and short name.</p>
           <div class="sp-actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:22px" data-sp-reveal>
             <a href="/dashboard/kitbuilder.html" class="btn">Build a kit with these items</a>
             <a href="#itemcatalogue" class="btn ghost">Jump to the catalogue</a>
@@ -84,9 +84,9 @@
       <section class="sp-section is-tight">
         <div class="wrap">
           <div class="sp-stats">
-            <div class="sp-stat" data-sp-reveal><b data-sp-count="299">0</b><span>Items in the catalogue</span></div>
-            <div class="sp-stat" data-sp-reveal style="--sp-i:1"><b data-sp-count="15">0</b><span>Item groups</span></div>
-            <div class="sp-stat" data-sp-reveal style="--sp-i:2"><b data-sp-count="29">0</b><span>Store products listed</span></div>
+            <div class="sp-stat" data-sp-reveal><b data-sp-count="29">0</b><span>Store products</span></div>
+            <div class="sp-stat" data-sp-reveal style="--sp-i:1"><b data-sp-count="59">0</b><span>Individual skins</span></div>
+            <div class="sp-stat" data-sp-reveal style="--sp-i:2"><b data-sp-count="299">0</b><span>Items in the kit catalogue</span></div>
             <div class="sp-stat" data-sp-reveal style="--sp-i:3"><b>Free</b><span>No account, no fee</span></div>
           </div>
         </div>
@@ -100,18 +100,19 @@
             <p class="sp-lede">Every product the official Rust Console Edition store lists, read from rust.double11.com on 11 November 2026: the name, its category, the product's own promotional image, and a link straight to its store page. Search, category chips and sorting all work on it. Fields the store does not publish - price, rarity, release date - are left blank here instead of guessed.</p>
           </div>
           <div data-sp-skins>
+            <div id="spSkinTabs"></div>
             <div class="sp-toolbar">
-              <label class="sp-search">&#128269;<input id="spSkinSearch" type="search" placeholder="Search skins by name, item or rarity" aria-label="Search skins"></label>
+              <label class="sp-search">&#128269;<input id="spSkinSearch" type="search" placeholder="Search products, packs, individual skins and descriptions" aria-label="Search the skin catalogue"></label>
               <div class="sp-chips" id="spSkinCats"></div>
-              <select class="sp-select" id="spSkinSort" aria-label="Sort skins">
+              <select class="sp-select" id="spSkinSort" aria-label="Sort the skin catalogue">
                 <option value="name">Sort: name A-Z</option>
-                <option value="released">Sort: newest first</option>
-                <option value="rarity">Sort: rarity</option>
+                <option value="category">Sort: category</option>
+                <option value="pack">Sort: pack</option>
               </select>
             </div>
             <div class="sp-cards-skins" id="spSkinGrid"></div>
             <p class="sp-note" id="spSkinStatus" style="margin-top:16px" role="status"></p>
-            <p class="sp-note" style="margin-top:12px">Source: the official Rust Console Edition store, rust.double11.com/store. Names and images belong to Double Eleven and Facepunch; this site is not affiliated with them and sells nothing.</p>
+            <p class="sp-note" style="margin-top:12px">Source: the official Rust Console Edition store, rust.double11.com/store, read on 11 November 2026. Names, descriptions and images belong to Double Eleven and Facepunch; this site is not affiliated with them and sells nothing. Prices, rarities and release dates are left blank because the store does not publish them in a readable form - this page does not guess.</p>
           </div>
         </div>
       </section>
@@ -133,6 +134,7 @@
                 <option value="stack">Sort: biggest stack</option>
               </select>
             </div>
+            <p class="sp-lede" style="margin-bottom:16px">Icons come from the same console item art the Kit Studio uses, so what you see here is what you get in game. Group chips carry their counts, and the list loads 60 at a time until you ask for all of them.</p>
             <div class="sp-cards-skins" id="spItemGrid"></div>
             <p class="sp-note" id="spItemStatus" style="margin-top:16px" role="status"></p>
           </div>
@@ -151,6 +153,10 @@
               <div class="sp-answer">From the public RUST item database that the Rust Console server documentation points at for item names, display names and stack sizes. Entries marked as added by Spinback are well-known items with no documented stack size and are labelled as such in the detail sheet, so you can check them on your server before you rely on them.</div>
             </details>
             <details data-sp-reveal style="--sp-i:1">
+              <summary>What is inside a pack?</summary>
+              <div class="sp-answer">Open any pack on the wall and you get what its store page lists: the description, a gallery of the product's own images, and the individual skins inside it - Arctic Hazmat Suit, Arctic Assault Rifle and the Tomaha Snowmobile Skin, for example. Switch to the "Every individual skin" tab to see all of them side by side, or search for one by name.</div>
+            </details>
+            <details data-sp-reveal style="--sp-i:4">
               <summary>Where does this catalogue come from?</summary>
               <div class="sp-answer">Every entry was read from the official Rust Console Edition store at <a href="https://rust.double11.com/store" target="_blank" rel="noopener">rust.double11.com/store</a> in November 2026: the product name, the product's own image and its store page. Nothing here is invented - the fields that store does not publish (price, rarity, release date) are left blank rather than filled with a guess. Names and images belong to Double Eleven and Facepunch; Spinback RCE is not affiliated with them and sells nothing.</div>
             </details>
