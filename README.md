@@ -178,7 +178,7 @@ in any of it.
 Some things deliberately keep the old spelling, because they are plumbing rather than
 copy and renaming them would cost the live URL or break references:
 
-- the deployed host `rustyworks-rce-j7ao5f.camelai.app`, and the canonical, `og:url` and
+- the deployed host `spinback-j7ao5f.camelai.app`, and the canonical, `og:url` and
   `og:image` URLs built from it;
 - the Worker name and the `STATUS_LOG` bucket name in `wrangler.jsonc`, and the npm
   package name (a lockfile rewrite for no visible gain);
@@ -283,3 +283,16 @@ reliably through this repository's tooling. `scripts/build.mjs` decodes those pa
 real image files during a build, so edit the parts, not the binaries. If you replace the mark,
 regenerate the parts for every raster in the table above: the build decodes them over whatever
 else is in `public/media/`.
+
+## Kit Studio page
+
+`public/dashboard/kitbuilder.html` is the Kit Builder page maintained on the main site, kept as it
+was written (only the visible name was changed to Spinback). It reads its item list from
+`/media/entitys/entities.json` and one icon per item from `/media/kitbuilder/`*<shortname>`.png`, both
+served by `worker.js` from `https://rustyworksrce.xyz` and cached by the browser for a day, so the
+repository does not carry a few hundred PNGs.
+
+Because those paths are proxied, an item appears only when its icon exists upstream. Two
+features of that page talk to the bot API directly for account data (saved kits, live
+counters, server presets): signing in happens on the main site's domain, so those calls
+cannot succeed from this domain and the page simply shows nothing there instead of failing.

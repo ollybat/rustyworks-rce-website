@@ -105,3 +105,150 @@ html[data-theme="light"] .xm-flake {
   border-color: rgba(0, 0, 0, 0.12);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
 }
+
+/* ==============================================================
+   HALLOWEEN (ported from the original stylesheet)
+   Only applies while html[data-season="halloween"] is set.
+   ============================================================== */
+html[data-season="halloween"] {--rw-season-css: 1;                 
+  --bg:        #09060f;
+  --bg-2:      #100a19;
+  --panel:     #160e22;
+  --panel-2:   #1d1230;
+  --rust:      #ff7a1a;
+  --rust-2:    #ff9a3d;
+  --ember:     #ffb454;
+  --steel:     #a07bff;
+  --text:      #f2e9f8;
+  --text-dim:  #ab9bbd;
+  --line:      #34224c;
+  --green:     #8dff4a;
+
+  --btn-text:    #1b0a00;
+  --glass:       rgba(12,7,20,.78);
+  --glass-solid: rgba(8,4,14,.72);
+  --overlay:     rgba(8,4,14,.5);
+  --hover-tint:  rgba(255,154,61,.07);
+  --shadow-key:  rgba(255,122,26,.4);
+  --shadow-soft: rgba(0,0,0,.45);
+  --menu-bg:     #160e22;
+
+  --hw-glow:   255,122,26;
+  --hw-slime:  141,255,74;
+  --hw-violet: 160,123,255;
+  --hw-display: 'Pirata One', 'Oswald', Georgia, serif;
+
+  color-scheme: dark;
+  scrollbar-color: #ff7a1a #100a19;}
+html[data-season="halloween"] ::selection {background: rgba(255,122,26,.5); color: #fff;}
+html[data-season="halloween"] ::-webkit-scrollbar {width: 11px; height: 11px;}
+html[data-season="halloween"] ::-webkit-scrollbar-track {background: #100a19;}
+html[data-season="halloween"] ::-webkit-scrollbar-thumb {background: linear-gradient(#ff9a3d,#c24e08); border-radius: 8px; border: 2px solid #100a19;}
+html[data-season="halloween"] body {background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -12%, rgba(255,122,26,.22), transparent 60%),
+    radial-gradient(circle at 6% 42%,  rgba(160,123,255,.11), transparent 42%),
+    radial-gradient(circle at 96% 100%, rgba(141,255,74,.07), transparent 40%);}
+html[data-season="halloween"] body::before {content: ""; position: fixed; inset: -10%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(40% 30% at 20% 82%, rgba(var(--hw-violet),.17), transparent 70%),
+    radial-gradient(45% 28% at 76% 92%, rgba(var(--hw-violet),.13), transparent 70%),
+    radial-gradient(35% 22% at 50% 102%, rgba(255,255,255,.08), transparent 70%);
+  animation: hw-fog 38s ease-in-out infinite alternate;}
+html[data-season="halloween"] body::after {content: ""; position: fixed; z-index: -1; pointer-events: none;
+  top: 96px; right: 7%; width: 104px; height: 104px; border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 34%, rgba(0,0,0,.14) 0 9%, transparent 10%),
+    radial-gradient(circle at 62% 58%, rgba(0,0,0,.11) 0 12%, transparent 13%),
+    radial-gradient(circle at 38% 36%, #fffbe8, #f3e6b6 55%, #cdbb86 100%);
+  box-shadow: 0 0 60px 14px rgba(255,236,170,.2), 0 0 160px 50px rgba(255,200,120,.1);
+  opacity: .9;}
+html[data-season="halloween"] body::after {width: 62px; height: 62px; top: 84px;}
+html[data-season="halloween"] header {background: linear-gradient(180deg, rgba(20,10,33,.94), var(--glass));
+  border-bottom: 1px solid rgba(255,122,26,.38);
+  box-shadow: 0 10px 30px -14px rgba(255,122,26,.4);}
+html[data-season="halloween"] header::before, html[data-season="halloween"] header::after {content: ""; position: absolute; top: 100%; width: 118px; height: 118px;
+  pointer-events: none; opacity: .3;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22 fill=%22none%22 stroke=%22%23d9cdf2%22 stroke-width=%221%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M0 0L100.0 0.0%22/%3E%3Cpath d=%22M0 0L95.1 30.9%22/%3E%3Cpath d=%22M0 0L80.9 58.8%22/%3E%3Cpath d=%22M0 0L58.8 80.9%22/%3E%3Cpath d=%22M0 0L30.9 95.1%22/%3E%3Cpath d=%22M0 0L0.0 100.0%22/%3E%3Cpath d=%22M22.0 0.0Q16.7 2.7 20.9 6.8Q15.1 7.7 17.8 12.9Q12.0 12.0 12.9 17.8Q7.7 15.1 6.8 20.9Q2.7 16.7 0.0 22.0%22/%3E%3Cpath d=%22M42.0 0.0Q32.0 5.1 39.9 13.0Q28.8 14.7 34.0 24.7Q22.9 22.9 24.7 34.0Q14.7 28.8 13.0 39.9Q5.1 32.0 0.0 42.0%22/%3E%3Cpath d=%22M64.0 0.0Q48.7 7.7 60.9 19.8Q43.9 22.4 51.8 37.6Q34.9 34.9 37.6 51.8Q22.4 43.9 19.8 60.9Q7.7 48.7 0.0 64.0%22/%3E%3Cpath d=%22M86.0 0.0Q65.4 10.4 81.8 26.6Q59.0 30.1 69.6 50.5Q46.8 46.8 50.5 69.6Q30.1 59.0 26.6 81.8Q10.4 65.4 0.0 86.0%22/%3E%3C/svg%3E") no-repeat left top / contain;}
+html[data-season="halloween"] header::before {left: 0;}
+html[data-season="halloween"] header::after {right: 0; transform: scaleX(-1);}
+html[data-season="halloween"] .nav-links a:not(.btn):hover {color: var(--ember); text-shadow: 0 0 14px rgba(255,122,26,.75);}
+html[data-season="halloween"] .logo {position: relative;}
+html[data-season="halloween"] header::before, html[data-season="halloween"] header::after {display: none;}
+html[data-season="halloween"] h1, html[data-season="halloween"] .sec-head h2, html[data-season="halloween"] .cta-inner h2, html[data-season="halloween"] .ks-text h2, html[data-season="halloween"] .duo-card h2, html[data-season="halloween"] .pp-panel h2, html[data-season="halloween"] .acct-head h1 {font-family: var(--hw-display);
+  text-transform: none; letter-spacing: .6px; font-weight: 400;}
+html[data-season="halloween"] .hero h1, html[data-season="halloween"] .page-hero h1 {font-size: clamp(3rem, 7.4vw, 5.8rem); line-height: .98;}
+html[data-season="halloween"] .sec-head h2, html[data-season="halloween"] .cta-inner h2 {font-size: clamp(2.3rem, 4.6vw, 3.3rem);}
+html[data-season="halloween"] .ks-text h2, html[data-season="halloween"] .duo-card h2 {font-size: 2.5rem;}
+html[data-season="halloween"] .sec-head h2::after {content: ""; display: block; width: 190px; height: 25px; margin: 12px auto 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 26%22 fill=%22none%22%3E%3Cpath d=%22M0 13h74M126 13h74%22 stroke=%22%23ff7a1a%22 stroke-opacity=%22.5%22 stroke-width=%221%22/%3E%3Cpath d=%22M100 6c-1.3 0-2 1.4-2.6 2.8-2-2-5.4-3.4-9-2.6 1.5 1.4 2 2.8 2 4.8-3-.8-5.4 0-8.4 2.2 3.4 0 5.6 1.4 7 3.4 2-2 4-2.2 6-1.4 1.4.6 1.4 2 2 3.4.6-1.4.6-2.8 2-3.4 2-.8 4-.6 6 1.4 1.4-2 3.6-3.4 7-3.4-3-2.2-5.4-3-8.4-2.2 0-2 .5-3.4 2-4.8-3.6-.8-7 .6-9 2.6C102 7.4 101.300 6 100 6z%22 fill=%22%23a07bff%22/%3E%3C/svg%3E") center / contain no-repeat;}
+html[data-season="halloween"] .sec-head .eyebrow {color: var(--green);}
+html[data-season="halloween"] .hero-title .ht-accent {background-image: linear-gradient(90deg, #ff6a00, #ffb454, #8dff4a, #ffb454, #ff6a00);
+  background-size: 240% auto;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.9)) drop-shadow(0 0 28px rgba(255,122,26,.6));
+  animation:
+    ht-ignite .8s cubic-bezier(.2,.8,.2,1) .35s forwards,
+    rw-shimmer 7s linear 1.15s infinite,
+    hw-flicker 9s linear 1.6s infinite;}
+html[data-season="halloween"] .rw-video-hero__video {filter: saturate(.7) hue-rotate(-16deg) contrast(1.06) brightness(.9);}
+html[data-season="halloween"] .rw-video-hero__fade {background: #09060f;}
+html[data-season="halloween"] .rw-video-hero__overlay {background:
+    radial-gradient(ellipse 70% 45% at 50% 0%, rgba(255,122,26,.16), transparent 70%),
+    linear-gradient(180deg, rgba(16,6,30,.74) 0%, rgba(20,8,36,.82) 40%, rgba(10,5,19,.92) 70%, rgba(9,6,15,.98) 100%);}
+html[data-season="halloween"] .hero .tag, html[data-season="halloween"] .page-hero .tag, html[data-season="halloween"] .ks-text .tag, html[data-season="halloween"] .duo-card .tag {color: var(--green); border-color: rgba(var(--hw-slime),.55);
+  box-shadow: 0 0 20px rgba(var(--hw-slime),.16);}
+html[data-season="halloween"] .free-strip {background: linear-gradient(90deg, rgba(160,123,255,.12), rgba(255,122,26,.2), rgba(160,123,255,.12));
+  border-color: rgba(255,122,26,.35);}
+html[data-season="halloween"] .free-strip .fs-check {color: var(--green);}
+html[data-season="halloween"] .stat .num {text-shadow: 0 0 22px rgba(255,122,26,.65), 0 2px 8px rgba(0,0,0,.9);}
+html[data-season="halloween"] .card, html[data-season="halloween"] .cta-strip-card, html[data-season="halloween"] .doc-card, html[data-season="halloween"] .duo-card {position: relative; overflow: hidden;
+  background: linear-gradient(160deg, var(--panel), var(--panel-2));
+  border-color: var(--line);}
+html[data-season="halloween"] .card::after, html[data-season="halloween"] .cta-strip-card::after, html[data-season="halloween"] .doc-card::after, html[data-season="halloween"] .duo-card::after {content: ""; position: absolute; top: 0; right: 0; width: 74px; height: 74px;
+  transform: scaleX(-1); opacity: .2; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22 fill=%22none%22 stroke=%22%23d9cdf2%22 stroke-width=%221%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M0 0L100.0 0.0%22/%3E%3Cpath d=%22M0 0L95.1 30.9%22/%3E%3Cpath d=%22M0 0L80.9 58.8%22/%3E%3Cpath d=%22M0 0L58.8 80.9%22/%3E%3Cpath d=%22M0 0L30.9 95.1%22/%3E%3Cpath d=%22M0 0L0.0 100.0%22/%3E%3Cpath d=%22M22.0 0.0Q16.7 2.7 20.9 6.8Q15.1 7.7 17.8 12.9Q12.0 12.0 12.9 17.8Q7.7 15.1 6.8 20.9Q2.7 16.7 0.0 22.0%22/%3E%3Cpath d=%22M42.0 0.0Q32.0 5.1 39.9 13.0Q28.8 14.7 34.0 24.7Q22.9 22.9 24.7 34.0Q14.7 28.8 13.0 39.9Q5.1 32.0 0.0 42.0%22/%3E%3Cpath d=%22M64.0 0.0Q48.7 7.7 60.9 19.8Q43.9 22.4 51.8 37.6Q34.9 34.9 37.6 51.8Q22.4 43.9 19.8 60.9Q7.7 48.7 0.0 64.0%22/%3E%3Cpath d=%22M86.0 0.0Q65.4 10.4 81.8 26.6Q59.0 30.1 69.6 50.5Q46.8 46.8 50.5 69.6Q30.1 59.0 26.6 81.8Q10.4 65.4 0.0 86.0%22/%3E%3C/svg%3E") no-repeat left top / contain;
+  transition: opacity .3s;}
+html[data-season="halloween"] .card:hover::after, html[data-season="halloween"] .cta-strip-card:hover::after, html[data-season="halloween"] .doc-card:hover::after, html[data-season="halloween"] .duo-card:hover::after {opacity: .5;}
+html[data-season="halloween"] .card::before {opacity: .55; background: linear-gradient(90deg, var(--rust), var(--green), transparent);}
+html[data-season="halloween"] .card:hover, html[data-season="halloween"] .cta-strip-card:hover, html[data-season="halloween"] .doc-card:hover {transform: translateY(-5px) rotate(-.35deg);
+  border-color: var(--rust);
+  box-shadow: 0 16px 40px -14px rgba(255,122,26,.45), 0 0 0 1px rgba(255,122,26,.25), 0 0 34px -8px rgba(var(--hw-violet),.4);}
+html[data-season="halloween"] .card .ico, html[data-season="halloween"] .cta-strip-card .csc-ico {filter: drop-shadow(0 0 10px rgba(255,122,26,.5));}
+html[data-season="halloween"] .ks-list li::before {content: "🎃"; background: none; width: auto; height: auto; font-size: .78rem; line-height: 1;}
+html[data-season="halloween"] .cmd:hover, html[data-season="halloween"] .cmd-row:hover {box-shadow: 0 0 22px -6px rgba(255,122,26,.45);}
+html[data-season="halloween"] .kit-studio-section {background: linear-gradient(160deg, var(--panel), #21102a);}
+html[data-season="halloween"] .colour-studio-section {background: linear-gradient(160deg, var(--panel), #150d2e);}
+html[data-season="halloween"] .browser-duo-section {background: linear-gradient(160deg, var(--panel), #12161a);}
+html[data-season="halloween"] .btn {box-shadow: 0 6px 22px rgba(255,122,26,.38), inset 0 1px 0 rgba(255,255,255,.22);}
+html[data-season="halloween"] .btn:hover {box-shadow: 0 10px 32px rgba(255,122,26,.6), 0 0 0 3px rgba(var(--hw-violet),.28);}
+html[data-season="halloween"] .btn.ghost {box-shadow: none;}
+html[data-season="halloween"] .btn.ghost:hover {box-shadow: 0 0 22px -6px rgba(255,122,26,.5);}
+html[data-season="halloween"] .btn-discord {box-shadow: 0 6px 22px rgba(88,101,242,.4), 0 0 0 1px rgba(var(--hw-violet),.35);}
+html[data-season="halloween"] #global-loader {background: #09060f;}
+html[data-season="halloween"] .loader-cog {font-size: 0; animation: hw-bob 2.2s ease-in-out infinite; filter: drop-shadow(0 0 22px rgba(255,122,26,.7));}
+html[data-season="halloween"] .loader-cog > * {display: none;}
+html[data-season="halloween"] .loader-cog::before {content: "🎃"; font-size: 4.2rem; line-height: 1;}
+html[data-season="halloween"] .loader-text {color: var(--ember);}
+html[data-season="halloween"] .pf-hero, html[data-season="halloween"] .set-bar {border-color: rgba(255,122,26,.35);}
+html[data-season="halloween"] .acct-card:hover {box-shadow: 0 14px 36px -16px rgba(255,122,26,.4);}
+html[data-season="halloween"] footer {position: relative; border-top-color: rgba(255,122,26,.4);}
+html[data-season="halloween"] footer::before {content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 64px;
+  pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 64%22%3E%3Cdefs%3E%3CradialGradient id=%22g%22 cx=%2250%25%22 cy=%2240%25%22 r=%2265%25%22%3E%3Cstop offset=%220%22 stop-color=%22%23ff9a3d%22/%3E%3Cstop offset=%221%22 stop-color=%22%23c24e08%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Cg fill=%22%231b1030%22 stroke=%22%233a2656%22 stroke-width=%221.2%22%3E%3Cpath d=%22M26 64V30c0-9 7-15 15-15s15 6 15 15v34z%22/%3E%3Cpath d=%22M41 22v14M35 27h12%22 stroke=%22%234a3270%22/%3E%3Cpath d=%22M142 64V36c0-7 6-12 13-12s13 5 13 12v28z%22/%3E%3Cpath d=%22M376 64V26c0-9 7-15 15-15s15 6 15 15v38z%22/%3E%3Cpath d=%22M391 19v16M384 25h14%22 stroke=%22%234a3270%22/%3E%3Cpath d=%22M535 64V32c0-8 6-13 14-13s14 5 14 13v32z%22/%3E%3Cpath d=%22M300 64v-32M290 40h20%22 stroke-width=%223%22/%3E%3C/g%3E%3Cg%3E%3Cellipse cx=%22236%22 cy=%2250%22 rx=%2217%22 ry=%2214%22 fill=%22url(%23g)%22/%3E%3Cellipse cx=%22228%22 cy=%2250%22 rx=%229%22 ry=%2214%22 fill=%22%23e86a10%22 opacity=%22.55%22/%3E%3Cpath d=%22M234 36c0-4 1-6 4-8%22 stroke=%22%236cc24a%22 stroke-width=%223%22 fill=%22none%22 stroke-linecap=%22round%22/%3E%3Cpath d=%22M227 46l5 5h-10zM245 46l5 5h-10zM226 55c4 4 14 4 20 0l-2 3c-5 3-11 3-16 0z%22 fill=%22%23ffd36e%22/%3E%3C/g%3E%3Cg%3E%3Cellipse cx=%22470%22 cy=%2255%22 rx=%2211%22 ry=%229%22 fill=%22url(%23g)%22/%3E%3Cpath d=%22M469 46c0-3 1-4 3-5%22 stroke=%22%236cc24a%22 stroke-width=%222.4%22 fill=%22none%22 stroke-linecap=%22round%22/%3E%3Cpath d=%22M465 52l3 3h-6zM475 52l3 3h-6z%22 fill=%22%23ffd36e%22/%3E%3C/g%3E%3Cg fill=%22%231b1030%22 stroke=%22%233a2656%22 stroke-width=%221%22%3E%3Cpath d=%22M70 64c0-6 4-9 9-9s9 3 9 9z%22/%3E%3Cpath d=%22M432 64c0-5 3-8 8-8s8 3 8 8z%22/%3E%3C/g%3E%3C/svg%3E") repeat-x left bottom / auto 64px;}
+html[data-season="halloween"] body::before, html[data-season="halloween"] .loader-cog {animation: none;}
+html[data-season="halloween"] .logo img[src$="/media/rustyworks-icon.svg"] {content: url("/media/rustyworks-icon-halloween.svg");}
+
+/* ==============================================================
+   OWNER CONSOLE (setup checklist while the last values are missing)
+   ============================================================== */
+.setup-list { list-style: none; margin: 0; padding: 0; }
+.setup-row { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 10px 14px; border: 1px solid var(--line, #2a2320); border-radius: 12px; margin-bottom: 8px; }
+.setup-name code { font-size: .86rem; }
+.setup-state { font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.setup-uri { display: inline-block; max-width: 100%; overflow-wrap: anywhere; padding: 8px 12px;
+  border-radius: 10px; border: 1px solid var(--line, #2a2320); font-size: .84rem; }
+.setup-steps { margin: 14px 0 0 18px; padding: 0; }
+.setup-steps li { margin-bottom: 8px; line-height: 1.5; }
+@media (max-width: 560px) { .setup-row { flex-direction: column; align-items: flex-start; gap: 4px; } }
+
