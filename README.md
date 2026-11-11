@@ -11,6 +11,8 @@ public/
   index.html            Homepage markup
   style.css             Full site stylesheet (theme tokens, every page, seasonal themes)
   sections.css          Homepage scene styles used by the homepage
+  ui-extras.css         Skip link, theme switch, and the light palette winning over
+                        the seasonal palettes (must load after style.css)
   config.js             Runtime config (the bot API base URL)
   theme.js              Theme engine, seasons, "add to home screen"
   apiHelper.js          Small JSON helper for the bot API
