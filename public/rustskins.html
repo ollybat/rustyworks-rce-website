@@ -12,16 +12,16 @@
       } catch (e) {}
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Skin Store - Spinback RCE</title>
+    <title>Skin Store and Item Catalogue - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
     <meta name="apple-mobile-web-app-title" content="Spinback">
-    <meta name="description" content="Browse Rust Console skins: search by name or item, sort by release date, open a full-size preview.">
+    <meta name="description" content="Search the Rust Console item catalogue Spinback RCE uses for kits: filter by group, sort by name or stack size, and copy any short name. The skin catalogue plugs straight into the same page.">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/rustskins.html">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Spinback RCE">
-    <meta property="og:title" content="Skin Store">
-    <meta property="og:description" content="Browse Rust Console skins: search by name or item, sort by release date, open a full-size preview.">
+    <meta property="og:title" content="Skin Store and Item Catalogue">
+    <meta property="og:description" content="Search and filter every item Spinback RCE knows about, and see the skin catalogue as it is published.">
     <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/rustskins.html">
     <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta property="og:image:width" content="1200">
@@ -29,8 +29,8 @@
     <meta property="og:image:type" content="image/jpeg">
     <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Skin Store">
-    <meta name="twitter:description" content="Browse Rust Console skins: search by name or item, sort by release date, open a full-size preview.">
+    <meta name="twitter:title" content="Skin Store and Item Catalogue">
+    <meta name="twitter:description" content="Search and filter every item Spinback RCE knows about, and see the skin catalogue as it is published.">
     <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta name="twitter:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,26 +38,28 @@
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/ui-extras.css">
     <link rel="stylesheet" href="/sections.css">
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
     <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
     <link rel="shortcut icon" href="/media/spinback-icon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0b0704">
     <script src="/theme.js"></script>
-    <script src="/config.js"></script>
+    <script src="/config.js" defer></script>
     <script src="/nav-auth.js" defer></script>
-    <link rel="stylesheet" href="/theme-spinback.css">
-  <link rel="stylesheet" href="/motion.css">
-</head>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Skin Store and Item Catalogue","url":"https://spinback-j7ao5f.camelai.app/rustskins.html","isPartOf":{"@type":"WebSite","name":"Spinback RCE","url":"https://spinback-j7ao5f.camelai.app/"}}</script>
+  </head>
   <body>
-    <div id="rw-fx" aria-hidden="true"></div>
-    <a class="skip-link" href="#main">Skip to content</a>
     <header>
       <div class="wrap">
         <nav>
           <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
           <div class="nav-links" id="navLinks">
+            <a href="/index.html#features">Features</a>
             <a href="/status.html">Status</a>
+            <a href="/dashboard/kitbuilder.html">Kit Studio</a>
             <a href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands" target="_blank" rel="noopener" class="btn">Add to Discord</a>
             <div class="rw-auth" id="rwAuth"></div>
           </div>
@@ -69,29 +71,109 @@
     <main id="main" tabindex="-1">
       <section class="page-hero">
         <div class="wrap">
-          <span class="tag">Building now</span>
-          <h1>Skin <span class="accent">Store</span></h1>
-          <p>Browse every Rust Console skin in one place, search by name or item, and open any skin for a full-size preview. The catalogue page is still being built.</p>
+          <span class="sp-kicker" data-sp-reveal>Skin store and catalogue</span>
+          <h1 data-sp-reveal style="--sp-i:1">Everything you <span class="accent">spawn</span>, searchable.</h1>
+          <p data-sp-reveal style="--sp-i:2">Every item Spinback RCE knows about, in one searchable grid: filter by group, sort by stack size, open any item for its short name, id and where that entry came from. The skin catalogue below feeds off the very same page.</p>
+          <div class="sp-actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:22px" data-sp-reveal>
+            <a href="/dashboard/kitbuilder.html" class="btn">Build a kit with these items</a>
+            <a href="#itemcatalogue" class="btn ghost">Jump to the catalogue</a>
+          </div>
         </div>
       </section>
-      <section style="padding-top:0">
+
+      <section class="sp-section is-tight">
         <div class="wrap">
-          <div class="panel-box">
-            <h2>What it will do</h2>
-            <p class="note" style="margin-top:10px">The skin catalogue is already collected; this page is the shop window for it.</p>
-            <ul class="ks-list" style="margin-top:12px">
-              <li>Weapon, clothing, item and tool skins</li>
-              <li>Search by skin name, item or catalog ID</li>
-              <li>Sort by release date, latest shop appearance or name</li>
-              <li>See what is new in the New releases view</li>
-              <li>Open a large preview, then copy the catalog ID or share a link</li>
-            </ul>
-            <div class="u-mt-18"><a href="https://discord.gg/NFRkb9NYNd" class="btn ghost" target="_blank" rel="noopener">Ask for it in the support server</a></div>
+          <div class="sp-stats">
+            <div class="sp-stat" data-sp-reveal><b data-sp-count="299">0</b><span>Items in the catalogue</span></div>
+            <div class="sp-stat" data-sp-reveal style="--sp-i:1"><b data-sp-count="15">0</b><span>Item groups</span></div>
+            <div class="sp-stat" data-sp-reveal style="--sp-i:2"><b data-sp-count="7">0</b><span>Loadout slots per kit</span></div>
+            <div class="sp-stat" data-sp-reveal style="--sp-i:3"><b>Free</b><span>No account, no fee</span></div>
           </div>
-          <div class="panel-box">
-            <h2>In the meantime</h2>
-            <p class="note" style="margin-top:10px">Skins still appear through the bot in Discord. The Kit Studio placeholder explains how loadouts are coming along, and the Colour Studio does the same for gradient text.</p>
-            <div class="u-mt-18"><a href="/dashboard/kitbuilder.html" class="btn ghost">See Kit Studio</a></div>
+        </div>
+      </section>
+
+      <section class="sp-section is-tight">
+        <div class="wrap">
+          <div class="sp-head" data-sp-reveal>
+            <span class="sp-kicker">Skin catalogue</span>
+            <h2 class="sp-title">The skin wall</h2>
+            <p class="sp-lede">This grid is built and wired: it reads <b>/data/skins.json</b>, draws a card per entry, and gives you search, category chips, sorting and a full preview sheet. It is empty until a catalogue is published here, and it says so rather than inventing skins.</p>
+          </div>
+          <div data-sp-skins>
+            <div class="sp-toolbar">
+              <label class="sp-search">&#128269;<input id="spSkinSearch" type="search" placeholder="Search skins by name, item or rarity" aria-label="Search skins"></label>
+              <div class="sp-chips" id="spSkinCats"></div>
+              <select class="sp-select" id="spSkinSort" aria-label="Sort skins">
+                <option value="name">Sort: name A-Z</option>
+                <option value="released">Sort: newest first</option>
+                <option value="rarity">Sort: rarity</option>
+              </select>
+            </div>
+            <div class="sp-cards-skins" id="spSkinGrid"></div>
+            <p class="sp-note" id="spSkinStatus" style="margin-top:16px" role="status"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="sp-section is-tight" id="itemcatalogue">
+        <div class="wrap">
+          <div class="sp-head" data-sp-reveal>
+            <span class="sp-kicker">Live, working now</span>
+            <h2 class="sp-title">Item catalogue explorer</h2>
+            <p class="sp-lede">Real entries only: names, short names, stacks, groups and ids come from the same public item data the Kit Studio builds loadouts from. Nothing on this page is invented, and entries that carry no documented stack size say so.</p>
+          </div>
+          <div data-sp-items>
+            <div class="sp-toolbar">
+              <label class="sp-search">&#128269;<input id="spItemSearch" type="search" placeholder="Search 299 items: name, short name or group" aria-label="Search items"></label>
+              <div class="sp-chips" id="spItemGroups"></div>
+              <select class="sp-select" id="spItemSort" aria-label="Sort items">
+                <option value="name">Sort: name A-Z</option>
+                <option value="group">Sort: group</option>
+                <option value="stack">Sort: biggest stack</option>
+              </select>
+            </div>
+            <div class="sp-cards-skins" id="spItemGrid"></div>
+            <p class="sp-note" id="spItemStatus" style="margin-top:16px" role="status"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="sp-section">
+        <div class="wrap">
+          <div class="sp-head is-center" data-sp-reveal>
+            <span class="sp-kicker">Questions</span>
+            <h2 class="sp-title">Before you ask</h2>
+          </div>
+          <div class="sp-faq">
+            <details data-sp-reveal>
+              <summary>Where do these item names come from?</summary>
+              <div class="sp-answer">From the public RUST item database that the Rust Console server documentation points at for item names, display names and stack sizes. Entries marked as added by Spinback are well-known items with no documented stack size and are labelled as such in the detail sheet, so you can check them on your server before you rely on them.</div>
+            </details>
+            <details data-sp-reveal style="--sp-i:1">
+              <summary>Why is the skin wall empty?</summary>
+              <div class="sp-answer">Because publishing a catalogue I cannot verify would mean inventing skin names, prices and rarities. The page is finished and reads <b>/data/skins.json</b>. Give it real entries - from your own bot database or any source you trust - and the wall fills in with search, filters and previews already working.</div>
+            </details>
+            <details data-sp-reveal style="--sp-i:2">
+              <summary>Can I use these items to build a kit right now?</summary>
+              <div class="sp-answer">Yes. Open the <a href="/dashboard/kitbuilder.html">Kit Studio</a>, pick a preset, choose your server multiplier, then add anything from this catalogue. Your kits are saved in your own browser, so no account is needed and nothing is uploaded.</div>
+            </details>
+            <details data-sp-reveal style="--sp-i:3">
+              <summary>Do the skins cost anything here?</summary>
+              <div class="sp-answer">No. This site does not sell skins and never takes a cut. Skins you own in Rust Console Edition are yours; this page is only a way to find and look things up.</div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="sp-section is-tight">
+        <div class="wrap">
+          <div class="sp-cta" data-sp-reveal>
+            <h2>Pick your loadout, then run <span class="sp-glow-text">/dashboard</span></h2>
+            <p>Spinback RCE is free, runs on your own server, and keeps itself out of the way until the server owner calls it.</p>
+            <div class="sp-actions">
+              <a href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands" class="btn" target="_blank" rel="noopener">Add Spinback to Discord</a>
+              <a href="/dashboard/kitbuilder.html" class="btn ghost">Open the Kit Studio</a>
+            </div>
           </div>
         </div>
       </section>
@@ -126,6 +208,7 @@
       </div>
     </footer>
     <script src="/page.js" defer></script>
-  <script src="/motion.js" defer></script>
-</body>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+  </body>
 </html>
