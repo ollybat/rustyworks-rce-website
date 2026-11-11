@@ -98,6 +98,7 @@ const REMAP = {
     ['Additional Content','Chicken Costume DLC'],['Additional Content','Horse Costume DLC'],
     ['Additional Content','Industrial Lights DLC'],['Additional Content','Weapon Racks DLC'],
   ],
+
 };
 
 // Source categories whose items go into Wear slots
@@ -198,6 +199,7 @@ function toLabel(sn) {
     'maxhealthtea':'Max Health Tea','maxhealthtea.advanced':'Adv Max Health Tea','maxhealthtea.pure':'Pure Max Health Tea',
     'radiationresisttea':'Rad Resist Tea','radiationresisttea.advanced':'Adv Rad Resist Tea','radiationresisttea.pure':'Pure Rad Resist Tea',
     'chicken.cooked':'Cooked Chicken','fish.cooked':'Cooked Fish',
+
     'humanmeat.cooked':'Cooked Human Meat','bearmeat.cooked':'Cooked Bear',
     'deermeat.cooked':'Cooked Deer','horsemeat.cooked':'Cooked Horse',
     'meat.pork.cooked':'Cooked Pork','wolfmeat.cooked':'Cooked Wolf',
@@ -399,6 +401,7 @@ function updateAuthButtons() {
   }
 }
 
+
 // ════════════════════════════════════════════════════════════════════════════
 // MOBILE TABS
 // ════════════════════════════════════════════════════════════════════════════
@@ -499,6 +502,7 @@ function renderItemGrid(items, isSearch=false) {
 }
 
 function setupBrowserItem(div, item) {
+
   div.addEventListener('click', () => selectItem(item.v, item.l));
   div.addEventListener('dragstart', e => {
     e.dataTransfer.effectAllowed = 'copy';
@@ -700,6 +704,7 @@ function qpRemove() {
   renderSlot(QP.pos, QP.idx);
   updateOutput();
   closeQP();
+
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -799,6 +804,7 @@ function doImport() {
   renderAllSlots(); updateOutput(); closeModal('importModal');
   toast('✅ Kit imported!');
 }
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // SAVE / LOAD / MANAGE
@@ -1002,6 +1008,7 @@ async function loadPresetKit(kit) {
   toast(`✅ Loaded ${kit.name} (${placed} items)`);
 }
 
+
 // ════════════════════════════════════════════════════════════════════════════
 // SCREENSHOT SYSTEM
 // ════════════════════════════════════════════════════════════════════════════
@@ -1101,6 +1108,7 @@ async function drawScreenshotSlot(ctx, x, y, size, itemData, keyType) {
   ctx.save();
   
   // Base Slot Background
+
   ctx.fillStyle = "rgba(38, 36, 34, 0.95)"; 
   ctx.fillRect(x, y, size, size);
   
