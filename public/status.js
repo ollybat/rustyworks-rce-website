@@ -447,7 +447,7 @@
       }).join("");
       text(els.stMonEmpty, incidents.length ? "" : "No failed checks were recorded in this window.");
     }
-    text(els.stMonFoot, "Recording since " + (data.monitoringSince ? clockShort(data.monitoringSince) + " on " + new Date(data.monitoringSince).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "the first recorded check") +
+    text(els.stMonFoot, "Oldest check on file: " + (data.monitoringSince ? clockShort(data.monitoringSince) + " on " + new Date(data.monitoringSince).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "none yet") +
       " - " + formatCount(totals.checks || 0) + " checks in the last " + rangeLabel() + " - refreshed " + ago(state.monitorAt) + ".");
   }
   function summarise(slice, byDay) {

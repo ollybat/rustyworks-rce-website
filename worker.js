@@ -182,6 +182,11 @@ function hourStamp(at) {
   return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) + "-" + pad(d.getUTCHours());
 }
 
+/* The hour object is a read-modify-write, so two requests landing together could
+   each write their own sample and lose the other's. Keeping the last list this
+   isolate wrote and merging it back on the next write closes most of that gap. */
+const lastWritten = { key: null, list: [] };
+
 async function recordSample(env, sample) {
   const bucket = env.STATUS_LOG;
   if (!bucket) return;
@@ -196,11 +201,22 @@ async function recordSample(env, sample) {
   } catch (error) {
     list = [];
   }
+  if (lastWritten.key === key && lastWritten.list.length) {
+    const seen = new Set(list.map((entry) => entry.t));
+    for (const entry of lastWritten.list) if (!seen.has(entry.t)) list.push(entry);
+    list.sort((a, b) => a.t - b.t);
+  }
   const last = list[list.length - 1];
-  if (last && sample.t - last.t < MONITOR_SAMPLE_GAP_MS) return;
+  if (last && sample.t - last.t < MONITOR_SAMPLE_GAP_MS) {
+    lastWritten.key = key;
+    lastWritten.list = list;
+    return;
+  }
   list.push(sample);
   if (list.length > MONITOR_MAX_PER_HOUR) list = list.slice(-MONITOR_MAX_PER_HOUR);
   await bucket.put(key, JSON.stringify(list), { httpMetadata: { contentType: "application/json" } });
+  lastWritten.key = key;
+  lastWritten.list = list;
 }
 
 /* Old buckets go out with the tide; done rarely, and never on the request path. */
@@ -286,10 +302,20 @@ async function readHistory(env, hours) {
   const failed = samples.filter((entry) => !entry.ok).length;
   const latencies = samples.filter((entry) => entry.ok && typeof entry.ms === "number").map((entry) => entry.ms);
 
+  /* When recording began: the timestamp inside the oldest bucket we hold. The
+     object's own upload time is useless here - the current hour's object is
+     rewritten on every check. */
   let monitoringSince = null;
   try {
     const first = await bucket.list({ prefix: MONITOR_PREFIX, limit: 1 });
-    if (first.objects.length) monitoringSince = first.objects[0].uploaded ? first.objects[0].uploaded.getTime() : null;
+    if (first.objects.length) {
+      const oldest = await bucket.get(first.objects[0].key);
+      if (oldest) {
+        const list = await oldest.json();
+        if (Array.isArray(list) && list.length && typeof list[0].t === "number") monitoringSince = list[0].t;
+      }
+      if (!monitoringSince && first.objects[0].uploaded) monitoringSince = first.objects[0].uploaded.getTime();
+    }
   } catch (error) {
     monitoringSince = null;
   }
