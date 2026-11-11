@@ -6,13 +6,15 @@
    ========================================================================== */
 
 /* --- the animated banner as a big, fixed backdrop --- */
-.sb-bg { position: fixed; inset: 0; z-index: -2; pointer-events: none;
-  background: url('/media/spinback-bg-poster.jpg') center/cover no-repeat; opacity: .22; }
+/* Blurred and slightly oversized so the artwork sits behind the page instead of
+   competing with the headline, and so no blurred edge shows at the viewport rim. */
+.sb-bg { position: fixed; inset: -14px; z-index: -2; pointer-events: none; filter: blur(4px) saturate(1.05);
+  background: url('/media/spinback-bg-poster.jpg') center/cover no-repeat; opacity: .5; }
 .sb-bg.sb-bg-live { background-image: url('/media/spinback-bg.webp'); background-size: cover; }
 .sb-bg::after { content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(6, 11, 19, .55), rgba(6, 11, 19, .88) 70%, var(--bg)); }
-html[data-theme="light"] .sb-bg { opacity: .16; }
-html[data-theme="light"] .sb-bg::after { background: linear-gradient(180deg, rgba(238, 246, 253, .6), rgba(238, 246, 253, .9) 70%, var(--bg)); }
+  background: linear-gradient(180deg, rgba(6, 11, 19, .38), rgba(6, 11, 19, .7) 70%, var(--bg)); }
+html[data-theme="light"] .sb-bg { opacity: .32; }
+html[data-theme="light"] .sb-bg::after { background: linear-gradient(180deg, rgba(238, 246, 253, .45), rgba(238, 246, 253, .8) 70%, var(--bg)); }
 
 /* --- scroll progress --- */
 .sb-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 70;

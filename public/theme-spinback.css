@@ -59,4 +59,7 @@ a:hover, a:focus-visible { color: var(--rust-2); }
 .btn:not(.ghost):not(.danger):hover { box-shadow: 0 10px 28px rgba(74, 168, 224, 0.5); }
 .btn.ghost:hover { border-color: var(--rust-2); color: var(--rust-2); }
 html[data-theme="light"] .btn:not(.ghost):not(.danger) { color: #04121c; }
-html[data-theme="light"] .btn.ghost { color: var(--text); border-color: var(--line); } + 
+html[data-theme="light"] .btn.ghost { color: var(--text); border-color: var(--line); }
+
+/* The nav rule is more specific than .btn, so text there needs pinning explicitly. */
+.nav-links a.btn, .nav-links a.btn:hover { color: #04121c; } + 
