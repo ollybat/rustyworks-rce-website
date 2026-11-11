@@ -189,3 +189,15 @@ clone builds and deploys with the artwork in place.
 says plainly what the page will do and what is not built yet — none of them invents
 numbers or features for a tool that does not exist yet. `page.js` only fills in the
 footer year.
+
+## The status monitor
+
+`worker.js` records one sample every time it proxies `/api/status`, and keeps a week of
+them in the `STATUS_LOG` R2 bucket (`history/<yyyy-mm-dd-HH>.json`, up to 240 samples an
+hour, deduplicated to one per 20 seconds so a refreshing visitor cannot skew it).
+`/api/history?hours=24` (or `168`) turns that back into hourly buckets, totals and
+incident runs, and the status page draws its "Measured by this site" panel from it.
+
+Two limits the page states rather than hides: samples only exist while somebody is
+looking at the site, and the response time recorded is from the Worker to the bot API -
+not from the visitor's browser, which is measured separately by the visit strip.
