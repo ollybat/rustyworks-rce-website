@@ -35,7 +35,12 @@
   window.fetch = function (input, init) {
     var url = (typeof input === 'string') ? input : (input && input.url) || '';
     var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
-    if (url.indexOf('http') !== 0) { return nativeFetch ? nativeFetch(input, init) : Promise.reject(new Error('offline')); }
+    /* The page builds its URLs from SPINBACK_API. While that is blank - which it is until
+       your own API exists - they arrive as same-origin paths such as /auth/me, so both shapes
+       have to reach the handlers below. Anything that is not this site's own address is
+       passed straight through to the network. */
+    var sameSite = (url.indexOf('/') === 0 && url.indexOf('//') !== 0) || url.indexOf(window.location.origin) === 0;
+    if (!sameSite) { return nativeFetch ? nativeFetch(input, init) : Promise.reject(new Error('offline')); }
     try {
       if (url.indexOf('/auth/me') !== -1) {
         return Promise.resolve(reply({ authenticated: true, user: { id: 'local', username: 'This browser', discriminator: '0000', avatar: null } }));

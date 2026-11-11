@@ -234,7 +234,7 @@ function toLabel(sn) {
 async function loadEntities() {
   let raw = {};
   try {
-    raw = await fetch('/media/entitys/entities.json').then(r => r.json());
+    raw = await fetch('/data/entities.json').then(r => r.json());
   } catch(e) {
     console.warn('[KitBuilder] entities.json failed to load:', e.message);
     return; // CATS stays empty — builder will show nothing, not crash
@@ -276,7 +276,7 @@ let MANAGE_MODE = 'load'; // 'load' or 'manage'
 // ════════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ════════════════════════════════════════════════════════════════════════════
-const API = () => window.RW_API || '';
+const API = () => window.SPINBACK_API || '';
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function toast(msg,err=false){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=err?'#e74c3c':'var(--rust)';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
 function closeModal(id){document.getElementById(id).style.display='none'}
@@ -298,6 +298,7 @@ function openConfirm(title, desc, confirmBtnText = 'Yes', btnClass = 'danger') {
     _confirmResolver = resolve;
   });
 }
+
 function closeConfirmModal(ev) {
   if (ev && ev.target !== document.getElementById('confirmModal')) return;
   document.getElementById('confirmModal').style.display = 'none';
@@ -366,7 +367,7 @@ async function init() {
 })();
 
 async function loadStats() {
-  if (!API()) return;
+  /* Counters come from this site while no API of our own is set, so do not skip them. */
   try {
     const d = await fetch(`${API()}/api/kitbuilder/stats`).then(r=>r.json());
     document.getElementById('stGen').textContent   = fmtNum(d.generated);
@@ -375,7 +376,9 @@ async function loadStats() {
 }
 
 async function checkAuth() {
-  if (!API()) return;
+  /* No API of our own is configured yet, so this request goes to this site, where the
+     browser kit store answers it. Bailing out here would leave every visitor looking
+     signed out, which is what made Save Kit bounce people to the login page. */
   try {
     const d = await fetch(`${API()}/auth/me`,{credentials:'include'}).then(r=>r.json());
     USER = d?.authenticated ? d : null;
@@ -398,6 +401,7 @@ function updateAuthButtons() {
 
 // ════════════════════════════════════════════════════════════════════════════
 // MOBILE TABS
+// ════════════════════════════════════════════════════════════════════════════
 function setMobTab(tab) {
   const isMob = window.innerWidth <= 900;
   if (!isMob) return;
@@ -595,6 +599,7 @@ function openQtyDialog(pos, idx) {
 }
 
 function onSlotDrop(e, pos, idx) {
+
   const raw = e.dataTransfer.getData('text/plain');
   if (!raw) return;
   let data;
@@ -715,7 +720,7 @@ function updateOutput() {
 }
 
 async function incrementGenerated() {
-  if (!API()) return;
+  /* Counted locally while no API of our own is set; the request still has to go out. */
   try {
     const d = await fetch(`${API()}/api/kitbuilder/generate`,{method:'POST',credentials:'include'}).then(r=>r.json());
     if (d.generated) document.getElementById('stGen').textContent = fmtNum(d.generated);
@@ -798,6 +803,7 @@ function doImport() {
 // ════════════════════════════════════════════════════════════════════════════
 // SAVE / LOAD / MANAGE
 // ════════════════════════════════════════════════════════════════════════════
+async function saveKit() {
   if (!USER) { toast('Login to save kits.', true); window.location.href='../login.html'; return; }
   if (!kitHasItems()) { toast('Add items before saving.', true); return; }
   KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
@@ -882,17 +888,18 @@ function togglePresetPanel() {
 // PRESETS SYSTEM
 // ════════════════════════════════════════════════════════════════════════════
 const PRESET_FILES = [
-  { id: "vanilla", label: "Vanilla", path: "/media/kitbuilder/presets/vanilla.json" },
-  { id: "2x", label: "2x", path: "/media/kitbuilder/presets/2x.json" },
-  { id: "3x", label: "3x", path: "/media/kitbuilder/presets/3x.json" },
-  { id: "6x", label: "6x", path: "/media/kitbuilder/presets/6x.json" },
-  { id: "supermodded", label: "Super Modded", path: "/media/kitbuilder/presets/supermodded.json" },
+  { id: "vanilla", label: "Vanilla", path: "/data/presets/vanilla.json" },
+  { id: "2x", label: "2x", path: "/data/presets/2x.json" },
+  { id: "3x", label: "3x", path: "/data/presets/3x.json" },
+  { id: "6x", label: "6x", path: "/data/presets/6x.json" },
+  { id: "supermodded", label: "Super Modded", path: "/data/presets/supermodded.json" },
 ];
 const _presetCache = new Map();
 
 function setupServerPresets() {
   const select = document.getElementById("presetMultiplierSelect");
   if (!select) return;
+
 
   PRESET_FILES.forEach(group => {
     const option = document.createElement("option");
@@ -1194,9 +1201,11 @@ async function copyScreenshotImage() {
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       toast("📋 Image copied to clipboard!");
     } catch (err) {
+
       console.error(err);
       toast("Failed to copy image.", true);
     }
   }, "image/png");
+}
 
 init();
