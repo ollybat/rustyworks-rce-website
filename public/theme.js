@@ -153,7 +153,7 @@
     }
   }
 
-  /* RustyWorks is designed dark, so that is what a first-time visitor gets and
+  /* Spinback is designed dark, so that is what a first-time visitor gets and
      what the owner sees. To follow the operating system instead, swap the
      fallback below for: (systemLight && systemLight.matches ? 'light' : 'dark').
      Either way the switch in the navigation wins, and it is remembered. */
@@ -245,8 +245,8 @@
           deferredPrompt = null;
           return prompt.prompt().then(function () { return true; });
         }
-        if (isStandalone()) window.alert('RustyWorks is already running as an app.');
-        else window.alert('Install RustyWorks on this device:\n\n' + steps());
+        if (isStandalone()) window.alert((window.RW_BRAND && window.RW_BRAND.short ? window.RW_BRAND.short : 'Spinback') + ' is already running as an app.');
+        else window.alert('Install ' + (window.RW_BRAND && window.RW_BRAND.short ? window.RW_BRAND.short : 'Spinback') + ' on this device:\n\n' + steps());
         return Promise.resolve(false);
       }
     }
