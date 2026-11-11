@@ -263,3 +263,23 @@ Worker serves `/sw.js` with `no-cache` and `Service-Worker-Allowed: /`, so an ol
 cannot pin an old site on a phone. `public/media/icon-512.png` (with a base64 companion for
 this text-only repository) gives Android the 512px icon it wants before it offers an
 install, alongside the existing 192px icon.
+
+## Brand assets
+
+Everything the site shows as "Spinback" comes from artwork kept in `public/media/`:
+
+| File | What it is |
+| --- | --- |
+| `spinback-mark.png` | The S mark on its own, transparent background |
+| `rustyworks-icon.svg` | Site logo and favicon: the mark wrapped in an SVG |
+| `rustyworks-icon-christmas.svg` | Same mark with a hat, used from Nov 1 to Jan 6 |
+| `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | App and install icons on a dark tile |
+| `spinback-banner.webp` | Animated hero banner (46 frames, about 230 KB) |
+| `spinback-banner-poster.jpg` | Still first frame, shown before the animation loads |
+| `og-card.jpg` | 1200x630 link preview card |
+
+Raster art is stored as `*.b64` (or `*.b64.partN`) text, because that is what travels
+reliably through this repository's tooling. `scripts/build.mjs` decodes those parts back into
+real image files during a build, so edit the parts, not the binaries. If you replace the mark,
+regenerate the parts for every raster in the table above: the build decodes them over whatever
+else is in `public/media/`.
