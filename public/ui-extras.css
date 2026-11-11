@@ -1,0 +1,39 @@
+/* ==========================================================================
+   Small additions kept in their own file
+   --------------------------------------------------------------------------
+   The skip link and the light/dark switch live here rather than at the end of
+   style.css, so the stylesheet that ships can stay byte-identical to the one
+   this site was built from. Pages load this AFTER style.css, which is the same
+   place in the cascade these rules had when they were appended.
+   ========================================================================== */
+/* ==================================================================
+   SKIP LINK AND THEME TOGGLE
+   ------------------------------------------------------------------
+   The light palette has always been in this file (html[data-theme="light"]),
+   it just had no switch. theme.js now draws one in the navigation.
+   ================================================================== */
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 120;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--rust); border-radius: 0 0 10px 0;
+  padding: 12px 18px; font-family: 'Oswald'; font-size: 0.8rem;
+  letter-spacing: 0.5px; text-transform: uppercase; text-decoration: none;
+}
+.skip-link:focus { left: 0; }
+main:focus { outline: none; }
+
+.rw-theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; flex: 0 0 auto; padding: 0;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel); color: var(--text-dim); cursor: pointer;
+  transition: color .2s, border-color .2s, background .2s, transform .15s;
+}
+.rw-theme-toggle:hover { color: var(--ember); border-color: var(--rust); background: var(--panel-2); transform: translateY(-1px); }
+.rw-theme-toggle:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
+.rw-theme-toggle svg { width: 18px; height: 18px; display: block; }
+.rw-theme-toggle .rw-tg-moon { display: none; }
+html[data-theme="light"] .rw-theme-toggle .rw-tg-sun { display: none; }
+html[data-theme="light"] .rw-theme-toggle .rw-tg-moon { display: block; }
+html[data-reduce-motion="1"] .rw-theme-toggle { transition: none; }
+

@@ -135,6 +135,15 @@ async function readSession(request, env) {
   }
 }
 
+/* Two headers that cost nothing and close the usual holes: stop the browser
+   guessing a content type, and keep referrers tidy. */
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  headers.set("x-content-type-options", "nosniff");
+  if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 /* ---------- the bot API proxy ---------- */
 
 async function proxyApi(request) {
@@ -418,14 +427,37 @@ export default {
     if (url.pathname === "/auth/me") return authMe(request, env);
 
     const assetResponse = await env.ASSETS.fetch(request);
-    if (assetResponse.status !== 404) return assetResponse;
+    if (assetResponse.status !== 404) return withSecurityHeaders(assetResponse);
 
     const method = request.method.toUpperCase();
-    const acceptsHtml = (request.headers.get("accept") || "").includes("text/html");
-    if ((method === "GET" || method === "HEAD") && acceptsHtml && !HAS_EXTENSION.test(url.pathname)) {
-      return env.ASSETS.fetch(new URL("/index.html", request.url));
+    const isPageRequest = (method === "GET" || method === "HEAD") &&
+      (request.headers.get("accept") || "").includes("text/html");
+
+    if (isPageRequest) {
+      /* A page asked for without its extension — /status for /status.html — so
+         links people copy out of the address bar stay short. */
+      if (!HAS_EXTENSION.test(url.pathname)) {
+        const target = url.pathname === "/" ? "/index.html" : url.pathname.replace(/\/+$/, "") + ".html";
+        const pretty = await env.ASSETS.fetch(new URL(target, request.url));
+        if (pretty.status !== 404) return withSecurityHeaders(pretty);
+      }
+
+      /* Nothing there: the site's own 404 page, still answering 404. */
+      const fallback = await env.ASSETS.fetch(new URL("/404.html", request.url));
+      if (fallback.status !== 404) {
+        return new Response(method === "HEAD" ? null : await fallback.arrayBuffer(), {
+          status: 404,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store",
+            "x-robots-tag": "noindex",
+            "x-content-type-options": "nosniff",
+          },
+        });
+      }
     }
 
-    return assetResponse;
+    return withSecurityHeaders(assetResponse);
   },
 };
+
