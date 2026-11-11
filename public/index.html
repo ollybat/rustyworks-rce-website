@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <!-- Marks the page as scripted: the reveal animation only hides content when this is set. -->
+    <script>document.documentElement.className += " js";</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>RustyWorks RCE — Free Rust Console Server Bot</title>
+    <meta
+      name="description"
+      content="The all-in-one Discord bot for Rust Console Edition servers. Zorp protection, economy, gambling, killfeed and more. 100% free forever.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Oswald:wght@500;600;700&family=Chakra+Petch:wght@400;500;600&display=swap"
+      rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
+    <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
+    <link rel="apple-touch-icon" href="/media/rustyworks-icon.svg">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <!-- Colours the browser / status bar chrome on phones and the installed app. -->
+    <meta name="theme-color" content="#0b0704">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="RustyWorks">
+    <script src="/theme.js"></script>
+    <!-- Progressive enhancement: the page works without these, they just add the live counts, the app install prompt and the signed-in shortcuts. -->
+    <script src="/config.js" defer></script>
+    <script src="/apiHelper.js" defer></script>
+    <script src="/nav-auth.js" defer></script>
+    <script src="/home.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="features.html">Features</a>
+            <a href="commands.html">Commands</a>
+            <a href="docs.html">Docs</a>
+            <a href="updates.html">Updates</a>
+            <a href="#" data-open-partners>Partners</a>
+            <a href="status.html">Status</a>
+            <a
+              href="https://discord.com/oauth2/authorize?client_id=1468652543012896854&permissions=8&integration_type=0&scope=bot+applications.commands"
+              target="_blank"
+              rel="noopener"
+              class="btn">
+              Add to Discord
+            </a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
+        </nav>
+      </div>
+    </header>
+    <div class="rw-video-hero">
+      <video
+        class="rw-video-hero__video"
+        id="rwHeroVideo"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="auto">
+        <source src="/media/Website_Background.mp4" type="video/mp4">
+      </video>
+      <div class="rw-video-hero__fade" id="rwHeroFade"></div>
+      <div class="rw-video-hero__overlay"></div>
+      <!-- FREE strip -->
+      <div class="free-strip">
+        <span class="fs-check">✅</span>
+        <span>Zero subscriptions &nbsp;·&nbsp; Zero premium tiers &nbsp;·&nbsp; Every feature free forever</span>
+        <span class="fs-check">✅</span>
+      </div>
+      <!-- ============ HERO ============ -->
+      <section class="hero">
+        <div class="wrap">
+          <span class="tag reveal">Built for Rust Console Edition</span>
+          <div class="hero-sub-badge reveal"><span>✅</span><span>100% Free — Always Has Been, Always Will Be</span></div>
+          <h1 class="hero-title reveal"><span class="ht-pre">Your Rust server,</span><span class="ht-accent">running itself.</span></h1>
+          <p class="reveal">
+            RustyWorks RCE is the all-in-one free Discord bot for Rust Console servers. Offline
+            raid protection, full economy, 14 fully interactable games, killfeed, battle-pass,
+            and live automation — one bot handles everything your community needs.
+          </p>
+          <div class="hero-cta-3 reveal">
+            <a
+              href="https://discord.com/oauth2/authorize?client_id=1468652543012896854&permissions=8&integration_type=0&scope=bot+applications.commands"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-discord">
+              ⊕ Add to Discord — Free
+            </a>
+            <a
+              href="https://discord.gg/NFRkb9NYNd"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-support">
+              💬 Join Support Server
+            </a>
+            <a href="login.html" class="btn btn-login">🔑 Login to Dashboard</a>
+          </div>
+          <div class="stats">
+            <div class="stat reveal">
+              <div class="num">44+</div>
+              <div class="lbl">Feature Modules</div>
+            </div>
+            <div class="stat reveal">
+              <div class="num" id="statUsers">818+</div>
+              <div class="lbl">Linked Players</div>
+            </div>
+            <div class="stat reveal">
+              <div class="num" id="statServers">36</div>
+              <div class="lbl">Servers Connected</div>
+            </div>
+            <div class="stat reveal">
+              <div class="num u-stat-free">FREE</div>
+              <div class="lbl">Always &amp; Forever</div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- ============ 3-CTA STRIP ============ -->
+      <section class="u-strip-space">
+        <div class="wrap">
+          <div class="cta-strip">
+            <div class="cta-strip-card reveal">
+              <span class="csc-ico">🤖</span>
+              <h3>Add the Bot</h3>
+              <p>One click and the bot is in your Discord. No config files, no hosting, just invite and run <code>/setup</code>.</p>
+              <a
+                href="https://discord.com/oauth2/authorize?client_id=1468652543012896854&permissions=8&integration_type=0&scope=bot+applications.commands"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-discord u-btn-block">
+                ⊕ Add to Discord
+              </a>
+            </div>
+            <div class="cta-strip-card reveal">
+              <span class="csc-ico">💬</span>
+              <h3>Join Our Community</h3>
+              <p>
+                Get official help, report issues, suggest features, and chat with other Rust
+                Console server owners and get exclusive perks.
+              </p>
+              <a
+                href="https://discord.gg/NFRkb9NYNd"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-support u-btn-block">
+                💬 Join Support Server
+              </a>
+            </div>
+            <div class="cta-strip-card reveal">
+              <span class="csc-ico">🎛️</span>
+              <h3>Web Dashboard</h3>
+              <p>Manage every setting, player, and module from a clean web dashboard — no Discord commands needed.</p>
+              <a
+                href="login.html"
+                class="btn btn-login u-btn-block">
+                🔑 Login to Dashboard
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <!-- /.rw-video-hero -->
+    <!-- ============ KIT STUDIO FEATURE ============ -->
+    <section class="kit-studio-section">
+      <div class="wrap">
+        <div class="ks-split">
+          <div class="ks-text">
+            <span class="tag reveal">Free Tool — No Login Required</span>
+            <h2 class="reveal">🛠️ Kit <span class="accent">Studio</span></h2>
+            <p class="reveal">
+              Build custom Rust kit loadouts visually with real item icons, drag-and-drop
+              inventory slots, and instant code generation. No login needed — open it, build a
+              kit, install it.
+            </p>
+            <ul class="ks-list reveal">
+              <li>Drag-and-drop Wear, Main &amp; Belt inventory slots</li>
+              <li>400+ Rust items with in-game icons</li>
+              <li>18 pre-made loadouts — click to install</li>
+              <li>Export as RCON commands or Base64 install code</li>
+              <li>Save &amp; manage your kits (login required)</li>
+            </ul>
+            <a href="dashboard/kitbuilder.html" class="btn reveal">🛠️ Open Kit Studio</a>
+          </div>
+          <div class="ks-visual reveal">
+            <div class="ks-mockup">
+              <div class="ksm-section">
+                <div class="ksm-label">👕 Wear — 7 slots</div>
+                <div class="ksm-row">
+                  <div class="ksm-slot w">⛑️</div>
+                  <div class="ksm-slot w">🛡️</div>
+                  <div class="ksm-slot w">👖</div>
+                  <div class="ksm-slot w">🥾</div>
+                  <div class="ksm-slot w">🧤</div>
+                  <div class="ksm-slot w">🎒</div>
+                  <div class="ksm-slot w"></div>
+                </div>
+              </div>
+              <div class="ksm-section">
+                <div class="ksm-label">📦 Main Inventory — 24 slots</div>
+                <div class="ksm-row-main">
+                  <div class="ksm-slot m">🔫</div>
+                  <div class="ksm-slot m">💣</div>
+                  <div class="ksm-slot m">🪨</div>
+                  <div class="ksm-slot m">🪵</div>
+                  <div class="ksm-slot m">🔩</div>
+                  <div class="ksm-slot m">💊</div>
+                  <div class="ksm-slot m">🧱</div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                  <div class="ksm-slot m"></div>
+                </div>
+              </div>
+              <div class="ksm-section">
+                <div class="ksm-label">🎯 Belt — 6 slots</div>
+                <div class="ksm-row-6">
+                  <div class="ksm-slot b">🔫</div>
+                  <div class="ksm-slot b">💉</div>
+                  <div class="ksm-slot b">💊</div>
+                  <div class="ksm-slot b"></div>
+                  <div class="ksm-slot b"></div>
+                  <div class="ksm-slot b"></div>
+                </div>
+              </div>
+              <div class="ksm-btn-row">
+                <div class="ksm-btn primary">📋 Commands</div>
+                <div class="ksm-btn primary">⚡ Install Code</div>
+                <div class="ksm-btn">💾 Save</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ COLOUR STUDIO FEATURE ============ -->
+    <section class="colour-studio-section">
+      <div class="wrap">
+        <div class="ks-split">
+          <div class="ks-text">
+            <span class="tag reveal u-steel">
+              🔒 Sign In Required
+            </span>
+            <h2 class="reveal">🎨 Colour <span class="accent">Studio</span></h2>
+            <p class="reveal">
+              Generate gradient colour text in the
+              <code>&lt;#RRGGBB&gt;character</code>
+              format for your Rust server messages, killfeed titles, and embed headers. Type
+              your text, pick a palette, copy — done.
+            </p>
+            <ul class="ks-list reveal">
+              <li>Live preview as you type — see the gradient in real time</li>
+              <li>Up to 8 custom colour stops per gradient</li>
+              <li>8 built-in Rust-themed presets to start from</li>
+              <li>Save your own palettes to your account</li>
+              <li>Paste existing tagged text to decode and re-edit it</li>
+            </ul>
+            <div class="reveal" id="colourStudioCta">
+              <a href="login.html?next=%2Fdashboard%2Fcolortext.html" class="btn" id="csBtn">
+                🔑 Sign In to Open Colour Studio
+              </a>
+              <div class="note u-note">
+                Free to use — it just needs a Discord sign-in so your saved palettes follow you.
+              </div>
+            </div>
+          </div>
+          <div class="ks-visual reveal">
+            <div class="ct-mockup">
+              <div class="ksm-label">🎨 Preview Stage</div>
+              <div class="ctm-preview-area">
+                <span class="ctm-text">
+                  <span style="color: #FF9A00">R</span><span style="color: #FF7200">u</span><span style="color: #FF4900">s</span><span style="color: #F21F6B">t</span><span style="color: #C800CC">y</span><span style="color: #8A00FF">W</span><span style="color: #5500FF">o</span><span style="color: #2B00FF">r</span><span style="color: #0055FF">k</span><span style="color: #00AAFF">s</span>
+                </span>
+              </div>
+              <div class="ksm-label" style="margin-bottom: 6px; margin-top: 10px">Colour Stops</div>
+              <div class="ctm-stops">
+                <div class="ctm-stop">
+                  <div class="ctm-stop-dot" style="background: #FF9A00"></div>
+                  <div class="ctm-stop-bar" style="background: linear-gradient(90deg, #FF9A00, #FF4900)"></div>
+                  <div class="ctm-stop-hex">#FF9A00</div>
+                </div>
+                <div class="ctm-stop">
+                  <div class="ctm-stop-dot" style="background: #C800CC"></div>
+                  <div class="ctm-stop-bar" style="background: linear-gradient(90deg, #C800CC, #5500FF)"></div>
+                  <div class="ctm-stop-hex">#C800CC</div>
+                </div>
+                <div class="ctm-stop">
+                  <div class="ctm-stop-dot" style="background: #00AAFF"></div>
+                  <div class="ctm-stop-bar" style="background: linear-gradient(90deg, #0055FF, #00AAFF)"></div>
+                  <div class="ctm-stop-hex">#00AAFF</div>
+                </div>
+              </div>
+              <div class="ksm-label" style="margin-bottom: 4px; margin-top: 10px">Output</div>
+              <div class="ctm-output-box">
+                &lt;#FF9A00&gt;R&lt;#FF7200&gt;u&lt;#FF4900&gt;s&lt;#F21F6B&gt;t&lt;#C800CC&gt;y&lt;#8A00FF&gt;W...
+              </div>
+              <div class="ksm-btn-row">
+                <div class="ksm-btn primary">📋 Copy Output</div>
+                <div class="ksm-btn">💾 Save Preset</div>
+                <div class="ksm-btn">↺ Reset</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ SERVER BROWSER + SKIN STORE (side by side) ============ -->
+    <section class="browser-duo-section">
+      <div class="wrap">
+        <div class="duo-grid">
+          <div class="duo-card reveal">
+            <span class="tag">Free Tool — No Login Required</span>
+            <h2>🌍 Server <span class="accent">Browser</span></h2>
+            <p>
+              Find your next Rust Console server. Browse every official and community server in
+              one list, filter it down to what you like, and check a server's map before you
+              join.
+            </p>
+            <ul class="ks-list">
+              <li>Official and Community servers, PlayStation and Xbox</li>
+              <li>Search by server name, server ID or map seed</li>
+              <li>Filter by region, map wipe, team size, map size and monuments</li>
+              <li>See gather, loot and stack rates on community servers</li>
+              <li>Load a map preview, then copy the server ID or share a link</li>
+            </ul>
+            <a href="rustservers.html" class="btn">🌍 Open Server Browser</a>
+            <div class="duo-visual">
+              <div class="sbm-mockup" aria-hidden="true">
+                <div class="sbm-tabs">
+                  <div class="sbm-tab on">🛡️ Official</div>
+                  <div class="sbm-tab">🖥️ Community</div>
+                </div>
+                <div class="sbm-search">🔍 Search name, ID or seed…</div>
+                <div class="sbm-filters">
+                  <div class="sbm-filter">All platforms</div>
+                  <div class="sbm-filter">All regions</div>
+                  <div class="sbm-filter">Any schedule</div>
+                  <div class="sbm-filter">Any team size</div>
+                </div>
+                <div class="sbm-row">
+                  <div class="sbm-row-top"><span>● Crossplay</span><span>Europe</span></div>
+                  <div class="sbm-name">Official Server [Weekly]</div>
+                  <div class="sbm-chips">
+                    <span class="sbm-chip b">Weekly wipe</span><span class="sbm-chip">Trio</span><span class="sbm-chip">1× gather</span>
+                  </div>
+                </div>
+                <div class="sbm-row">
+                  <div class="sbm-row-top"><span>● Crossplay</span><span>US East</span></div>
+                  <div class="sbm-name">Official Server [Monthly]</div>
+                  <div class="sbm-chips"><span class="sbm-chip b">Monthly wipe</span><span class="sbm-chip">Quad</span></div>
+                </div>
+                <div class="ksm-btn-row">
+                  <div class="ksm-btn primary">🗺️ Map</div>
+                  <div class="ksm-btn">📋 Copy ID</div>
+                  <div class="ksm-btn">🔗 Share</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="duo-card reveal">
+            <span class="tag">Free Tool — No Login Required</span>
+            <h2>🎽 Skin <span class="accent">Store</span></h2>
+            <p>
+              Browse every Rust Console skin in one place. Search by name or item, sort by
+              release date, and open any skin for a full-size preview.
+            </p>
+            <ul class="ks-list">
+              <li>Weapon, clothing, item and tool skins</li>
+              <li>Search by skin name, item or catalog ID</li>
+              <li>Sort by release date, latest shop appearance or name</li>
+              <li>See what's new in the New releases view</li>
+              <li>Open a large preview, then copy the catalog ID or share a link</li>
+            </ul>
+            <a href="rustskins.html" class="btn">🎽 Open Skin Store</a>
+            <div class="duo-visual">
+              <div class="skm-mockup" aria-hidden="true">
+                <div class="sbm-tabs">
+                  <div class="sbm-tab on">✨ All skins</div>
+                  <div class="sbm-tab">🆕 New releases</div>
+                </div>
+                <div class="sbm-search">🔍 Search a skin, item or ID…</div>
+                <div class="skm-chips">
+                  <span class="sbm-chip b">Everything</span><span class="sbm-chip">🔫 Weapons</span><span class="sbm-chip">👕 Clothing</span><span class="sbm-chip">📦 Items</span><span class="sbm-chip">🛠️ Tools</span>
+                </div>
+                <div class="skm-grid">
+                  <div class="skm-tile">
+                    <div class="skm-art">🔫</div>
+                    <div class="skm-meta">
+                      <div class="skm-name">Skin Name</div>
+                      <div class="skm-item">Weapon</div>
+                    </div>
+                  </div>
+                  <div class="skm-tile">
+                    <div class="skm-art">👕</div>
+                    <div class="skm-meta">
+                      <div class="skm-name">Skin Name</div>
+                      <div class="skm-item">Hoodie</div>
+                    </div>
+                  </div>
+                  <div class="skm-tile">
+                    <div class="skm-art">📦</div>
+                    <div class="skm-meta">
+                      <div class="skm-name">Skin Name</div>
+                      <div class="skm-item">Storage Box</div>
+                    </div>
+                  </div>
+                  <div class="skm-tile">
+                    <div class="skm-art">🪓</div>
+                    <div class="skm-meta">
+                      <div class="skm-name">Skin Name</div>
+                      <div class="skm-item">Tool</div>
+                    </div>
+                  </div>
+                  <div class="skm-tile">
+                    <div class="skm-art">🧤</div>
+                    <div class="skm-meta">
+                      <div class="skm-name">Skin Name</div>
+                      <div class="skm-item">Gloves</div>
+                    </div>
+                  </div>
+                  <div class="skm-tile">
+                    <div class="skm-art">🚪</div>
+                    <div class="skm-meta">
+                      <div class="skm-name">Skin Name</div>
+                      <div class="skm-item">Door</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="ksm-btn-row">
+                  <div class="ksm-btn primary">🔍 Preview</div>
+                  <div class="ksm-btn">📋 Copy ID</div>
+                  <div class="ksm-btn">🔗 Share</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ FEATURES TEASER ============ -->
+    <section id="features">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <span class="eyebrow">What it does</span>
+          <h2>One bot. Your whole server.</h2>
+          <p>
+            Over 44 feature modules covering economy, community, automation and server
+            management — all completely free.
+          </p>
+        </div>
+        <div class="grid">
+          <div class="card reveal">
+            <span class="ico">🧱</span>
+            <h3>Zorps</h3>
+            <p>Offline base protection with dome zones that auto-toggle as your team logs on and off.</p>
+          </div>
+          <div class="card reveal">
+            <span class="ico">💰</span>
+            <h3>Economy &amp; Shop</h3>
+            <p>Full currency system, 550+ item shop, player bags, kits, roles and in-game delivery.</p>
+          </div>
+          <div class="card reveal">
+            <span class="ico">🎰</span>
+            <h3>14 Games</h3>
+            <p>all fully interactive.</p>
+          </div>
+          <div class="card reveal">
+            <span class="ico">🎟️</span>
+            <h3>Battle-Pass</h3>
+            <p>Earn rewards just by playing — claim items in-game or sell them straight to the bot.</p>
+          </div>
+          <div class="card reveal">
+            <span class="ico">☢️</span>
+            <h3>Nuclear Fallout Drops</h3>
+            <p>Server-wide reward drops players race to claim, fully configurable by staff.</p>
+          </div>
+          <div class="card reveal">
+            <span class="ico">🎛️</span>
+            <h3>Master Dashboard</h3>
+            <p>Manage servers, players, and automation from one web control panel — no Discord needed.</p>
+          </div>
+        </div>
+        <div class="reveal u-center u-mt-44">
+          <a href="features.html" class="btn">View all 68 features →</a>
+        </div>
+      </div>
+    </section>
+    <!-- ============ EXPLORE TEASER ============ -->
+    <section id="explore">
+      <div class="wrap">
+        <div class="grid u-grid-auto">
+          <div class="card reveal">
+            <span class="ico">⌨️</span>
+            <h3>177 Commands</h3>
+            <p>
+              Everything players and staff can do, organised by category — from
+              <code class="u-ember">/eco shop</code>
+              to
+              <code class="u-ember">/zorp config</code>.
+            </p>
+            <div class="u-mt-18"><a href="commands.html" class="btn ghost">Browse Commands →</a></div>
+          </div>
+          <div class="card reveal">
+            <span class="ico">📚</span>
+            <h3>Full Documentation</h3>
+            <p>Player guides and admin setup docs covering every system, written in plain English with examples.</p>
+            <div class="u-mt-18"><a href="docs.html" class="btn ghost">Read the Docs →</a></div>
+          </div>
+          <div class="card reveal">
+            <span class="ico">🌍</span>
+            <h3>Server Browser</h3>
+            <p>
+              Search every official and community Rust Console server by platform, region, wipe
+              day, team size and monuments. Free, no login.
+            </p>
+            <div class="u-mt-18"><a href="rustservers.html" class="btn ghost">Find a Server →</a></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ PARTNERS TEASER ============ -->
+    <section id="partners-teaser" class="u-pt-0">
+      <div class="wrap">
+        <div class="card reveal u-center">
+          <span class="ico">🤝</span>
+          <h3>Our Partners</h3>
+          <p>
+            RustyWorks RCE wouldn't be the same without the people who helped build it. Meet RCE
+            Maps and KINGS3X V2.
+          </p>
+          <div class="u-mt-18"><a href="#" class="btn ghost" data-open-partners>Meet the Partners →</a></div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ CTA ============ -->
+    <section class="cta-band">
+      <div class="wrap">
+        <div class="cta-inner reveal">
+          <h2>Ready to power up your server?</h2>
+          <p>Add RustyWorks RCE to your Discord — every feature, completely free, forever.</p>
+          <div class="u-row">
+            <a
+              href="https://discord.com/oauth2/authorize?client_id=1468652543012896854&permissions=8&integration_type=0&scope=bot+applications.commands"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-discord">
+              ⊕ Add to Discord
+            </a>
+            <a href="login.html" class="btn btn-login">🔑 Login to Dashboard</a>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ FOOTER ============ -->
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="#" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="features.html">Features</a>
+            <a href="commands.html">Commands</a>
+            <a href="docs.html">Documentation</a>
+            <a href="rustservers.html">Server Browser</a>
+            <a href="rustskins.html">Skin Store</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="#" data-open-partners>Partners</a>
+            <a href="status.html">Status</a>
+          </div>
+          <div class="foot-col">
+            <h4>Legal</h4>
+            <a href="legal/privacy.html">Privacy Policy</a>
+            <a href="legal/terms.html">Terms of Service</a>
+          </div>
+        </div>
+        <div class="foot-bottom">© <span id="year"></span> RustyWorks RCE. Not affiliated with Facepunch Studios or Rust.</div>
+        <div class="foot-app">
+          <button type="button" id="rwInstallBtn">📲 Get the RustyWorks app</button>
+          <small>Open RustyWorks from your home screen. Free, no app store needed.</small>
+        </div>
+      </div>
+    </footer>
+    <!-- ============ PARTNERS PANEL ============ -->
+    <div
+      class="pp-overlay"
+      id="partnersPanel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ppTitle"
+      aria-hidden="true">
+      <div class="pp-panel">
+        <button type="button" class="pp-close" id="ppClose" aria-label="Close">✕</button>
+        <span class="tag">Thank you</span>
+        <h2 id="ppTitle">Our Partners</h2>
+        <p class="pp-intro">Some of what RustyWorks RCE can do exists because of the people below.</p>
+        <div class="pp-item">
+          <span class="pp-ico">🗺️</span>
+          <div>
+            <h3>RCE Maps</h3>
+            <div class="pp-role">Map generation partner</div>
+            <p>Powers the map tools for Rust Console servers.</p>
+            <div class="pp-links">
+              <a href="https://rcemaps.com/" target="_blank" rel="noopener" class="btn ghost">Website</a>
+              <a
+                href="https://discord.gg/NvZ7mhpt2P"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-discord">
+                Discord
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="pp-item">
+          <span class="pp-ico">👑</span>
+          <div>
+            <h3>KINGS3X V2</h3>
+            <div class="pp-role">Community partner</div>
+            <p>Helped make parts of RustyWorks RCE possible.</p>
+            <div class="pp-links">
+              <a href="https://kings3x.com/" target="_blank" rel="noopener" class="btn ghost">Website</a>
+              <a href="https://discord.gg/king3x" target="_blank" rel="noopener" class="btn btn-discord">Discord</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

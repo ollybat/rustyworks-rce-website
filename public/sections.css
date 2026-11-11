@@ -1,0 +1,620 @@
+/* ==========================================================================
+   RustyWorks RCE — homepage sections
+
+   Per-section styling for index.html: the hero video backdrop and free
+   strip, the Kit Studio and Colour Studio feature blocks, the server
+   browser and skin store teasers, the partners panel and the footer's
+   install-the-app button. Theme tokens and shared components live in
+   style.css.
+   ========================================================================== */
+
+/* ── FREE strip ── */
+.free-strip {
+  background: linear-gradient(90deg, rgba(207, 106, 46, 0.12), rgba(232, 132, 63, 0.18), rgba(207, 106, 46, 0.12));
+  border-top: 1px solid rgba(207, 106, 46, 0.3);
+  border-bottom: 1px solid rgba(207, 106, 46, 0.3);
+  padding: 10px 0;
+  text-align: center;
+  font-size: 0.88rem;
+  letter-spacing: 0.5px;
+  color: var(--ember);
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+}
+.free-strip span { margin: 0 12px; }
+.free-strip .fs-check { color: #2ecc71; }
+/* ── Video hero background ── */
+/* Wraps the free-strip + hero + 3-CTA strip so the video sits behind all
+ three as one continuous background instead of just the hero section. */
+.rw-video-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  /* keeps the negative z-index layers scoped to this box only */;
+}
+.rw-video-hero__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* 'cover' ensures the background is completely filled on all devices */
+  object-fit: cover;
+  /* 'center' anchors the focal point to the middle so it doesn't look weirdly zoomed */
+  object-position: center center; z-index: -3;
+}
+/* Fades to solid near the loop point so restarting the clip reads as an
+ intentional beat, not a jarring jump-cut. Driven by JS below, timed off
+ the video's own duration so it works with a clip of any length. */
+.rw-video-hero__fade {
+  position: absolute;
+  inset: 0;
+  background: #060402;
+  opacity: 0;
+  transition: opacity 0.6s ease-in-out;
+  z-index: -2;
+  pointer-events: none;
+}
+/* Keeps hero text readable over whatever's playing underneath, and blends
+ the bottom edge smoothly into the section that follows rather than
+ ending in a hard rectangle. Darker than a typical hero overlay on
+ purpose — this has to hold up against a moving video, not a static
+ image, so it needs more margin than usual. */
+.rw-video-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(4, 3, 1, 0.74) 0%, rgba(4, 3, 1, 0.82) 40%, rgba(4, 3, 1, 0.9) 70%, rgba(4, 3, 1, 0.97) 100%);
+  z-index: -1;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-video-hero__video { display: none; }
+  .rw-video-hero { background: linear-gradient(160deg, var(--panel), #0a0704); }
+}
+/* Belt-and-braces on top of the overlay: a drop shadow directly on the
+ text itself, so a bright/busy frame in the video underneath can never
+ wash a line out completely, no matter how dark that moment happens to
+ look on average. */
+.rw-video-hero .tag, .hero-sub-badge, .hero p, .stats .num, .stats .lbl, .free-strip span {
+  /* Dramatically increased text shadows for better readability */
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 1), 0 2px 5px rgba(0, 0, 0, 1), 0 0 15px rgba(0, 0, 0, 0.8);
+}
+/* ── Hero improvements ── */
+.hero-sub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.65);
+  /* Dark background for contrast */
+  border: 1px solid rgba(46, 204, 113, 0.6);
+  border-radius: 30px;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  color: #4ceb8a;
+  /* Brighter green */
+  margin-bottom: 16px;
+  font-family: 'Chakra Petch', sans-serif;
+  backdrop-filter: blur(4px);
+}
+.hero-cta-3 {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 44px;
+}
+.btn-discord { background: linear-gradient(135deg, #5865f2, #4752c4); color: #fff; border: none; }
+.btn-discord:hover { background: linear-gradient(135deg, #6976f5, #5865f2); }
+.btn-support {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.btn-support:hover { border-color: var(--rust); background: rgba(207, 106, 46, 0.1); }
+.btn-login {
+  background: rgba(207, 106, 46, 0.1);
+  border: 1px solid var(--rust);
+  color: var(--ember);
+}
+.btn-login:hover { background: rgba(207, 106, 46, 0.2); }
+/* ── Kit Studio Feature Section ── */
+.kit-studio-section { background: linear-gradient(160deg, var(--panel), #1a120a); }
+.ks-split { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+.ks-text .tag { margin-bottom: 16px; display: inline-block; }
+.ks-text h2 {
+  font-family: 'Oswald', sans-serif;
+  font-size: 2.2rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+.ks-text p { color: var(--text-dim); font-size: 0.97rem; line-height: 1.7; margin-bottom: 20px; }
+.ks-list { list-style: none; margin: 0 0 28px; padding: 0; }
+.ks-list li {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 5px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ks-list li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--rust);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Mini kit mockup */
+.ks-visual { display: flex; justify-content: center; }
+.ks-mockup {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(207, 106, 46, 0.3);
+  border-radius: 14px;
+  padding: 20px;
+  width: 100%;
+  max-width: 340px;
+}
+.ksm-section { margin-bottom: 14px; }
+.ksm-label {
+  font-family: 'Oswald', sans-serif;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.ksm-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.ksm-row-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.ksm-row-main { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.ksm-slot {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+.ksm-slot.w { border-color: rgba(207, 106, 46, 0.5); background: rgba(207, 106, 46, 0.1); }
+.ksm-slot.b { border-color: rgba(231, 76, 60, 0.4); background: rgba(231, 76, 60, 0.08); }
+.ksm-slot.m { border-color: rgba(52, 152, 219, 0.3); background: rgba(52, 152, 219, 0.06); }
+.ksm-btn-row { display: flex; gap: 6px; margin-top: 12px; }
+.ksm-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ksm-btn.primary {
+  border-color: var(--rust);
+  color: var(--ember);
+  background: rgba(207, 106, 46, 0.1);
+}
+/* ── 3-CTA cards strip ── */
+.cta-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 0 0 64px; }
+.cta-strip-card {
+  background: linear-gradient(160deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  text-align: center;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.cta-strip-card:hover { border-color: var(--rust); transform: translateY(-3px); }
+.cta-strip-card .csc-ico { font-size: 2rem; margin-bottom: 14px; display: block; }
+.cta-strip-card h3 {
+  font-family: 'Oswald', sans-serif;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.cta-strip-card p {
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+@media (max-width: 900px) {
+  .ks-split { grid-template-columns: 1fr; gap: 40px; }
+  .cta-strip { grid-template-columns: 1fr; gap: 14px; }
+}
+@media (max-width: 600px) {
+  .ks-text h2 { font-size: 1.7rem; }
+}
+/* ── Colour Studio Section ── */
+.colour-studio-section { background: linear-gradient(160deg, var(--panel), #080d1a); }
+/* Colour Studio Mockup */
+.ct-mockup {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(207, 106, 46, 0.25);
+  border-radius: 14px;
+  padding: 18px;
+  width: 100%;
+  max-width: 340px;
+}
+.ctm-preview-area {
+  background: #030303;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin-bottom: 10px;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+}
+.ctm-text {
+  font-family: 'Oswald', sans-serif;
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.ctm-stops { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.ctm-stop { display: flex; align-items: center; gap: 6px; }
+.ctm-stop-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.ctm-stop-bar { flex: 1; height: 5px; border-radius: 3px; }
+.ctm-stop-hex {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  color: var(--text-dim);
+}
+.ctm-output-box {
+  background: #030303;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: #ffb347;
+  line-height: 1.5;
+  word-break: break-all;
+  margin-bottom: 8px;
+  min-height: 40px;
+}
+/* mockups for the Colour Studio stay visible down to phone width — see the
+   640px block at the end of this file */
+
+/* ── Server Browser + Skin Store (side by side) ── */
+.browser-duo-section { background: linear-gradient(160deg, var(--panel), #0c1812); }
+.duo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: stretch; }
+.duo-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  min-width: 0;
+}
+.duo-card .tag { align-self: flex-start; margin-bottom: 16px; }
+.duo-card h2 {
+  font-family: 'Oswald', sans-serif;
+  font-size: 1.9rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 14px;
+}
+.duo-card p { color: var(--text-dim); font-size: 0.95rem; line-height: 1.7; margin-bottom: 18px; }
+.duo-card .btn { align-self: flex-start; }
+.duo-visual { margin-top: auto; padding-top: 30px; display: flex; justify-content: center; }
+.sbm-mockup {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(207, 106, 46, 0.25);
+  border-radius: 14px;
+  padding: 18px;
+  width: 100%;
+  max-width: 340px;
+}
+.sbm-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.sbm-tab {
+  flex: 1;
+  text-align: center;
+  padding: 7px 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  font-family: 'Oswald', sans-serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sbm-tab.on { border-color: var(--rust); color: var(--ember); background: rgba(207, 106, 46, 0.12); }
+.sbm-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #030303;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+.sbm-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.sbm-filter {
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-size: 0.66rem;
+}
+.sbm-row {
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+.sbm-row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 0.62rem;
+  margin-bottom: 4px;
+}
+.sbm-name {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  margin-bottom: 7px;
+}
+.sbm-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.sbm-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 0.6rem;
+}
+.sbm-chip.b {
+  border-color: rgba(207, 106, 46, 0.5);
+  color: var(--ember);
+  background: rgba(207, 106, 46, 0.1);
+}
+/* Skin Store mockup */
+.skm-mockup {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(207, 106, 46, 0.25);
+  border-radius: 14px;
+  padding: 18px;
+  width: 100%;
+  max-width: 340px;
+}
+.skm-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.skm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 12px; }
+.skm-tile {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+.skm-art {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  background: radial-gradient(circle at 50% 46%, rgba(207, 106, 46, 0.3), transparent 66%), #030303;
+}
+.skm-meta { padding: 6px 8px 7px; }
+.skm-name {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 600;
+  font-size: 0.66rem;
+  line-height: 1.2;
+}
+.skm-item { color: var(--text-dim); font-size: 0.58rem; margin-top: 1px; }
+@media(max-width:900px) {
+  .duo-grid { grid-template-columns: 1fr; gap: 20px; }
+  .duo-card { padding: 26px 20px; }
+}
+@media(max-width:600px) {
+  .duo-card h2 { font-size: 1.6rem; }
+}
+/* ── Hero headline animation ── */
+/* Both lines rise and fade in on load, staggered slightly so the second
+ line (the accent line) lands just after the first — then it settles
+ into a dramatic pulse and a slow ember-to-rust sheen sweeping across it. */
+.hero-title { overflow: visible; animation: title-breathe 3s ease-in-out 1.15s infinite; }
+.hero-title .ht-pre, .hero-title .ht-accent { display: block; opacity: 0; }
+.hero-title .ht-pre { animation: ht-rise 0.8s cubic-bezier( 0.2, 0.8, 0.2, 1) 0.05s forwards; }
+.hero-title .ht-accent {
+  background: linear-gradient(90deg, var(--ember), var(--rust), var(--ember));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.85)) drop-shadow(0 0 22px rgba(207, 106, 46, 0.35));
+  animation: ht-ignite 0.8s cubic-bezier( 0.2, 0.8, 0.2, 1) 0.35s forwards, rw-shimmer 4.5s linear 1.15s infinite, accent-glow 3s ease-in-out 1.15s infinite;
+}
+@keyframes ht-rise {
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ht-ignite {
+  0% { opacity: 0; transform: translateY(18px) scale( 0.96); }
+  65% { opacity: 1; transform: translateY(-3px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes rw-shimmer {
+  to { background-position: -200% center; }
+}
+@keyframes title-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+@keyframes accent-glow {
+  0%, 100% {
+    filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 22px rgba(207, 106, 46, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 4px 15px rgba(0, 0, 0, 1)) drop-shadow(0 0 65px rgba(207, 106, 46, 1));
+  }
+}
+.hero-title .ht-pre { transform: translateY(18px); }
+@media (prefers-reduced-motion: reduce) {
+  .hero-title .ht-pre, .hero-title .ht-accent { animation: none; opacity: 1; transform: none; }
+}
+/* ── Partners panel ── */
+.pp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 3, 1, 0.78);
+  backdrop-filter: blur(4px);
+}
+.pp-overlay.open { display: flex; }
+.pp-panel {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: linear-gradient(160deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--rust);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.pp-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.pp-close:hover { border-color: var(--rust); background: rgba(207, 106, 46, 0.15); }
+.pp-panel h2 {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 1.7rem;
+  margin: 6px 0 8px;
+}
+.pp-intro { color: var(--text-dim); line-height: 1.6; font-size: 0.93rem; margin: 0 0 22px; }
+.pp-item {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px;
+  margin-bottom: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.pp-item .pp-ico { font-size: 1.8rem; line-height: 1; }
+.pp-item h3 {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 1.05rem;
+  margin: 0 0 2px;
+}
+.pp-item .pp-role {
+  color: var(--ember);
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+  font-family: 'Chakra Petch', sans-serif;
+}
+.pp-item p { color: var(--text-dim); font-size: 0.9rem; line-height: 1.55; margin: 0; }
+.pp-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+@media (max-width: 600px) {
+  .pp-panel { padding: 28px 18px; }
+  .pp-item { flex-direction: column; gap: 8px; }
+}
+/* ── Install-the-app button (footer, very bottom) ── */
+.foot-app { text-align: center; padding: 6px 0 26px; }
+.foot-app button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  background: rgba(207, 106, 46, 0.1);
+  border: 1px solid var(--rust);
+  color: var(--ember);
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 600;
+  font-size: 0.92rem;
+  padding: 10px 20px;
+  border-radius: 10px;
+  transition: background 0.2s, transform 0.15s;
+}
+.foot-app button:hover { background: rgba(207, 106, 46, 0.2); transform: translateY(-1px); }
+.foot-app button:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; }
+.foot-app small { display: block; margin-top: 8px; color: var(--text-dim); font-size: 0.78rem; }
+html[data-app] .foot-app { display: none; }
+/* already inside the installed app */
+
+/* ── Phone-sized screens: the mockups become decoration we can drop ── */
+@media (max-width: 640px) {
+  .ks-visual,
+  .colour-studio-section .ks-visual,
+  .duo-visual { display: none; }
+}
+
+/* ── Landscape phones / short viewports ── */
+@media (orientation: landscape) and (max-height: 520px) {
+  .hero { padding: 36px 0 18px; }
+  .stats { margin-top: 24px; }
+  .pp-panel { max-height: 92vh; }
+}
+
+/* Phones: keep the free strip inside the safe edges with tighter gutters. */
+@media (max-width: 480px) {
+  .free-strip {
+    padding: 10px max(12px, env(safe-area-inset-left)) 10px max(12px, env(safe-area-inset-right));
+    font-size: 0.8rem;
+    letter-spacing: 0.2px;
+    line-height: 1.6;
+  }
+  .free-strip span { margin: 0 6px; }
+}
+
+/* ==========================================================================
+   Small utilities
+   --------------------------------------------------------------------------
+   Repetition that would otherwise live in style="…" on the markup. Prefixed
+   with u- so they can never collide with a component class.
+   ========================================================================== */
+.u-mt-18 { margin-top: 18px; }
+.u-mt-44 { margin-top: 44px; }
+.u-center { text-align: center; }
+.u-pt-0 { padding-top: 0; }
+.u-strip-space { padding-top: 0; padding-bottom: 20px; }
+.u-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.u-btn-block { display: flex; justify-content: center; width: 100%; }
+.u-grid-auto { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.u-note { font-size: .82rem; margin-top: 10px; }
+.u-ember { color: var(--ember); }
+.u-steel { border-color: var(--steel); color: var(--steel); }
+.u-green { border-color: var(--green); color: var(--green); }
+.u-stat-free { color: #2ecc71; }
