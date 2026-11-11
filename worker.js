@@ -651,6 +651,19 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    /* Answers "did my settings land?" with booleans only - never a secret value. Handy
+       right after setting values on the Worker, and the dashboard page can point at it. */
+    if (url.pathname === "/api/config-check") {
+      return json({
+        app: "spinback-rce",
+        dashboardOpen: authConfigured(env),
+        clientId: clientId(env),
+        guildIdSet: Boolean(env.DISCORD_GUILD_ID),
+        clientSecretSet: Boolean(env.DISCORD_CLIENT_SECRET),
+        sessionSecretSet: Boolean(env.SESSION_SECRET),
+        statusLogBound: Boolean(env.STATUS_LOG)
+      });
+    }
     if (url.pathname === "/api/history") return statusHistory(request, env);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
