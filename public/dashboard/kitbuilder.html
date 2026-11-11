@@ -15,13 +15,13 @@
     <title>Kit Studio - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
     <meta name="apple-mobile-web-app-title" content="Spinback">
-    <meta name="description" content="Build Rust kit loadouts visually: drag and drop wear, main inventory and belt slots, then copy install code.">
+    <meta name="description" content="Build a Rust Console Edition kit in your browser and copy the exact kit add commands for your server. Free, no sign-in, works offline.">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://rustyworks-rce-j7ao5f.camelai.app/dashboard/kitbuilder.html">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Spinback RCE">
     <meta property="og:title" content="Kit Studio">
-    <meta property="og:description" content="Build Rust kit loadouts visually: drag and drop wear, main inventory and belt slots, then copy install code.">
+    <meta property="og:description" content="Build a Rust Console Edition kit in your browser and copy the exact kit add commands for your server.">
     <meta property="og:url" content="https://rustyworks-rce-j7ao5f.camelai.app/dashboard/kitbuilder.html">
     <meta property="og:image" content="https://rustyworks-rce-j7ao5f.camelai.app/media/og-card.jpg">
     <meta property="og:image:width" content="1200">
@@ -30,7 +30,7 @@
     <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Kit Studio">
-    <meta name="twitter:description" content="Build Rust kit loadouts visually: drag and drop wear, main inventory and belt slots, then copy install code.">
+    <meta name="twitter:description" content="Build a Rust Console Edition kit in your browser and copy the exact kit add commands for your server.">
     <meta name="twitter:image" content="https://rustyworks-rce-j7ao5f.camelai.app/media/og-card.jpg">
     <meta name="twitter:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -45,6 +45,7 @@
     <meta name="theme-color" content="#0b0704">
     <script src="/theme.js"></script>
     <script src="/nav-auth.js" defer></script>
+    <link rel="stylesheet" href="/kitstudio.css">
   </head>
   <body>
     <div id="rw-fx" aria-hidden="true"></div>
@@ -66,29 +67,80 @@
     <main id="main" tabindex="-1">
       <section class="page-hero">
         <div class="wrap">
-          <span class="tag">Free tool</span>
+          <span class="tag">Free tool - no sign-in</span>
           <h1>Kit <span class="accent">Studio</span></h1>
-          <p>Build custom Rust kit loadouts with real item icons, drag-and-drop inventory slots and instant code generation. Free, and no login needed - the builder screen is still being built.</p>
+          <p>Pick items, set the amount, condition and container, then copy the exact console commands your Rust Console Edition server wants. It runs in your browser, works offline once loaded, and never asks you to sign in.</p>
         </div>
       </section>
+
       <section style="padding-top:0">
+        <div class="wrap ks-grid">
+          <div class="ks-panel">
+            <label class="ks-label" for="ksSearch">Find an item</label>
+            <div class="ks-searchrow">
+              <input id="ksSearch" type="search" placeholder="ak, bandage, wood, ammo.rifle..." autocomplete="off" spellcheck="false">
+              <span id="ksCount" class="ks-count" aria-live="polite"></span>
+            </div>
+            <div id="ksGroups" class="ks-chips" role="group" aria-label="Item groups"></div>
+            <div id="ksResults" class="ks-results" role="list" aria-label="Items"></div>
+            <button id="ksMore" class="ks-more" type="button" hidden>Show more items</button>
+            <p class="ks-hint">Missing something? <button id="ksAddManual" class="ks-link" type="button">Add an item by name</button> &middot; press <code>/</code> to search, <code>c</code> to copy the commands.</p>
+          </div>
+
+          <aside class="ks-panel ks-kit" aria-label="The kit you are building">
+            <label class="ks-label" for="ksKitName">Kit name</label>
+            <input id="ksKitName" class="ks-kitname" value="starter" maxlength="40" spellcheck="false">
+            <p class="ks-small">Spaces are fine - the command wraps the name in quotes for you.</p>
+            <div id="ksPresets" class="ks-presets" role="group" aria-label="Starting points"></div>
+            <ol id="ksLines" class="ks-lines"></ol>
+            <p id="ksEmpty" class="ks-empty">Nothing in this kit yet. Add items from the list, or load a starting point above.</p>
+            <p id="ksWarn" class="ks-note" role="status" hidden></p>
+            <div class="ks-out">
+              <div class="ks-outhead">
+                <span id="ksLinesCount">0 lines</span>
+                <button id="ksCopy" class="ks-btn primary" type="button">Copy commands</button>
+              </div>
+              <pre id="ksCommands" class="ks-cmds" tabindex="0" aria-label="Generated commands"># Add items on the left and the commands appear here.</pre>
+              <div class="ks-outfoot">
+                <button id="ksCopyInfo" class="ks-btn" type="button">Copy kit info + list</button>
+                <button id="ksDownload" class="ks-btn" type="button">Download .txt</button>
+                <button id="ksExport" class="ks-btn" type="button">Export JSON</button>
+                <label class="ks-btn" for="ksImport" style="display:inline-block">Import JSON</label>
+                <input id="ksImport" type="file" accept="application/json,.json" style="display:none">
+                <button id="ksClear" class="ks-btn" type="button">Clear</button>
+              </div>
+              <p id="ksNote" class="ks-note" role="status" aria-live="polite"></p>
+              <p id="ksProvenance" class="ks-small"></p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="ks-notes" style="padding-top:0">
         <div class="wrap">
           <div class="panel-box">
-            <h2>What it will do</h2>
-            <p class="note" style="margin-top:10px">This one will never need an account: open it, build a kit, install it.</p>
-            <ul class="ks-list" style="margin-top:12px">
-              <li>Drag-and-drop Wear, Main and Belt inventory slots</li>
-              <li>400+ Rust items with in-game icons</li>
-              <li>18 pre-made loadouts - click to install</li>
-              <li>Export as RCON commands or Base64 install code</li>
-              <li>Save and manage your kits (that part will need the owner sign-in)</li>
+            <h2>How these commands work</h2>
+            <p class="note" style="margin-top:10px">The syntax comes straight from the official Rust Console Edition community-server documentation, in the Kit Management guide:</p>
+            <ul>
+              <li><code>kit add "Kit name" "item" amount condition Container</code> - run it once per item. The first time you use a kit name, the kit is created.</li>
+              <li><code>condition</code> is <code>0-1</code>, and it only matters for items that wear out. <code>1</code> is brand new.</li>
+              <li><code>Container</code> is <code>Main</code>, <code>Belt</code> or <code>Wear</code>. The hotbar only holds six items, so the tool warns you if you put more than six on the belt.</li>
+              <li>The amount is capped by your server's stack rules, so a bigger number is trimmed rather than rejected.</li>
+              <li>Servers allow up to <code>128</code> kits. <code>kit list</code> shows what exists, <code>kit info "Kit name"</code> describes one, and <code>kit remove "Kit name" "ID"</code> removes a single item.</li>
+              <li><a href="https://rust-console-edition.gitbook.io/community-servers/feature-guides/kit-management" target="_blank" rel="noopener">Read the official guide</a> before you run these on a live server.</li>
             </ul>
-            <div class="u-mt-18"><a href="https://discord.gg/NFRkb9NYNd" class="btn ghost" target="_blank" rel="noopener">Ask for it in the support server</a></div>
           </div>
+
           <div class="panel-box">
-            <h2>Why it is not here yet</h2>
-            <p class="note" style="margin-top:10px">The page needs the item art and the loadout data shipped alongside it, and both are still being prepared. Nothing about this tool needs a Discord account, so nothing here will ask you for one.</p>
-            <div class="u-mt-18"><a href="/dashboard/colortext.html" class="btn ghost">See Colour Studio</a></div>
+            <h2>Where the item list comes from</h2>
+            <p class="note" style="margin-top:10px">The picker reads <code>/data/items.json</code>. Entries marked <b>ours</b> in the kit list were added by us from item names that are widely known in the game and carry no recorded stack size - check those names on your server before you ship a kit. The rest came from a public RUST item database, which is the reference the RCE server docs point at for item names, and they include the short name and stack size.</p>
+            <p class="note" style="margin-top:10px">Rust Console Edition runs an older build than the PC game, so a name from that database may not exist on your server yet, and we could only read part of that database. If a name is rejected, try the other form (the short name or the display name), or add your own with the button above.</p>
+          </div>
+
+          <div class="panel-box">
+            <h2>Nothing here is sent anywhere</h2>
+            <p class="note" style="margin-top:10px">The kit you build is kept in your browser's own storage so it survives a reload, and it is never uploaded. No account, no tracking, and the page keeps working when your connection drops.</p>
+            <div class="u-mt-18"><a href="/dashboard/colortext.html" class="btn ghost">Try Colour Studio</a> <a href="https://discord.gg/NFRkb9NYNd" class="btn ghost" target="_blank" rel="noopener">Ask a question</a></div>
           </div>
         </div>
       </section>
@@ -123,5 +175,6 @@
       </div>
     </footer>
     <script src="/page.js" defer></script>
+    <script src="/kitstudio.js" defer></script>
   </body>
 </html>

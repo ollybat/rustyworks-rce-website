@@ -251,4 +251,13 @@
       }
     }
   };
+
+  /* Installable, and usable when the signal drops: the worker saves the pictures, the
+     fonts and the offline page. It never touches pages, sign-ins or API answers, so a
+     visitor always sees the live site. */
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').catch(function () { /* the site works without it */ });
+    });
+  }
 })();

@@ -1,0 +1,76 @@
+/* Kit Studio - styles for the kit builder only. Kept out of style.css so that the
+   main stylesheet stays exactly as it was, and loaded after it so these win. */
+
+.ks-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 1000px) { .ks-grid { grid-template-columns: 1fr; } }
+
+.ks-panel { border: 1px solid rgba(255,255,255,0.09); border-radius: 16px; padding: 18px; background: rgba(255,255,255,0.02); }
+html[data-theme="light"] .ks-panel { border-color: rgba(0,0,0,0.10); background: rgba(0,0,0,0.02); }
+
+.ks-label { display: block; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.65; margin-bottom: 8px; }
+.ks-searchrow { display: flex; gap: 10px; align-items: center; }
+.ks-searchrow input { flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.35); color: inherit; font: inherit; }
+html[data-theme="light"] .ks-searchrow input { background: rgba(255,255,255,0.75); border-color: rgba(0,0,0,0.15); }
+.ks-searchrow input:focus { outline: 2px solid #ff8a4c; outline-offset: 1px; }
+.ks-count { font-size: 12px; opacity: 0.7; white-space: nowrap; }
+
+.ks-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.ks-chip { border: 1px solid rgba(255,255,255,0.14); background: transparent; color: inherit; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.ks-chip:hover { border-color: #ff8a4c; }
+.ks-chip[aria-pressed="true"] { border-color: #ff8a4c; background: rgba(255,138,76,0.14); }
+html[data-theme="light"] .ks-chip { border-color: rgba(0,0,0,0.16); }
+
+.ks-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; max-height: 62vh; overflow: auto; padding-right: 4px; }
+.ks-card { display: flex; gap: 10px; align-items: center; text-align: left; padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.09); background: rgba(255,255,255,0.02); color: inherit; font: inherit; cursor: pointer; }
+.ks-card:hover { border-color: #ff8a4c; background: rgba(255,138,76,0.08); }
+.ks-card[disabled] { opacity: 0.45; cursor: default; }
+html[data-theme="light"] .ks-card { border-color: rgba(0,0,0,0.10); background: rgba(255,255,255,0.6); }
+.ks-ico { flex: 0 0 auto; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: rgba(255,138,76,0.12); color: #ff8a4c; }
+.ks-ico svg { width: 20px; height: 20px; display: block; }
+.ks-card b { display: block; font-size: 14px; line-height: 1.25; }
+.ks-card small { display: block; font-size: 11.5px; opacity: 0.6; word-break: break-all; }
+
+.ks-more { margin-top: 12px; width: 100%; padding: 10px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.2); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.ks-link { background: none; border: 0; color: #ff8a4c; font: inherit; cursor: pointer; text-decoration: underline; padding: 0; }
+.ks-hint { margin-top: 10px; font-size: 13px; opacity: 0.75; }
+
+.ks-kit { position: sticky; top: 16px; }
+@media (max-width: 1000px) { .ks-kit { position: static; } }
+.ks-kit input, .ks-kit select { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.35); color: inherit; font: inherit; }
+html[data-theme="light"] .ks-kit input, html[data-theme="light"] .ks-kit select { background: rgba(255,255,255,0.8); border-color: rgba(0,0,0,0.15); }
+.ks-kitname { width: 100%; margin-bottom: 4px; }
+.ks-small { font-size: 12px; opacity: 0.65; margin: 6px 0 0; }
+.ks-presets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; font-size: 13px; }
+.ks-preset { border: 1px solid rgba(255,255,255,0.14); background: transparent; color: inherit; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+.ks-preset:hover { border-color: #ff8a4c; }
+html[data-theme="light"] .ks-preset { border-color: rgba(0,0,0,0.16); }
+
+.ks-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 34vh; overflow: auto; }
+.ks-line { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px 10px; border-radius: 11px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); }
+html[data-theme="light"] .ks-line { border-color: rgba(0,0,0,0.09); background: rgba(255,255,255,0.6); }
+.ks-line b { font-size: 13.5px; font-weight: 600; }
+.ks-line .ks-sub { font-size: 11.5px; opacity: 0.6; word-break: break-all; }
+.ks-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.ks-row input { width: 62px; text-align: center; padding: 6px 8px; }
+.ks-row select { padding: 6px 8px; font-size: 12.5px; }
+.ks-row .ks-x { border: 1px solid rgba(255,255,255,0.16); background: transparent; color: inherit; border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font: inherit; }
+.ks-row .ks-x:hover { border-color: #ff5c5c; color: #ff8a8a; }
+.ks-flag { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid rgba(255,200,80,0.45); color: #ffcf7a; }
+.ks-flag.stack { border-color: rgba(255,92,92,0.5); color: #ff9a9a; }
+.ks-empty { font-size: 13px; opacity: 0.7; padding: 12px 0; }
+
+.ks-out { margin-top: 16px; }
+.ks-outhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+.ks-cmds { margin: 0; padding: 12px; border-radius: 12px; background: #060402; border: 1px solid rgba(255,138,76,0.25); color: #ffd9c0; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow: auto; max-height: 260px; }
+html[data-theme="light"] .ks-cmds { background: #14100c; }
+.ks-outfoot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ks-btn { border: 1px solid rgba(255,255,255,0.16); background: transparent; color: inherit; border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.ks-btn:hover { border-color: #ff8a4c; }
+.ks-btn.primary { background: #ff8a4c; border-color: #ff8a4c; color: #1a0d04; font-weight: 600; }
+.ks-btn.primary:hover { filter: brightness(1.06); }
+.ks-note { font-size: 12.5px; min-height: 18px; margin: 10px 0 0; color: #ffcf7a; }
+
+.ks-notes ul { margin: 10px 0 0; padding-left: 18px; }
+.ks-notes li { margin-bottom: 7px; font-size: 14px; }
+.ks-notes code { font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: rgba(255,255,255,0.07); }
+html[data-theme="light"] .ks-notes code { background: rgba(0,0,0,0.06); }
