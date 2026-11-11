@@ -3,14 +3,34 @@
   <head>
     <meta charset="UTF-8">
     <!-- Marks the page as scripted: reveal-on-scroll only hides content when this is set. -->
-    <script>document.documentElement.className += " js";</script>
+    <script>
+      /* Marks the page as scripted, and applies the saved light/dark choice
+         before the first paint, so there is never a flash of the wrong palette. */
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("rw-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Status — RustyWorks RCE</title>
     <meta name="description" content="Live status for the RustyWorks RCE bot: uptime, linked players, connected servers and guilds, straight from the bot's API.">
+    <link rel="canonical" href="https://rustyworks-rce-j7ao5f.camelai.app/status.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="RustyWorks RCE">
+    <meta property="og:title" content="Status - RustyWorks RCE">
+    <meta property="og:description" content="Live status for the RustyWorks RCE bot: uptime, linked players, connected servers and guilds, read straight from the bot API.">
+    <meta property="og:url" content="https://rustyworks-rce-j7ao5f.camelai.app/status.html">
+    <meta property="og:image" content="https://rustyworks-rce-j7ao5f.camelai.app/media/rustyworks-icon.svg">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Status - RustyWorks RCE">
+    <meta name="twitter:description" content="Live status for the RustyWorks RCE bot: uptime, linked players, connected servers and guilds, read straight from the bot API.">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"RustyWorks RCE","applicationCategory":"GameApplication","operatingSystem":"Discord","description":"Live status for the RustyWorks RCE bot: uptime, linked players, connected servers and guilds, read straight from the bot API.","url":"https://rustyworks-rce-j7ao5f.camelai.app/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}<\/script>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- One less origin to talk to: the face list is served from here, the woff2 files still stream from fonts.gstatic.com. -->
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
     <link rel="stylesheet" href="sections.css">
     <link rel="icon" type="image/svg+xml" href="/media/rustyworks-icon.svg">
     <link rel="shortcut icon" href="/media/rustyworks-icon.svg">
@@ -27,12 +47,13 @@
   <body>
     <!-- Seasonal overlay layer: theme.js fills this with the pieces the stylesheet animates. -->
     <div id="rw-fx" aria-hidden="true"></div>
+    <a class="skip-link" href="#main">Skip to content</a>
     <header>
       <div class="wrap">
         <nav>
-          <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+          <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks" width="34" height="34">RustyWorks<span class="accent">RCE</span></a>
           <div class="nav-links" id="navLinks">
-            <a href="status.html">Status</a>
+            <a href="status.html" aria-current="page">Status</a>
             <a
               href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
               target="_blank"
@@ -48,9 +69,11 @@
       </div>
     </header>
 
+
+    <main id="main" tabindex="-1">
     <section class="status-hero">
       <div class="wrap">
-        <div class="status-dot">
+        <div class="status-dot" role="status" aria-live="polite">
           <span class="dot unknown" id="statusDot"></span>
           <span id="statusHeadline">Checking the bot…</span>
         </div>
@@ -126,17 +149,18 @@
           </p>
           <div class="u-mt-18">
             <button type="button" class="btn ghost" id="statusRefresh">↻ Refresh now</button>
-            <span class="count-pill" id="statusUpdated">Not checked yet</span>
+            <span class="count-pill" id="statusUpdated" role="status" aria-live="polite">Not checked yet</span>
           </div>
         </div>
       </div>
     </section>
+    </main>
 
     <footer>
       <div class="wrap">
         <div class="foot-grid">
           <div class="foot-col foot-brand">
-            <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks">RustyWorks<span class="accent">RCE</span></a>
+            <a href="index.html" class="logo"><img src="/media/rustyworks-icon.svg" alt="RustyWorks" width="34" height="34">RustyWorks<span class="accent">RCE</span></a>
             <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
           </div>
           <div class="foot-col">
@@ -162,3 +186,4 @@
     </footer>
   </body>
 </html>
+
