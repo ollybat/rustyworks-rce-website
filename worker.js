@@ -132,13 +132,14 @@ async function signSession(session, secret) {
 }
 
 async function readSession(request, env) {
-  if (!env.SESSION_SECRET) return null;
+  const sessionSecret = (await resolveSecrets(env)).sessionSecret;
+  if (!sessionSecret) return null;
   const raw = cookies(request)[SESSION_COOKIE];
   if (!raw) return null;
   const dot = raw.lastIndexOf(".");
   if (dot < 1) return null;
   const payload = raw.slice(0, dot);
-  const expected = base64url(await crypto.subtle.sign("HMAC", await hmacKey(env.SESSION_SECRET), new TextEncoder().encode(payload)));
+  const expected = base64url(await crypto.subtle.sign("HMAC", await hmacKey(sessionSecret), new TextEncoder().encode(payload)));
   if (!sameString(expected, raw.slice(dot + 1))) return null;
   try {
     const session = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
@@ -541,9 +542,6 @@ function clientId(env) {
   return env.DISCORD_CLIENT_ID || DEFAULT_CLIENT_ID;
 }
 
-function authConfigured(env) {
-  return Boolean(clientId(env) && env.DISCORD_CLIENT_SECRET && env.DISCORD_GUILD_ID && env.SESSION_SECRET);
-}
 
 /* Only same-site paths are ever accepted as a post-sign-in destination, so a
    crafted ?next= cannot bounce somebody off to another host. */
@@ -553,16 +551,17 @@ function safeNext(value) {
   return path;
 }
 
-async function needsSetup(env, request) {
+async function needsSetup(env, request, notice) {
+  const sec = await resolveSecrets(env);
   /* The owner console while the last two values are still missing. It shows exactly what is
      configured and what is not, plus the public live numbers, so the page is useful before
      sign-in exists - and it exposes nothing private: no session is read or issued here. */
   const origin = new URL(request.url).origin;
   const checklist = [
     ["DISCORD_CLIENT_ID", Boolean(clientId(env))],
-    ["DISCORD_CLIENT_SECRET", Boolean(env.DISCORD_CLIENT_SECRET)],
+    ["DISCORD_CLIENT_SECRET", Boolean(sec.clientSecret)],
     ["DISCORD_GUILD_ID", Boolean(env.DISCORD_GUILD_ID)],
-    ["SESSION_SECRET", Boolean(env.SESSION_SECRET)],
+    ["SESSION_SECRET", Boolean(sec.sessionSecret)],
     ["Status storage", Boolean(env.STATUS_LOG)]
   ];
   let live = null;
@@ -594,6 +593,7 @@ async function needsSetup(env, request) {
     + '<link rel="stylesheet" href="/style.css">'
     + '<link rel="stylesheet" href="/status.css">'
     + '<link rel="stylesheet" href="/ui-extras.css"></head>'
+    + '<style>.setup-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0 10px}.setup-form label{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#9db0bf;width:100%}.setup-form input[type=password]{flex:1 1 280px;min-width:220px;padding:11px 13px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.35);color:inherit;font-family:inherit}.setup-form button{padding:11px 16px;border-radius:10px;border:0;cursor:pointer;font-family:inherit;font-weight:600;background:linear-gradient(96deg,#58c8f5,#7bdcff);color:#04131c}.setup-notice{border:1px solid rgba(232,163,61,.5);background:rgba(232,163,61,.12);color:#f0c176;border-radius:10px;padding:10px 12px;margin:0 0 12px}</style>'
     + '<body><header><div class="wrap"><nav>'
     + '<a href="/" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>'
     + '<div class="nav-links"><a href="/">Website</a><a href="/status">Status</a>'
@@ -607,9 +607,17 @@ async function needsSetup(env, request) {
     + '<ul class="setup-list">' + checklist.map(row).join('') + '</ul>'
     + '<p style="margin-top:14px">Add this redirect URI to the Discord application (OAuth2 section), exactly as written:</p>'
     + '<p><code class="setup-uri">' + escapeHtml(origin + '/auth/callback') + '</code></p>'
+    + (notice ? '<div class="setup-notice">' + escapeHtml(notice) + '</div>' : '')
+    + '<form method="post" action="/api/setup" class="setup-form">'
+    + '<label for="clientSecret">Discord client secret</label>'
+    + '<input id="clientSecret" name="clientSecret" type="password" autocomplete="off" spellcheck="false" placeholder="paste it from OAuth2 - Client Secret">'
+    + '<input type="hidden" name="next" value="/dashboard">'
+    + '<button type="submit">Verify and switch sign-in on</button>'
+    + '</form>'
+    + '<p class="muted">No session secret to invent - one is generated here. The client secret is checked against Discord before it is saved, and it is never shown again.</p>'
     + '<ol class="setup-steps">'
     + '<li>Open the Discord application <code>1570023832717361213</code> and add the redirect URI above.</li>'
-    + '<li>Add <code>DISCORD_CLIENT_SECRET</code> (from that same OAuth2 page) and <code>SESSION_SECRET</code> (any long random string) as values on this app.</li>'
+    + '<li>Paste the client secret from that same OAuth2 page into the box below - or set <code>DISCORD_CLIENT_SECRET</code> and <code>SESSION_SECRET</code> as variables on this app instead, which always takes priority.</li>'
     + '<li>Reload this page: the checklist above turns green and the sign-in button appears.</li>'
     + '</ol>'
     + '<p class="muted">Server id watched by this dashboard: <code>' + escapeHtml(env.DISCORD_GUILD_ID || "not set")
@@ -688,7 +696,7 @@ async function guildRoleNames(env) {
 }
 
 async function authLogin(request, env) {
-  if (!authConfigured(env)) return needsSetup(env, request);
+  if (!(await authReady(env))) return needsSetup(env, request);
   const url = new URL(request.url);
   const next = safeNext(url.searchParams.get("next"));
 
@@ -712,7 +720,7 @@ async function authLogin(request, env) {
 }
 
 async function authCallback(request, env) {
-  if (!authConfigured(env)) return needsSetup(env, request);
+  if (!(await authReady(env))) return needsSetup(env, request);
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -728,7 +736,7 @@ async function authCallback(request, env) {
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: clientId(env),
-      client_secret: env.DISCORD_CLIENT_SECRET,
+      client_secret: (await resolveSecrets(env)).clientSecret,
       grant_type: "authorization_code",
       code,
       redirect_uri: url.origin + "/auth/callback",
@@ -790,7 +798,7 @@ async function authCallback(request, env) {
   await appendLog(env, { kind: "sign_in", by: { id: user.id, name: user.global_name || user.username }, detail: "level " + level + " on " + (session.guildName || "the server") });
 
   const sessionHeaders = new Headers();
-  sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, await signSession(session, env.SESSION_SECRET), SESSION_DAYS * 86400));
+  sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, await signSession(session, (await resolveSecrets(env)).sessionSecret), SESSION_DAYS * 86400));
   sessionHeaders.append("set-cookie", cookieHeader(NEXT_COOKIE, "", 0));
   return redirect(safeNext(cookies(request)[NEXT_COOKIE]), sessionHeaders);
 }
@@ -803,7 +811,7 @@ function authLogout(request) {
 /* Read by nav-auth.js (the header capsule) and login.html. Never carries
    anything the signed-in person does not already own. */
 async function authMe(request, env) {
-  if (!authConfigured(env)) return json({ authenticated: false, configured: false }, 200);
+  if (!(await authReady(env))) return json({ authenticated: false, configured: false }, 200);
   const session = await readSession(request, env);
   if (!session) return json({ authenticated: false, configured: true }, 200);
   return json({
@@ -952,12 +960,107 @@ async function probeUrl(url) {
     return { ok: false, reason: String((error && error.message) || error).slice(0, 120), at: Date.now() };
   }
 }
+/* ------------------------- sign-in secrets, resolved -------------------------
+   The two secrets come from the app's own variables when they are set. If they are not,
+   the owner can paste the Discord client secret once on this site's setup page: it is
+   verified against Discord before being stored, and the session secret is generated here
+   rather than asked for. Variables always win, so setting them later simply takes over. */
+const SECRETS_KEY = "spinback-rce/settings/auth.json";
+let secretsCache = { at: 0, value: null };
+
+async function resolveSecrets(env) {
+  const now = Date.now();
+  if (secretsCache.value && now - secretsCache.at < 60000) return secretsCache.value;
+  let stored = null;
+  if (!env.DISCORD_CLIENT_SECRET || !env.SESSION_SECRET) stored = await readJson(env, SECRETS_KEY);
+  const value = {
+    clientId: env.DISCORD_CLIENT_ID || (stored && stored.clientId) || DEFAULT_CLIENT_ID,
+    clientSecret: env.DISCORD_CLIENT_SECRET || (stored && stored.clientSecret) || null,
+    sessionSecret: env.SESSION_SECRET || (stored && stored.sessionSecret) || null,
+    source: env.DISCORD_CLIENT_SECRET && env.SESSION_SECRET ? "the app's variables" : (stored ? "saved on this site" : "nowhere yet"),
+  };
+  secretsCache = { at: now, value: value };
+  return value;
+}
+
+function forgetSecrets() { secretsCache = { at: 0, value: null }; }
+
+async function authReady(env) {
+  const sec = await resolveSecrets(env);
+  return Boolean(sec.clientId && sec.clientSecret && env.DISCORD_GUILD_ID && sec.sessionSecret);
+}
+
+/* Ask Discord whether the pasted secret belongs to this application. A wrong secret comes
+   back as invalid_client; a right one fails later with invalid_grant, because the code we
+   send is deliberately not real. Nothing is stored until Discord has confirmed it. */
+async function verifyClientSecret(env, clientSecret, request) {
+  const origin = new URL(request.url).origin;
+  try {
+    const body = new URLSearchParams();
+    body.set("grant_type", "authorization_code");
+    body.set("code", "spinback-setup-check");
+    body.set("redirect_uri", origin + "/auth/callback");
+    const response = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: "Basic " + base64url(new TextEncoder().encode(clientId(env) + ":" + clientSecret)),
+      },
+      body: body.toString(),
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (error) { data = {}; }
+    if (data.error === "invalid_client" || response.status === 401) {
+      return { ok: false, message: "Discord rejected that client secret (invalid_client). Copy it again from OAuth2 - Client Secret." };
+    }
+    return { ok: true, detail: "Discord answered " + response.status + (data.error ? " / " + data.error : "") };
+  } catch (error) {
+    return { ok: false, message: "Discord could not be reached from the worker: " + String((error && error.message) || error).slice(0, 120) };
+  }
+}
+
+async function authSetup(request, env) {
+  if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  if (env.DISCORD_CLIENT_SECRET && env.SESSION_SECRET) {
+    return json({ error: "already_configured", note: "this app's own variables already provide the sign-in secrets" }, 409);
+  }
+  const type = request.headers.get("content-type") || "";
+  let clientSecret = "";
+  let next = "/dashboard";
+  if (type.indexOf("application/json") !== -1) {
+    const body = await request.json().catch(function () { return {}; });
+    clientSecret = tidy(body.clientSecret, 200);
+    next = safeNext(tidy(body.next, 200) || next);
+  } else {
+    const form = await request.formData().catch(function () { return null; });
+    if (form) {
+      clientSecret = tidy(form.get("clientSecret"), 200);
+      next = safeNext(tidy(form.get("next"), 200) || next);
+    }
+  }
+  const wantsJson = type.indexOf("application/json") !== -1;
+  const fail = async function (message) {
+    if (wantsJson) return json({ error: "not_saved", message: message }, 400);
+    return needsSetup(env, request, message);
+  };
+  if (!clientSecret) return fail("Paste the client secret first.");
+  const verdict = await verifyClientSecret(env, clientSecret, request);
+  if (!verdict.ok) return fail(verdict.message);
+  const sessionSecret = base64url(crypto.getRandomValues(new Uint8Array(48)));
+  const saved = await writeJson(env, SECRETS_KEY, { clientSecret: clientSecret, sessionSecret: sessionSecret, at: Date.now(), verified: verdict.detail });
+  if (!saved) return fail("The value could not be stored. Try again.");
+  forgetSecrets();
+  await appendLog(env, { kind: "auth_setup", by: { id: "setup-page", name: "sign-in setup page" }, detail: "Discord client secret verified and stored; session secret generated" });
+  if (wantsJson) return json({ ok: true, verified: verdict.detail, sessionSecretGenerated: true }, 200);
+  return redirect("/auth/login?next=" + encodeURIComponent(next));
+}
 /* ------------------------------- owner API ----------------------------------
    Read by the console pages. Everything below needs a signed-in staff session;
    anything that changes stored data needs the owner, and every change writes a log
    entry naming who made it. */
 async function ownerGuard(request, env, needOwner) {
-  if (!authConfigured(env)) return { error: json({ error: "not_configured" }, 503) };
+  if (!(await authReady(env))) return { error: json({ error: "not_configured" }, 503) };
   const session = await readSession(request, env);
   if (!session) return { error: json({ error: "unauthorized" }, 401) };
   const level = session.level || "none";
@@ -1203,7 +1306,7 @@ function avatarUrl(session) {
 }
 
 async function dashboard(request, env) {
-  if (!authConfigured(env)) return needsSetup(env, request);
+  if (!(await authReady(env))) return needsSetup(env, request);
 
   const session = await readSession(request, env);
   if (!session) return redirect("/auth/login");
@@ -1322,18 +1425,20 @@ export default {
     if (url.pathname === "/api/config-check") {
       return json({
         app: "spinback-rce",
-        dashboardOpen: authConfigured(env),
+        dashboardOpen: (await authReady(env)),
         staffRoleIdsSet: Boolean(env.STAFF_ROLE_IDS),
         staffRoleNamesSet: Boolean(env.STAFF_ROLE_NAMES),
         staffUsersSet: Boolean(env.STAFF_USERS || env.STAFF_USER_IDS),
         clientId: clientId(env),
         guildIdSet: Boolean(env.DISCORD_GUILD_ID),
-        clientSecretSet: Boolean(env.DISCORD_CLIENT_SECRET),
-        sessionSecretSet: Boolean(env.SESSION_SECRET),
+        clientSecretSet: Boolean((await resolveSecrets(env)).clientSecret),
+        sessionSecretSet: Boolean((await resolveSecrets(env)).sessionSecret),
+        secretsSource: (await resolveSecrets(env)).source,
         statusLogBound: Boolean(env.STATUS_LOG)
       });
     }
     if (url.pathname === "/api/history") return statusHistory(request, env);
+    if (url.pathname === "/api/setup") return authSetup(request, env);
     if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
     /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
     if (url.pathname === "/api/roles") {
@@ -1349,7 +1454,7 @@ export default {
       if (PUBLIC_DASHBOARD_PAGES.has(url.pathname)) {
         return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
       }
-      if (!authConfigured(env)) return needsSetup(env, request);
+      if (!(await authReady(env))) return needsSetup(env, request);
       const treeSession = await readSession(request, env);
       if (!treeSession) {
         return redirect("/auth/login?next=" + encodeURIComponent(url.pathname + url.search));
