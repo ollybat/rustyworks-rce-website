@@ -22,11 +22,20 @@
     node.className = 'sbc-msg' + (good === true ? ' good' : good === false ? ' bad' : '');
   }
 
+  /* The session is kept here rather than in a cookie: this host does not pass Set-Cookie
+     through to the browser, so the token is read out of storage and sent as a header with
+     every request the console makes. */
+  function sessionToken() {
+    try { return localStorage.getItem('spinback-session') || ''; } catch (error) { return ''; }
+  }
+
   function api(path, options) {
     var init = options || {};
     init.credentials = 'same-origin';
     init.headers = init.headers || {};
     init.headers.accept = 'application/json';
+    var token = sessionToken();
+    if (token) init.headers['x-spinback-session'] = token;
     if (init.body) init.headers['content-type'] = 'application/json';
     return fetch(path, init).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (data) {
@@ -334,6 +343,21 @@
   }
 
   function boot() {
+    /* Coming back from sign-in: the session is in the address once, is kept here, and is
+       removed from the address so it does not sit in history or a link someone shares. */
+    try {
+      var query = new URLSearchParams(location.search);
+      var arrived = query.get('t');
+      if (arrived) {
+        localStorage.setItem('spinback-session', arrived);
+        query.delete('t');
+        history.replaceState(null, '', location.pathname + (query.toString() ? '?' + query.toString() : ''));
+      }
+      var out = document.querySelector('a[href="/auth/logout"]');
+      if (out) out.addEventListener('click', function () {
+        try { localStorage.removeItem('spinback-session'); } catch (error) { /* nothing to clear */ }
+      });
+    } catch (error) { /* no storage available: the panels report what they can */ }
     var add = $('roles-add');
     if (add) add.addEventListener('click', function () { addRule($('r-kind').value, $('r-value').value.trim(), add); });
     var save = $('server-save');
