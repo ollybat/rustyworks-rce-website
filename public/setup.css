@@ -1,19 +1,37 @@
 /* Setup assistant - shows whether Spinback is in a server before anything can be set up.
    Loaded after style.css and site-plus.css, so it only ever adds. */
-.sb-setup { display: grid; gap: 14px; margin-top: 6px; }
-.sb-setup-loading { color: var(--text-dim); font-size: 14px; }
-.sb-setup-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 16px 18px; display: grid; gap: 10px; }
-.sb-setup-card h3 { margin: 0; font-size: 17px; }
-.sb-setup-card p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.55; }
-.sb-setup-who { color: var(--text-dim); font-size: 13px; }
-.sb-server { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 14px 16px; }
-.sb-server-main { display: grid; gap: 4px; min-width: 220px; }
-.sb-server-name { font-weight: 600; }
+.sb-setup { display: grid; gap: 14px; }
+.sb-setup-loading { color: var(--text-dim); font-size: 14px; margin: 0; }
+.sb-summary { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.sb-summary-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,0.02); }
+.sb-summary-num { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.sb-summary-label { color: var(--text-dim); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.sb-search { position: relative; }
+.sb-search input { width: 100%; }
+.sb-server { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 14px 16px; transition: border-color .18s, transform .18s; }
+.sb-server:hover { border-color: rgba(207,106,46,.5); transform: translateY(-1px); }
+.sb-server-left { display: flex; align-items: center; gap: 14px; min-width: 200px; flex: 1 1 220px; }
+.sb-icon { width: 46px; height: 46px; border-radius: 13px; border: 1px solid var(--line); object-fit: cover; background: var(--bg); flex: none; }
+.sb-server-main { display: grid; gap: 4px; min-width: 0; }
+.sb-server-name { font-weight: 600; font-size: 16px; }
+.sb-server-meta { color: var(--text-dim); font-size: 13px; }
 .sb-presence { font-size: 13px; display: inline-flex; align-items: center; gap: 7px; }
-.sb-presence::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--steel); }
+.sb-presence::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--steel); flex: none; }
 .sb-presence-yes { color: var(--green); } .sb-presence-yes::before { background: var(--green); }
 .sb-presence-no { color: var(--ember); } .sb-presence-no::before { background: var(--ember); }
 .sb-server-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.sb-setup-msg { font-size: 13px; color: var(--text-dim); min-height: 18px; }
+.sb-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 18px; display: grid; gap: 12px; }
+.sb-card h3 { margin: 0; font-size: 18px; }
+.sb-card p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.6; }
+.sb-steps { display: grid; gap: 10px; counter-reset: sb-step; }
+.sb-step { display: flex; gap: 12px; align-items: flex-start; font-size: 14px; color: var(--text-dim); line-height: 1.55; }
+.sb-step-num { counter-increment: sb-step; flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; color: var(--text); }
+.sb-step-num::before { content: counter(sb-step); }
+.sb-setup-msg { font-size: 14px; color: var(--text-dim); min-height: 18px; margin: 0; }
 .sb-setup-msg.good { color: var(--green); } .sb-setup-msg.bad { color: var(--ember); }
-@media (max-width: 560px) { .sb-server { flex-direction: column; align-items: stretch; } }
+.sb-skel { position: relative; overflow: hidden; height: 46px; border-radius: 12px; background: rgba(255,255,255,0.05); }
+.sb-skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0) 100%); animation: sb-shimmer 1.3s infinite; }
+@keyframes sb-shimmer { to { transform: translateX(100%); } }
+.sb-fade { animation: sb-fade .3s ease-out both; }
+@keyframes sb-fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .sb-skel::after { animation: none; } .sb-fade { animation: none; } .sb-server:hover { transform: none; } }
