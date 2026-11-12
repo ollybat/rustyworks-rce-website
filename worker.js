@@ -600,7 +600,7 @@ async function needsSetup(env, request) {
     + '<a href="/dashboard/kitbuilder">Kit Studio</a></div></nav></div></header>'
     + '<section class="page-hero"><div class="wrap">'
     + '<h1>Owner console</h1>'
-    + '<p>One step from live. Sign-in opens here for the owner of one Discord server and nobody else; '
+    + '<p>One step from live. Sign-in opens for the owner of one Discord server and for its staff; '
     + 'until the values below are set, this page stays a setup checklist.</p></div></section>'
     + '<section style="padding-top:0"><div class="wrap">'
     + '<div class="panel-box"><h2 style="margin-bottom:8px">What is left</h2>'
@@ -632,6 +632,64 @@ function redirect(location, headers = {}) {
   return new Response(null, { status: 302, headers: { location, "cache-control": "no-store", ...headers } });
 }
 
+/* --------------------------------- who is allowed in ---------------------------------
+   Signing in only proves who somebody is. What they may do here is decided from three
+   things the Discord API gives us for the one guild this bot serves: the guild owner
+   flag, the server permissions on their account, and their role list.
+     STAFF_ROLE_IDS    comma-separated role ids
+     STAFF_ROLE_NAMES  comma-separated role names, matched case-insensitively
+     STAFF_USER_IDS    comma-separated user ids
+     STAFF_USERS       comma-separated usernames or display names
+   The built-in defaults name the role or person this console was asked to admit; set any
+   of those variables to change it without touching this file. */
+const DEFAULT_STAFF_NAMES = ["astronomator"];
+const PERM_ADMINISTRATOR = 0x8n;
+const PERM_MANAGE_GUILD = 0x20n;
+
+function csv(value) {
+  return String(value || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+}
+function hasPermission(permissions, flag) {
+  try { return (BigInt(permissions || "0") & flag) === flag; } catch (error) { return false; }
+}
+function accessLevel(env, person) {
+  if (person.guildOwner === true) return "owner";
+  if (csv(env.STAFF_USER_IDS).indexOf(String(person.userId).toLowerCase()) !== -1) return "owner";
+  if (hasPermission(person.permissions, PERM_ADMINISTRATOR) || hasPermission(person.permissions, PERM_MANAGE_GUILD)) return "staff";
+  const wantedIds = csv(env.STAFF_ROLE_IDS);
+  const heldIds = (person.roleIds || []).map((id) => String(id).toLowerCase());
+  if (wantedIds.length && heldIds.some((id) => wantedIds.indexOf(id) !== -1)) return "staff";
+  const wantedNames = csv(env.STAFF_ROLE_NAMES).concat(DEFAULT_STAFF_NAMES);
+  const heldNames = (person.roleNames || []).map((n) => String(n).toLowerCase());
+  if (heldNames.some((n) => wantedNames.indexOf(n) !== -1)) return "staff";
+  const wantedUsers = csv(env.STAFF_USERS).concat(DEFAULT_STAFF_NAMES);
+  const myNames = [person.username, person.globalName].filter(Boolean).map((n) => String(n).toLowerCase());
+  if (myNames.some((n) => wantedUsers.indexOf(n) !== -1)) return "staff";
+  return "none";
+}
+
+/* Role ids arrive with the member record; role names do not. The bot knows them, so ask it
+   once at sign-in. If it cannot answer, sign-in still works - only name matching of
+   STAFF_ROLE_NAMES is unavailable, and ids still work. */
+async function guildRoleNames(env) {
+  const base = botApiBase(env);
+  if (!base) return {};
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const response = await fetch(base + "/api/guild", { headers: { accept: "application/json" }, signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) return {};
+    const data = await response.json();
+    const roles = (data && data.guild && data.guild.roles) || [];
+    const map = {};
+    roles.forEach((role) => { if (role && role.id) map[String(role.id)] = role.name; });
+    return map;
+  } catch (error) {
+    return {};
+  }
+}
+
 async function authLogin(request, env) {
   if (!authConfigured(env)) return needsSetup(env, request);
   const url = new URL(request.url);
@@ -645,7 +703,9 @@ async function authLogin(request, env) {
   authorize.searchParams.set("client_id", clientId(env));
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("redirect_uri", url.origin + "/auth/callback");
-  authorize.searchParams.set("scope", "identify guilds");
+  /* guilds.members.read lets us read the signed-in person's own roles in this one guild,
+     which is what decides whether they count as staff. */
+  authorize.searchParams.set("scope", "identify guilds guilds.members.read");
   authorize.searchParams.set("state", state);
   authorize.searchParams.set("prompt", "none");
   const headers = new Headers();
@@ -691,19 +751,43 @@ async function authCallback(request, env) {
   const guilds = await guildsResponse.json();
   const guild = Array.isArray(guilds) ? guilds.find((g) => String(g.id) === String(env.DISCORD_GUILD_ID)) : null;
 
-  /* owner === true is only set for guilds the signed-in account owns, which is
-     exactly the rule for this dashboard. */
-  /* Signed in, but not the owner of the one guild this bot serves. The login
-     page explains what that means; no session cookie is handed out. */
-  if (!guild || guild.owner !== true) return redirect("/login.html?denied=1");
+  /* The member record carries the roles this account holds in this one guild. */
+  let roleIds = [];
+  if (env.DISCORD_GUILD_ID) {
+    try {
+      const memberResponse = await fetch(DISCORD_API + "/users/@me/guilds/" + env.DISCORD_GUILD_ID + "/member", { headers });
+      if (memberResponse.ok) {
+        const member = await memberResponse.json();
+        if (member && Array.isArray(member.roles)) roleIds = member.roles.map(String);
+      }
+    } catch (error) { /* no member record: fall back to permissions and the owner flag */ }
+  }
+  const nameFor = await guildRoleNames(env);
+  const roleNames = roleIds.map((id) => nameFor[id]).filter(Boolean);
 
+  const level = accessLevel(env, {
+    guildOwner: Boolean(guild && guild.owner === true),
+    permissions: (guild && guild.permissions) || "0",
+    userId: user.id,
+    username: user.username,
+    globalName: user.global_name || null,
+    roleIds,
+    roleNames,
+  });
+
+  /* A session is handed out to anyone who signs in, so the site can tell them who it
+     thinks they are. The dashboard itself still refuses anything below staff. */
   const session = {
     userId: user.id,
     username: user.username,
     globalName: user.global_name || null,
     avatar: user.avatar || null,
-    guildId: guild.id,
-    guildName: guild.name,
+    guildId: (guild && guild.id) || String(env.DISCORD_GUILD_ID || ""),
+    guildName: (guild && guild.name) || null,
+    level,
+    roleIds,
+    roleNames,
+    permissions: (guild && guild.permissions) || "0",
     exp: Date.now() + SESSION_DAYS * 86400000,
   };
 
@@ -734,8 +818,54 @@ async function authMe(request, env) {
       avatar: avatarUrl(session),
     },
     guild: { id: session.guildId, name: session.guildName },
-    role: "owner",
+    role: session.level || "none",
+    level: session.level || "none",
+    roles: session.roleIds || [],
+    roleNames: session.roleNames || [],
+    staffRoleNames: csv(env.STAFF_ROLE_NAMES).concat(DEFAULT_STAFF_NAMES),
   }, 200);
+}
+
+/* The signed-in person, without the keys they do not need. Used by the staff-only pages
+   and by /api/roles, which is how you check what this site thinks your roles are. */
+function sessionRoles(request, env, session) {
+  return {
+    authenticated: true,
+    level: session.level || "none",
+    roles: session.roleIds || [],
+    roleNames: session.roleNames || [],
+    staffRoleIds: csv(env.STAFF_ROLE_IDS),
+    staffRoleNames: csv(env.STAFF_ROLE_NAMES).concat(DEFAULT_STAFF_NAMES),
+    staffUserIds: csv(env.STAFF_USER_IDS),
+    staffUsers: csv(env.STAFF_USERS).concat(DEFAULT_STAFF_NAMES),
+  };
+}
+
+/* Signed in, but not staff: say exactly who we think they are and what would change it.
+   No hiding behind a bare 403. */
+function notStaff(session, env) {
+  const roleList = (session.roleNames && session.roleNames.length)
+    ? session.roleNames.join(", ")
+    : ((session.roleIds && session.roleIds.length) ? session.roleIds.length + " role(s), none of them recognised as staff" : "no roles in this server");
+  const wanted = csv(env.STAFF_ROLE_NAMES).concat(DEFAULT_STAFF_NAMES).join(", ");
+  return html(
+    '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex">'
+    + '<title>Not staff - Spinback RCE</title><link rel="stylesheet" href="/style.css"></head><body>'
+    + '<header><div class="wrap"><nav><a href="/" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>'
+    + '<div class="nav-links"><a href="/">Website</a><a href="/auth/logout" class="btn ghost sm">Sign out</a></div></nav></div></header>'
+    + '<section class="status-hero"><div class="wrap"><div class="status-dot"><span class="dot unknown"></span><span>Signed in, but without staff access</span></div>'
+    + '<h1>You are signed in as ' + escapeHtml(session.globalName || session.username) + '</h1>'
+    + '<p class="lede">The owner console opens for the server owner and for staff of that server. '
+    + 'This account does not match either.</p>'
+    + '<p>What this site read about you in the server: <b>' + escapeHtml(roleList) + '</b>.</p>'
+    + '<p>It admits the server owner, anyone with Administrator or Manage Server, and anyone holding '
+    + 'a role named <code>' + escapeHtml(wanted) + '</code>. Ask the owner to give you that role, then '
+    + '<a href="/auth/login">sign in again</a>.</p>'
+    + '<p class="muted">Your user id is <code>' + escapeHtml(session.userId) + '</code>. If you should have access, send the owner that id or one of these role ids: '
+    + escapeHtml((session.roleIds || []).join(", ") || "none") + '.</p>'
+    + '</div></section></body></html>', 403
+  );
 }
 
 /* ---------- the owner-only dashboard ---------- */
@@ -751,6 +881,8 @@ async function dashboard(request, env) {
 
   const session = await readSession(request, env);
   if (!session) return redirect("/auth/login");
+  /* Staff and the owner only. A signed-in non-staff account is told why. */
+  if (session.level !== "owner" && session.level !== "staff") return notStaff(session, env);
 
   /* Live numbers straight from the bot API (server-side, so no CORS involved). */
   let stats = null;
@@ -861,6 +993,9 @@ export default {
       return json({
         app: "spinback-rce",
         dashboardOpen: authConfigured(env),
+        staffRoleIdsSet: Boolean(env.STAFF_ROLE_IDS),
+        staffRoleNamesSet: Boolean(env.STAFF_ROLE_NAMES),
+        staffUsersSet: Boolean(env.STAFF_USERS || env.STAFF_USER_IDS),
         clientId: clientId(env),
         guildIdSet: Boolean(env.DISCORD_GUILD_ID),
         clientSecretSet: Boolean(env.DISCORD_CLIENT_SECRET),
@@ -869,6 +1004,12 @@ export default {
       });
     }
     if (url.pathname === "/api/history") return statusHistory(request, env);
+    /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
+    if (url.pathname === "/api/roles") {
+      const roleSession = await readSession(request, env);
+      if (!roleSession) return json({ authenticated: false }, 200);
+      return json(sessionRoles(request, env, roleSession), 200);
+    }
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
     /* The whole /dashboard/ tree is owner-only, not just its front page. */
@@ -878,9 +1019,12 @@ export default {
         return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
       }
       if (!authConfigured(env)) return needsSetup(env, request);
-      if (!(await readSession(request, env))) {
+      const treeSession = await readSession(request, env);
+      if (!treeSession) {
         return redirect("/auth/login?next=" + encodeURIComponent(url.pathname + url.search));
       }
+      /* Staff or the owner, for every page under /dashboard/, not just the front page. */
+      if (treeSession.level !== "owner" && treeSession.level !== "staff") return notStaff(treeSession, env);
       if (url.pathname === "/dashboard") return dashboard(request, env);
       return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
     }
