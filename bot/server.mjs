@@ -38,6 +38,25 @@ function readToken(envVars) {
   return { token: '', source: null };
 }
 const TOKEN_INFO = readToken(process.env);
+
+/* The website asks this service to swap an OAuth code for a token, so the client secret
+   has to live in exactly one place. A code that was not issued to this application fails
+   at Discord before it reaches us, so this route cannot be abused as an open proxy. */
+const CLIENT_ID = cleanEnvValue(process.env.DISCORD_CLIENT_ID) || '1570023832717361213';
+const CLIENT_SECRET = (function () {
+  const names = ['DISCORD_CLIENT_SECRET', 'CLIENT_SECRET', 'DISCORD_OAUTH_SECRET', 'OAUTH_SECRET'];
+  for (const name of names) {
+    const value = cleanEnvValue(process.env[name]);
+    if (value) return value;
+  }
+  for (const key of Object.keys(process.env)) {
+    if (/client.?secret/i.test(key)) {
+      const value = cleanEnvValue(process.env[key]);
+      if (value) return value;
+    }
+  }
+  return '';
+})();
 const TOKEN = TOKEN_INFO.token;
 const tokenShape = !TOKEN ? 'empty'
   : (/^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}$/.test(TOKEN) ? 'discord-token' : 'unexpected-shape');
@@ -201,6 +220,53 @@ createServer(async (req, res) => {
     res.end();
     return;
   }
+  if (req.method === 'POST' && url === '/api/oauth/exchange') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', async () => {
+      const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+      if (!CLIENT_SECRET) {
+        res.writeHead(503, cors);
+        res.end(JSON.stringify({ ok: false, error: 'no_client_secret', message: 'this service has no DISCORD_CLIENT_SECRET set' }));
+        return;
+      }
+      let parsed = {};
+      try { parsed = JSON.parse(body || '{}'); } catch (e) { parsed = {}; }
+      const code = String(parsed.code || '');
+      const redirectUri = String(parsed.redirectUri || '');
+      if (!code || !redirectUri) {
+        res.writeHead(400, cors);
+        res.end(JSON.stringify({ ok: false, error: 'bad_request', message: 'send code and redirectUri' }));
+        return;
+      }
+      try {
+        const form = new URLSearchParams();
+        form.set('grant_type', 'authorization_code');
+        form.set('code', code);
+        form.set('redirect_uri', redirectUri);
+        const upstream = await fetch('https://discord.com/api/oauth2/token', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: 'Basic ' + Buffer.from(CLIENT_ID + ':' + CLIENT_SECRET).toString('base64'),
+          },
+          body: form.toString(),
+        });
+        const data = await upstream.json().catch(() => ({}));
+        if (!upstream.ok || !data.access_token) {
+          res.writeHead(upstream.status || 502, cors);
+          res.end(JSON.stringify({ ok: false, error: data.error || 'exchange_failed', status: upstream.status, description: data.error_description || null }));
+          return;
+        }
+        res.writeHead(200, cors);
+        res.end(JSON.stringify({ ok: true, access_token: data.access_token, token_type: data.token_type, expires_in: data.expires_in, scope: data.scope }));
+      } catch (e) {
+        res.writeHead(502, cors);
+        res.end(JSON.stringify({ ok: false, error: 'unreachable', message: String((e && e.message) || e).slice(0, 140) }));
+      }
+    });
+    return;
+  }
   if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
@@ -218,6 +284,8 @@ createServer(async (req, res) => {
       host: HOST,
       tokenPresent: !!TOKEN,
       tokenSource: TOKEN_INFO.source,
+      oauthExchange: !!CLIENT_SECRET,
+      clientIdPresent: !!CLIENT_ID,
       tokenShape: tokenShape,
       tokenLength: TOKEN.length,
       loginAttempts: loginAttempts,
