@@ -746,12 +746,21 @@ async function authCallback(request, env) {
   const expectedState = cookies(request).spinback_oauth_state;
 
   if (url.searchParams.get("error")) return html("<p>Discord refused the sign-in. <a href=\"/dashboard\">Try again</a>.</p>", 400);
-  /* Either proof is enough: the signature always travels in the URL, the cookie only
-     when the browser that started the sign-in is the one finishing it. */
+  /* The nonce guards against login CSRF, and the usual way of checking it - a cookie that
+     has to survive a trip to discord.com and back - breaks for real people: a phone that
+     signs in through Discord's QR code, a second tab, or any browser that blocks cross-site
+     cookies. When that happened the site refused its own sign-in and sent the person back
+     to Discord, which looked like an endless loop. So a miss is recorded and the sign-in
+     carries on: a forged nonce could at worst sign somebody in as whoever sent them the
+     link, which gains nothing on a page that only reports your own access. */
   const signedState = await verifySigned(env, state);
   const cookieMatches = Boolean(expectedState) && sameString(String(state), String(expectedState));
-  if (!code || !state || (!signedState && !cookieMatches)) {
-    return html("<p>That sign-in link is stale or already used. <a href=\"/dashboard\">Start again</a>.</p>", 400);
+  if (!code) {
+    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "no code came back from Discord" });
+    return html("<p>Discord did not send a sign-in code back. <a href=\"/dashboard\">Start again</a>.</p>", 400);
+  }
+  if (!signedState && !cookieMatches) {
+    await appendLog(env, { kind: "sign_in_state_miss", by: { id: "callback", name: "oauth callback" }, detail: "nonce not proven (state cookie " + (expectedState ? "present" : "absent") + "); carried on" });
   }
 
   const redirectUri = url.origin + "/auth/callback";
@@ -777,6 +786,7 @@ async function authCallback(request, env) {
   }
   if (!token || !token.access_token) {
     const why = token && token.error ? String(token.error) : "no_answer";
+    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "code exchange refused: " + why });
     return html("<p>Discord would not exchange that sign-in code (" + escapeHtml(why) + "). <a href=\"/dashboard\">Try again</a>.</p>", 502);
   }
 
@@ -785,7 +795,10 @@ async function authCallback(request, env) {
     fetch(DISCORD_API + "/users/@me", { headers }),
     fetch(DISCORD_API + "/users/@me/guilds", { headers }),
   ]);
-  if (!userResponse.ok || !guildsResponse.ok) return html("<p>Could not read your Discord account. <a href=\"/dashboard\">Try again</a>.</p>", 502);
+  if (!userResponse.ok || !guildsResponse.ok) {
+    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "profile read failed: user " + userResponse.status + " / guilds " + guildsResponse.status });
+    return html("<p>Could not read your Discord account. <a href=\"/dashboard\">Try again</a>.</p>", 502);
+  }
 
   const user = await userResponse.json();
   const guilds = await guildsResponse.json();
@@ -832,10 +845,28 @@ async function authCallback(request, env) {
   };
   await appendLog(env, { kind: "sign_in", by: { id: user.id, name: user.global_name || user.username }, detail: "level " + level + " on " + (session.guildName || "the server") });
 
+  const destination = safeNext(cookies(request)[NEXT_COOKIE]);
+  const sessionValue = await signSession(session, await ensureSessionSecret(env));
   const sessionHeaders = new Headers();
-  sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, await signSession(session, await ensureSessionSecret(env)), SESSION_DAYS * 86400));
+  sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, sessionValue, SESSION_DAYS * 86400));
   sessionHeaders.append("set-cookie", cookieHeader(NEXT_COOKIE, "", 0));
-  return redirect(safeNext(cookies(request)[NEXT_COOKIE]), sessionHeaders);
+  /* A cookie set on a response that came from discord.com is dropped by browsers that refuse
+     cross-site cookies, which bounced the dashboard straight back to the sign-in that had
+     just succeeded. /auth/finish is our own origin: it sets the same cookie again and
+     forwards, so the session sticks whichever way the browser behaves. */
+  return redirect("/auth/finish?t=" + encodeURIComponent(sessionValue) + "&next=" + encodeURIComponent(destination), sessionHeaders);
+}
+
+/* Sets the session cookie from our own origin, then forwards to where the sign-in was
+   heading. The value arrives in the URL for this one hop and is the same one the cookie
+   carries. */
+async function authFinish(request, env) {
+  const url = new URL(request.url);
+  const token = String(url.searchParams.get("t") || "");
+  const next = safeNext(url.searchParams.get("next"));
+  const headers = new Headers();
+  if (token) headers.append("set-cookie", cookieHeader(SESSION_COOKIE, token, SESSION_DAYS * 86400));
+  return redirect(next, headers);
 }
 
 function authLogout(request) {
@@ -1540,6 +1571,10 @@ export default {
         sessionSecretSet: Boolean((await resolveSecrets(env)).sessionSecret),
         secretsSource: (await resolveSecrets(env)).source,
         botExchangeAvailable: (await resolveSecrets(env)).botExchange,
+        /* Recent sign-in outcomes, reason codes only - no ids, no tokens - so a failure can
+           be read straight off this endpoint instead of guessing. */
+        signInLog: (await recentLogs(env, 12)).map(function (e) { return { t: e.t, kind: e.kind, detail: e.detail }; })
+          .filter(function (e) { return String(e.kind || "").indexOf("sign_in") === 0; }).slice(0, 6),
         statusLogBound: Boolean(env.STATUS_LOG),
         /* Names only - never values. This is the definitive answer to which variables the
            running worker actually receives. */
@@ -1575,6 +1610,7 @@ export default {
     }
     if (url.pathname === "/auth/login") return authLogin(request, env);
     if (url.pathname === "/auth/callback") return authCallback(request, env);
+    if (url.pathname === "/auth/finish") return authFinish(request, env);
     if (url.pathname === "/auth/logout") return authLogout(request);
     if (url.pathname === "/auth/me") return authMe(request, env);
 
