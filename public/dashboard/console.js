@@ -350,7 +350,174 @@
   }
 
   /* ------------------------------ navigation ------------------------------ */
-  var LOADERS = { overview: loadOverview, server: loadServer, roles: renderRoles, logs: loadLogs };
+  /* ------------------------------------------------------------ staff roles --- */
+  var roleSlots = [];
+  function loadStaff() {
+    return api('/api/owner/roles').then(renderStaff).catch(function (error) { msg($('staff-msg'), explain(error), false); });
+  }
+  function renderStaff(data) {
+    var host = $('staff-slots');
+    if (!host) return;
+    clear(host);
+    roleSlots = data.slots || [];
+    roleSlots.forEach(function (slot) {
+      var field = el('div', 'sbc-field');
+      var label = el('label', null, slot.label + (slot.required ? ' *' : ''));
+      label.setAttribute('for', 'role-' + slot.key);
+      var input = el('input');
+      input.id = 'role-' + slot.key;
+      input.maxLength = 25;
+      input.value = slot.roleId || '';
+      input.placeholder = 'Discord role id';
+      field.appendChild(label);
+      field.appendChild(input);
+      host.appendChild(field);
+    });
+    var set = roleSlots.filter(function (slot) { return slot.roleId; }).length;
+    var pill = $('staff-pill');
+    if (pill) { pill.textContent = set + ' of ' + roleSlots.length + ' set'; pill.className = 'sbc-pill' + (set === roleSlots.length ? ' good' : ''); }
+    if ($('staff-note')) $('staff-note').textContent = data.note || '';
+    var save = $('staff-save');
+    if (save) save.disabled = !data.canEdit;
+  }
+  function saveStaff() {
+    var payload = {};
+    roleSlots.forEach(function (slot) {
+      var input = $('role-' + slot.key);
+      if (input) payload[slot.key] = input.value.trim();
+    });
+    msg($('staff-msg'), 'Saving\u2026');
+    api('/api/owner/roles', { method: 'POST', body: JSON.stringify(payload) })
+      .then(function (data) {
+        msg($('staff-msg'), (data.missing && data.missing.length) ? 'Saved, but these required roles are still empty: ' + data.missing.join(', ') + '.' : 'Saved.', true);
+        return loadStaff();
+      })
+      .catch(function (error) { msg($('staff-msg'), explain(error), false); });
+  }
+
+  /* ---------------------------------------------------------- log channels --- */
+  var logSlots = [];
+  function loadChannels() {
+    return api('/api/owner/logchannels').then(renderChannels).catch(function (error) { msg($('channels-msg'), explain(error), false); });
+  }
+  function renderChannels(data) {
+    var host = $('channels-slots');
+    if (!host) return;
+    clear(host);
+    logSlots = data.slots || [];
+    logSlots.forEach(function (slot) {
+      var field = el('div', 'sbc-field');
+      var label = el('label', null, slot.label);
+      label.setAttribute('for', 'chan-' + slot.key);
+      var input = el('input');
+      input.id = 'chan-' + slot.key;
+      input.maxLength = 25;
+      input.value = slot.channelId || '';
+      input.placeholder = 'channel id, or empty to switch off';
+      field.appendChild(label);
+      field.appendChild(input);
+      host.appendChild(field);
+    });
+    var pill = $('channels-pill');
+    if (pill) { pill.textContent = (data.set || 0) + ' of ' + (data.total || logSlots.length) + ' on'; pill.className = 'sbc-pill' + (data.set ? ' good' : ''); }
+    if ($('channels-note')) $('channels-note').textContent = data.note || '';
+    var save = $('channels-save');
+    if (save) save.disabled = !data.canEdit;
+  }
+  function saveChannels() {
+    var payload = {};
+    logSlots.forEach(function (slot) {
+      var input = $('chan-' + slot.key);
+      if (input) payload[slot.key] = input.value.trim();
+    });
+    msg($('channels-msg'), 'Saving\u2026');
+    api('/api/owner/logchannels', { method: 'POST', body: JSON.stringify(payload) })
+      .then(function (data) {
+        msg($('channels-msg'), (data.rejected && data.rejected.length) ? 'Saved. These did not look like channel ids: ' + data.rejected.join(', ') + '.' : 'Saved.', true);
+        return loadChannels();
+      })
+      .catch(function (error) { msg($('channels-msg'), explain(error), false); });
+  }
+
+  /* ------------------------------------------------------ rust connections --- */
+  function loadRcon() {
+    return api('/api/owner/servers').then(renderRcon).catch(function (error) { msg($('rcon-msg'), explain(error), false); });
+  }
+  function renderRcon(data) {
+    var list = $('rcon-list');
+    if (!list) return;
+    clear(list);
+    var rows = data.servers || [];
+    rows.forEach(function (row) {
+      var card = el('div', 'sbc-conn');
+      var main = el('div', 'sbc-conn-main');
+      main.appendChild(el('div', 'sbc-conn-name', row.name));
+      main.appendChild(el('div', 'sbc-conn-host mono', row.host + ':' + row.port + (row.passwordSet ? ' \u00b7 password held' : ' \u00b7 no password')));
+      main.appendChild(el('div', 'sbc-conn-sub', row.lastTest
+        ? (row.lastTest.ok ? 'Last check answered ' + row.lastTest.command + ' in ' + row.lastTest.ms + ' ms \u00b7 ' + when(row.lastTest.at) : 'Last check did not answer: ' + row.lastTest.reason + ' \u00b7 ' + when(row.lastTest.at))
+        : 'Never checked'));
+      card.appendChild(main);
+      var actions = el('div', 'sbc-conn-actions');
+      var test = el('button', 'sbc-btn sbc-btn-go', 'Check it');
+      test.type = 'button';
+      test.addEventListener('click', function () { testRcon(row.id, test); });
+      var remove = el('button', 'sbc-btn', 'Delete');
+      remove.type = 'button';
+      remove.addEventListener('click', function () { removeRcon(row.id); });
+      actions.appendChild(test);
+      actions.appendChild(remove);
+      card.appendChild(actions);
+      list.appendChild(card);
+    });
+    if (!rows.length) list.appendChild(el('p', 'sbc-note', 'Nothing connected yet. Add a server below and the bot will reconnect to it by itself.'));
+    if ($('rcon-count')) $('rcon-count').textContent = rows.length + '/' + (data.max || 3) + ' connected';
+    if ($('rcon-note')) $('rcon-note').textContent = data.note || '';
+    var add = $('rcon-add');
+    if (add) add.disabled = !data.canEdit || rows.length >= (data.max || 3);
+  }
+  function testRcon(id, button) {
+    var was = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Asking\u2026';
+    api('/api/owner/rcon-test', { method: 'POST', body: JSON.stringify({ id: id }) })
+      .then(function (data) {
+        var result = data.result || {};
+        var said = result.ok
+          ? 'The server answered ' + (result.command || 'the check') + ' in ' + (result.ms || 0) + ' ms. ' + (result.answer ? 'It said: ' + result.answer.slice(0, 300) : 'It sent no text back.')
+          : 'No answer: ' + (result.detail || result.reason || 'unknown');
+        msg($('rcon-msg'), said, result.ok === true);
+        return loadRcon();
+      })
+      .catch(function (error) { msg($('rcon-msg'), explain(error), false); })
+      .then(function () { button.disabled = false; button.textContent = was; });
+  }
+  function addRcon() {
+    var payload = {
+      name: ($('rcon-name') || {}).value || '',
+      host: ($('rcon-host') || {}).value || '',
+      port: Number((($('rcon-port') || {}).value) || 0),
+      password: ($('rcon-password') || {}).value || '',
+    };
+    msg($('rcon-msg'), 'Adding\u2026');
+    api('/api/owner/servers', { method: 'POST', body: JSON.stringify(payload) })
+      .then(function () {
+        ['rcon-name', 'rcon-host', 'rcon-port', 'rcon-password'].forEach(function (id) { var input = $(id); if (input) input.value = ''; });
+        msg($('rcon-msg'), 'Added. Nothing is connected until the bot reads these settings - use Check it to see what a server answers.', true);
+        return loadRcon();
+      })
+      .catch(function (error) {
+        var said = (error && error.data && error.data.message) ? error.data.message : explain(error);
+        msg($('rcon-msg'), said, false);
+      });
+  }
+  function removeRcon(id) {
+    msg($('rcon-msg'), 'Removing\u2026');
+    api('/api/owner/servers?id=' + encodeURIComponent(id), { method: 'DELETE' })
+      .then(function () { msg($('rcon-msg'), 'Removed.', true); return loadRcon(); })
+      .catch(function (error) { msg($('rcon-msg'), explain(error), false); });
+  }
+
+  var LOADERS = { overview: loadOverview, server: loadServer, staff: loadStaff, channels: loadChannels, rcon: loadRcon, roles: renderRoles, logs: loadLogs };
 
   function loadOverview() {
     return api('/api/owner/overview').then(renderOverview).catch(function (error) {
@@ -361,7 +528,7 @@
   }
 
   function show(panel) {
-    var known = ['overview', 'server', 'roles', 'logs'];
+    var known = ['overview', 'server', 'staff', 'channels', 'rcon', 'roles', 'logs'];
     if (known.indexOf(panel) === -1) panel = 'overview';
     known.forEach(function (name) {
       var section = $('panel-' + name);
@@ -395,6 +562,12 @@
     if (save) save.addEventListener('click', saveServer);
     var probe = $('server-probe');
     if (probe) probe.addEventListener('click', probeServer);
+    var staffSave = $('staff-save');
+    if (staffSave) staffSave.addEventListener('click', saveStaff);
+    var channelsSave = $('channels-save');
+    if (channelsSave) channelsSave.addEventListener('click', saveChannels);
+    var rconAdd = $('rcon-add');
+    if (rconAdd) rconAdd.addEventListener('click', addRcon);
     var refresh = $('logs-refresh');
     if (refresh) refresh.addEventListener('click', loadLogs);
     window.addEventListener('hashchange', function () { show(location.hash.replace('#', '')); });
