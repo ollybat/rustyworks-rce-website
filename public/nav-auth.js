@@ -60,7 +60,7 @@
     servers:  '/servers.html',
     profile:  '/profile.html',
     settings: '/settings.html',
-    admin:    '/admin.html',
+    admin:    '/dashboard',
     login:    '/login.html'
   };
 
@@ -207,7 +207,10 @@
 
   function doSignOut() {
     clearCache();
-    var done = function () { window.location.href = '/index.html'; };
+    var done = function () {
+      try { localStorage.removeItem('spinback-session'); } catch (e) {}
+      window.location.href = '/index.html';
+    };
     try {
       var f = window.rwFetch
         ? window.rwFetch('/auth/logout', { method: 'POST', cache: 'no-store' })
@@ -225,12 +228,21 @@
     if (window.hideLoader) window.hideLoader();
   }
 
-  function fetchMe() {
-    var p = window.rwFetch
-      ? window.rwFetch('/auth/me')
-      : fetch(API + '/auth/me', { credentials: 'include' });
+  /* The session travels as a header on this site: this host does not pass Set-Cookie through
+     to the browser, so a cookie-only check would look signed out even right after signing in. */
+  function sessionHeaders() {
+    var out = {};
+    try {
+      var held = localStorage.getItem('spinback-session');
+      if (held) out['x-spinback-session'] = held;
+    } catch (e) {}
+    return out;
+  }
 
-    return p.then(function (r) { return r.json(); });
+  function fetchMe() {
+    /* Asked directly rather than through rwFetch, so the session header is always attached. */
+    return fetch(API + '/auth/me', { credentials: 'include', cache: 'no-store', headers: sessionHeaders() })
+      .then(function (r) { return r.json(); });
   }
 
   function boot() {
