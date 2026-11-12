@@ -632,3 +632,22 @@ html:not(.js) [data-sp-reveal] { opacity: 1; transform: none; }
   .sp-card.is-wide { grid-column: span 1; }
   .sp-step { padding-left: 64px; }
 }
+
+/* ---- release timeline, collection marks and the extra filter rows ----
+   Added by the premium layer; the operator's own style.css is untouched. ---- */
+.sp-timeline { display: grid; gap: 22px; }
+.sp-tl-month { display: grid; gap: 10px; }
+.sp-tl-label { display: flex; align-items: center; gap: 10px; font-size: .8rem; letter-spacing: .16em; text-transform: uppercase; color: rgba(214, 240, 255, .66); }
+.sp-tl-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(88, 200, 245, .38), transparent); }
+.sp-tl-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 10px; }
+.sp-tl-item { text-align: left; cursor: pointer; font: inherit; color: inherit; padding: 10px 12px; border: 1px solid var(--sp-line); border-radius: 14px; background: linear-gradient(180deg, var(--sp-panel-strong), var(--sp-panel)); transition: transform 240ms var(--sp-ease), border-color 240ms ease, box-shadow 240ms ease; }
+.sp-tl-item:hover { transform: translateY(-3px); border-color: rgba(88, 200, 245, .45); box-shadow: var(--sp-glow); }
+.sp-tl-item b { display: block; font-size: .95rem; line-height: 1.3; }
+.sp-tl-item small { display: block; margin-top: 3px; font-size: .76rem; opacity: .62; }
+.sp-tl-month.is-unknown .sp-tl-label { color: rgba(214, 240, 255, .4); }
+.sp-tl-month.is-unknown .sp-tl-item { opacity: .72; }
+.sp-own { position: absolute; top: 8px; right: 8px; z-index: 3; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; border: 1px solid var(--sp-line); background: rgba(6, 12, 18, .72); color: inherit; font: inherit; font-size: .95rem; cursor: pointer; transition: background 200ms ease, border-color 200ms ease; }
+.sp-own:hover { border-color: rgba(88, 200, 245, .6); }
+.sp-own.is-on { background: rgba(88, 200, 245, .26); border-color: rgba(88, 200, 245, .7); }
+.sp-skin[role="button"]:focus-visible { outline: 2px solid rgba(88, 200, 245, .7); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .sp-tl-item:hover { transform: none; } }

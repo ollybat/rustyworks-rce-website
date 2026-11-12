@@ -1,5 +1,5 @@
 /* ==========================================================================
-   site-plus.js — the behaviour side of the premium layer.
+   site-plus.js - the behaviour side of the premium layer.
    --------------------------------------------------------------------------
    Every page links this file last, so nothing here can disturb the operator's
    original scripts. Each piece checks for its own markup first and quietly does
@@ -15,6 +15,9 @@
   var SP = (window.SP = window.SP || {});
   var reduce = false;
   try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduce = false; }
+
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   function q(sel, root) { return (root || document).querySelector(sel); }
   function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -37,6 +40,28 @@
     });
   }
   function iconUrl(short) { return '/media/kitbuilder/' + String(short) + '.png'; }
+
+  /* ISO date helpers - the catalogue stores dates as YYYY-MM-DD. */
+  function parts(iso) {
+    var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? { y: +m[1], m: +m[2], d: +m[3] } : null;
+  }
+  function longDate(iso) {
+    var p = parts(iso);
+    return p ? p.d + ' ' + MONTHS[p.m - 1] + ' ' + p.y : '';
+  }
+  function shortDate(iso) {
+    var p = parts(iso);
+    return p ? MONTHS_SHORT[p.m - 1] + ' ' + p.y : '';
+  }
+  function monthKey(iso) {
+    var p = parts(iso);
+    return p ? p.y + '-' + String(p.m).padStart(2, '0') : '';
+  }
+  function monthLabel(key) {
+    var p = String(key || '').split('-');
+    return p.length === 2 ? MONTHS[+p[1] - 1] + ' ' + p[0] : '';
+  }
 
   /* ------------------------------------------------------- the backdrop -- */
 
@@ -97,7 +122,7 @@
     });
   }
 
-  /* -------------------------------------------------------------- marquee -- */
+  /* ------------------------------------------------------------ marquee -- */
 
   function marquee() {
     qa('[data-sp-marquee]').forEach(function (box) {
@@ -108,7 +133,7 @@
     });
   }
 
-  /* ------------------------------------------------------------ to the top -- */
+  /* --------------------------------------------------------- to the top -- */
 
   function totop() {
     if (q('.sp-totop')) return;
@@ -125,7 +150,7 @@
     onScroll();
   }
 
-  /* -------------------------------------------------- pointer-follow glow -- */
+  /* -------------------------------------------------- pointer glow / tilt -- */
 
   function glow() {
     if (reduce) return;
@@ -151,15 +176,16 @@
     });
   }
 
-  /* ------------------------------------------------------------ detail sheet -- */
+  /* -------------------------------------------------------- detail sheet -- */
 
-  SP.sheet = function (title, body) {
+  SP.sheet = function (title, body, onOpen) {
     var old = q('.sp-sheet');
     if (old) old.parentNode.removeChild(old);
     var back = make('div', 'sp-sheet');
+    back.setAttribute('role', 'dialog');
     back.style.cssText = 'position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:18px;background:rgba(2,7,12,.72);backdrop-filter:blur(4px)';
     var box = make('div', 'sp-sheet-box');
-    box.style.cssText = 'max-width:640px;width:100%;max-height:86vh;overflow:auto;padding:24px;border-radius:20px;border:1px solid var(--sp-line-strong,rgba(255,255,255,.2));background:#0a1219;color:#eef6fb;box-shadow:0 26px 70px rgba(0,0,0,.6)';
+    box.style.cssText = 'max-width:660px;width:100%;max-height:86vh;overflow:auto;padding:24px;border-radius:20px;border:1px solid var(--sp-line-strong,rgba(255,255,255,.2));background:#0a1219;color:#eef6fb;box-shadow:0 26px 70px rgba(0,0,0,.6)';
     box.innerHTML = '<h3 style="margin:0 0 12px;font-size:1.3rem">' + esc(title) + '</h3>' + body;
     var close = make('button', '', 'Close');
     close.type = 'button';
@@ -173,6 +199,7 @@
       if (ev.key === 'Escape') { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener('keydown', onKey); }
     });
     document.body.appendChild(back);
+    if (onOpen) onOpen(box);
     return box;
   };
 
@@ -180,25 +207,31 @@
     var html = '<div style="display:grid;gap:8px">';
     pairs.forEach(function (row) {
       if (row[1] == null || row[1] === '' || row[1] === false) return;
-      html += '<div style="display:flex;gap:12px;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:6px"><span style="opacity:.65">' + esc(row[0]) + '</span><span style="text-align:right;word-break:break-word">' + esc(row[1]) + '</span></div>';
+      html += '<div style="display:flex;gap:12px;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:6px"><span style="opacity:.65">' + esc(row[0]) + '</span><span style="text-align:right;word-break:break-word">' + (row[2] ? row[1] : esc(row[1])) + '</span></div>';
     });
     return html + '</div>';
   }
 
-  function copyButton(label, value) {
-    var b = make('button', '', label);
-    b.type = 'button';
-    b.className = 'btn sm';
-    b.style.marginTop = '16px';
-    b.addEventListener('click', function () {
-      var done = function () { b.textContent = 'Copied'; };
-      if (navigator.clipboard) navigator.clipboard.writeText(String(value)).then(done, done);
-      else done();
-    });
-    return b;
+  function buttonLink(label, href) {
+    var a = make('a', 'btn sm', esc(label));
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.style.cssText = 'margin:16px 8px 0 0;display:inline-block';
+    return a;
   }
 
-  /* ------------------------------------------------------- item catalogue -- */
+  /* ------------------------------------- collection, kept in this browser -- */
+
+  var OWN_KEY = 'spinback-owned-skins-v1';
+  function ownedMap() {
+    try { return JSON.parse(window.localStorage.getItem(OWN_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function ownedSave(map) {
+    try { window.localStorage.setItem(OWN_KEY, JSON.stringify(map)); } catch (e) { /* private mode */ }
+  }
+
+  /* ----------------------------------------------------- item catalogue -- */
 
   SP.items = null;
   var ITEM_PAGE = 60;
@@ -301,7 +334,17 @@
             ['Item id', it.id != null ? it.id : 'not documented'],
             ['Source', it.src === 'db' ? 'public RUST item database' : it.src === 'core' ? 'added by Spinback - verify on your server' : it.src]
           ]) + '<img src="' + esc(iconUrl(it.short)) + '" alt="" style="width:120px;display:block;margin:16px auto 0">');
-          if (it.short) box.appendChild(copyButton('Copy short name', it.short));
+          if (it.short) {
+            var copy = make('button', 'btn sm', 'Copy short name');
+            copy.type = 'button';
+            copy.style.marginTop = '16px';
+            copy.addEventListener('click', function () {
+              var done = function () { copy.textContent = 'Copied'; };
+              if (navigator.clipboard) navigator.clipboard.writeText(String(it.short)).then(done, done);
+              else done();
+            });
+            box.appendChild(copy);
+          }
         });
         return b;
       }
@@ -336,7 +379,7 @@
     });
   }
 
-  /* ------------------------------------------------------------ skin store -- */
+  /* ---------------------------------------------------------- skin store -- */
 
   function galleryHtml(images) {
     if (!images || !images.length) return '';
@@ -366,49 +409,71 @@
     var cats = q('#spSkinCats', host);
     var input = q('#spSkinSearch', host);
     var sort = q('#spSkinSort', host);
+    var kinds = q('#spSkinKinds', host);
+    var rail = q('#spSkinTimeline', host);
+    var meter = q('#spSkinMeter', host);
+    var newsHost = q('#spSkinNews', host);
     if (!grid) return;
     grid.innerHTML = '';
     for (var i = 0; i < 6; i++) grid.appendChild(make('div', 'sp-skel'));
 
-    var state = { mode: 'products', cat: 'All', term: '', order: 'name', products: [], skins: [] };
+    var state = { mode: 'products', cat: 'All', kind: 'All', term: '', order: 'newest', products: [], skins: [], owned: ownedMap(), counts: {}, news: [] };
+
+    function current() { return state.mode === 'products' ? state.products : state.skins; }
+    function dateOf(x) { return x && x.released ? x.released : ''; }
 
     getJSON('/data/skins.json').then(function (data) {
       state.products = (data && Array.isArray(data.products) ? data.products : []).filter(function (p) { return p && p.name; });
       state.skins = (data && Array.isArray(data.skins) ? data.skins : []).filter(function (s) { return s && s.name; });
-      if (!state.products.length && !state.skins.length) {
-        emptyWall(data);
-        return;
-      }
+      state.counts = (data && data.counts) || {};
+      state.news = (data && Array.isArray(data.news) ? data.news : []).filter(function (n) { return n && n.title && n.date; });
+      if (!state.products.length && !state.skins.length) { emptyWall(data); return; }
       if (!state.products.length) state.mode = 'skins';
 
-      var tabBar = make('div', 'sp-chips');
-      tabBar.style.marginBottom = '12px';
-      var tabWrap = q('#spSkinTabs', host);
-      if (tabWrap) tabWrap.appendChild(tabBar); else host.insertBefore(tabBar, host.firstChild);
-
+      var tabBar = q('#spSkinTabs', host) || host;
+      if (tabBar === host) { var wrap = make('div'); host.insertBefore(wrap, host.firstChild); tabBar = wrap; }
       var tabs = [];
       if (state.products.length) tabs.push(['products', 'Store products (' + state.products.length + ')']);
       if (state.skins.length) tabs.push(['skins', 'Every individual skin (' + state.skins.length + ')']);
+      var tabButtons = [];
       tabs.forEach(function (pair) {
         var b = make('button', 'sp-chip' + (state.mode === pair[0] ? ' is-on' : ''), esc(pair[1]));
         b.type = 'button';
         b.addEventListener('click', function () {
-          state.mode = pair[0];
-          state.cat = 'All';
-          qa('.sp-chip', tabBar).forEach(function (x) { x.classList.toggle('is-on', x === b); });
-          buildCats();
-          paint();
+          state.mode = pair[0]; state.cat = 'All'; state.kind = 'All';
+          tabButtons.forEach(function (x) { x.classList.toggle('is-on', x === b); });
+          buildKinds(); buildCats(); paint();
         });
         tabBar.appendChild(b);
+        tabButtons.push(b);
       });
 
       if (input) input.addEventListener('input', function () { state.term = input.value.trim().toLowerCase(); paint(); });
       if (sort) sort.addEventListener('change', function () { state.order = sort.value; paint(); });
 
-      buildCats();
-      paint();
-
-      function current() { return state.mode === 'products' ? state.products : state.skins; }
+      function buildKinds() {
+        if (!kinds) return;
+        kinds.innerHTML = '';
+        var list = current();
+        var options = [['All', 'Everything'], ['pack', 'Packs'], ['single', 'Single items'], ['dated', 'Has a release date'], ['undated', 'No published date']];
+        options.forEach(function (pair) {
+          var n = list.filter(function (x) {
+            if (pair[0] === 'pack') return x.type === 'pack';
+            if (pair[0] === 'single') return x.type !== 'pack';
+            if (pair[0] === 'dated') return !!dateOf(x);
+            if (pair[0] === 'undated') return !dateOf(x);
+            return true;
+          }).length;
+          var b = make('button', 'sp-chip' + (state.kind === pair[0] ? ' is-on' : ''), esc(pair[1]) + ' <span style="opacity:.6">' + n + '</span>');
+          b.type = 'button';
+          b.addEventListener('click', function () {
+            state.kind = pair[0];
+            qa('.sp-chip', kinds).forEach(function (x) { x.classList.toggle('is-on', x === b); });
+            paint();
+          });
+          kinds.appendChild(b);
+        });
+      }
 
       function buildCats() {
         if (!cats) return;
@@ -430,62 +495,218 @@
         });
       }
 
+      /* A dated run down the catalogue: newest store release first, and every
+         product the store lists without a date named at the end so the gap is
+         visible rather than hidden. */
+      function paintTimeline() {
+        if (!rail) return;
+        var dated = state.products.filter(function (p) { return dateOf(p); }).sort(function (a, b) { return dateOf(b).localeCompare(dateOf(a)); });
+        var undated = state.products.filter(function (p) { return !dateOf(p); });
+        if (!dated.length && !undated.length) { rail.style.display = 'none'; return; }
+        rail.innerHTML = '';
+        var byMonth = {}, order = [];
+        dated.forEach(function (p) {
+          var k = monthKey(dateOf(p));
+          if (!byMonth[k]) { byMonth[k] = []; order.push(k); }
+          byMonth[k].push(p);
+        });
+        order.forEach(function (k) {
+          var group = make('div', 'sp-tl-month');
+          group.appendChild(make('div', 'sp-tl-label', esc(monthLabel(k))));
+          var items = make('div', 'sp-tl-items');
+          byMonth[k].forEach(function (p) {
+            var chip = make('button', 'sp-tl-item');
+            chip.type = 'button';
+            chip.innerHTML = '<b>' + esc(p.name) + '</b><small>' + esc(longDate(dateOf(p))) + (p.type === 'pack' ? ' &middot; ' + (p.contents || []).length + ' items' : '') + '</small>';
+            chip.addEventListener('click', function () { openProduct(p); });
+            items.appendChild(chip);
+          });
+          group.appendChild(items);
+          rail.appendChild(group);
+        });
+        if (undated.length) {
+          var group2 = make('div', 'sp-tl-month is-unknown');
+          group2.appendChild(make('div', 'sp-tl-label', 'No published date'));
+          var items2 = make('div', 'sp-tl-items');
+          undated.forEach(function (p) {
+            var chip = make('button', 'sp-tl-item');
+            chip.type = 'button';
+            chip.innerHTML = '<b>' + esc(p.name) + '</b><small>the store lists this without a release date</small>';
+            chip.addEventListener('click', function () { openProduct(p); });
+            items2.appendChild(chip);
+          });
+          group2.appendChild(items2);
+          rail.appendChild(group2);
+        }
+      }
+
+      function paintNews() {
+        if (!newsHost || !state.news.length) return;
+        newsHost.innerHTML = '';
+        var head = make('p', 'sp-note', 'Official Rust Console Edition posts, dated on double11.com - the release notes behind the store updates.');
+        newsHost.appendChild(head);
+        var wrap = make('div', 'sp-chips');
+        state.news.forEach(function (n) {
+          var a = make('a', 'sp-chip', esc(n.title) + ' <span style="opacity:.6">' + esc(shortDate(n.date)) + '</span>');
+          a.href = n.url;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          wrap.appendChild(a);
+        });
+        newsHost.appendChild(wrap);
+      }
+
+      function paintMeter() {
+        if (!meter) return;
+        var total = current().length;
+        var mine = current().filter(function (x) { return state.owned[keyOf(x)]; }).length;
+        meter.innerHTML = '<b>' + fmt(mine) + '</b> of ' + fmt(total) + ' marked as yours in this browser' +
+          (mine ? ' <button type="button" class="btn sm ghost" id="spOwnReset">Clear</button>' : '');
+        var reset = q('#spOwnReset', meter);
+        if (reset) reset.addEventListener('click', function () { state.owned = {}; ownedSave(state.owned); paint(); paintMeter(); });
+      }
+
+      function keyOf(x) { return state.mode + ':' + (x.id || x.name); }
+      SP.openSkinByKey = function (key) {
+        var all = state.products.concat(state.skins);
+        var hit = all.filter(function (x) { return keyOf(x) === key; })[0];
+        if (!hit) return false;
+        if (hit.packId && hit.name !== hit.pack) openSkin(hit); else openProduct(hit);
+        return true;
+      };
+
+      function setHash(kind, key) { try { history.replaceState(null, '', '#' + kind + '=' + encodeURIComponent(key)); } catch (e) { /* file:// */ } }
+
+      function openProduct(p) {
+        setHash('product', p.id || p.name);
+        var body = (p.description ? '<p style="margin:0 0 14px;line-height:1.65;opacity:.9">' + esc(p.description) + '</p>' : '') +
+          rows([
+            ['Category', p.category],
+            ['Type', p.type === 'pack' ? 'pack of ' + (p.contents || []).length + ' items' : 'single skin'],
+            ['Released', p.released ? longDate(p.released) : 'not published by the store'],
+            ['Date source', p.releasedFrom ? p.releasedFrom + ' listing' : ''],
+            ['Catalog id', p.id]
+          ]) +
+          (p.image ? '<img src="' + esc(p.image) + '" alt="" style="width:100%;border-radius:14px;margin-top:16px">' : '') +
+          contentsHtml(p.contents) + galleryHtml(p.gallery);
+        var box = SP.sheet(p.name, body);
+        if (p.releasedUrl) box.appendChild(buttonLink('Date source', p.releasedUrl));
+        if (p.stores && p.stores.playstation) box.appendChild(buttonLink('PlayStation Store', p.stores.playstation));
+        if (p.stores && p.stores.xbox) box.appendChild(buttonLink('Xbox Store', p.stores.xbox));
+        if (p.link) box.appendChild(buttonLink('Official store page', p.link));
+        box.appendChild(ownButton(state.mode + ':' + (p.id || p.name)));
+      }
+
+      function openSkin(s) {
+        setHash('skin', s.name);
+        var body = rows([
+          ['Category', s.category],
+          ['Comes from', s.pack],
+          ['Released', s.released ? longDate(s.released) + (s.releasedVia ? ' with the ' + s.releasedVia : '') : 'not published by the store'],
+          ['Catalog id', s.id]
+        ]) + (s.image ? '<img src="' + esc(s.image) + '" alt="" style="width:100%;border-radius:14px;margin-top:16px">' : '');
+        var box = SP.sheet(s.name, body);
+        if (s.packId) {
+          var sib = state.skins.filter(function (x) { return x.packId === s.packId && x.name !== s.name; });
+          if (sib.length) {
+            var listHtml = '<h4 style="margin:18px 0 8px;font-size:.95rem">Elsewhere in ' + esc(s.pack) + '</h4><div style="display:grid;gap:8px">';
+            sib.forEach(function (x) {
+              listHtml += '<div style="display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 10px">' +
+                (x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:8px">' : '<span style="width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:rgba(255,255,255,.06)">\uD83C\uDFA8</span>') +
+                '<span>' + esc(x.name) + '</span></div>';
+            });
+            box.insertAdjacentHTML('beforeend', listHtml + '</div>');
+          }
+        }
+        if (s.link) box.appendChild(buttonLink('Official store page', s.link));
+        box.appendChild(ownButton('skins:' + (s.id || s.name)));
+      }
+
+      function ownButton(key) {
+        var b = make('button', 'btn sm', state.owned[key] ? 'In your collection - remove' : 'Add to my collection');
+        b.type = 'button';
+        b.style.marginTop = '16px';
+        b.addEventListener('click', function () {
+          if (state.owned[key]) delete state.owned[key]; else state.owned[key] = 1;
+          ownedSave(state.owned);
+          b.textContent = state.owned[key] ? 'In your collection - remove' : 'Add to my collection';
+          paintMeter();
+        });
+        return b;
+      }
+
       function paint() {
         var list = current().filter(function (x) {
           if (state.cat !== 'All' && x.category !== state.cat) return false;
+          if (state.kind === 'pack' && x.type !== 'pack') return false;
+          if (state.kind === 'single' && x.type === 'pack') return false;
+          if (state.kind === 'dated' && !dateOf(x)) return false;
+          if (state.kind === 'undated' && dateOf(x)) return false;
           if (!state.term) return true;
-          var hay = [x.name, x.category, x.item, x.rarity, x.pack, x.description, x.id].join(' ').toLowerCase();
+          var hay = [x.name, x.category, x.item, x.rarity, x.pack, x.description, x.id, x.released].join(' ').toLowerCase();
           return hay.indexOf(state.term) > -1;
         });
         list.sort(function (a, b) {
+          if (state.order === 'newest' || state.order === 'oldest') {
+            var da = dateOf(a), db = dateOf(b);
+            if (!da && !db) return String(a.name).localeCompare(String(b.name));
+            if (!da) return 1;
+            if (!db) return -1;
+            return state.order === 'newest' ? db.localeCompare(da) : da.localeCompare(db);
+          }
           if (state.order === 'category') return String(a.category || '').localeCompare(String(b.category || '')) || String(a.name).localeCompare(String(b.name));
           if (state.order === 'pack') return String(a.pack || a.name).localeCompare(String(b.pack || b.name)) || String(a.name).localeCompare(String(b.name));
           return String(a.name).localeCompare(String(b.name));
         });
         grid.innerHTML = '';
         if (!list.length) {
-          grid.appendChild(make('div', 'sp-empty', 'Nothing matched. Clear the search or pick another category.'));
+          grid.appendChild(make('div', 'sp-empty', 'Nothing matched. Clear the search or pick another filter.'));
           if (status) status.textContent = 'No matches';
+          paintMeter();
           return;
         }
         list.forEach(function (x) {
-          var isProduct = state.mode === 'products';
-          var card = make('button', 'sp-skin');
-          card.type = 'button';
-          var badge = isProduct && x.type === 'pack' && x.contents && x.contents.length
-            ? '<span class="sp-rarity">' + x.contents.length + ' items</span>'
-            : (x.category ? '<span class="sp-rarity">' + esc(String(x.category).split(' ')[0]) + '</span>' : '');
+          var isProduct = state.mode === 'products' || !!x.type;
+          var card = make('div', 'sp-skin');
+          card.setAttribute('role', 'button');
+          card.tabIndex = 0;
+          var badge = dateOf(x) ? '<span class="sp-rarity">' + esc(shortDate(dateOf(x))) + '</span>'
+            : (x.type === 'pack' && x.contents && x.contents.length ? '<span class="sp-rarity">' + x.contents.length + ' items</span>' : '');
           var thumb = x.image ? '<img src="' + esc(x.image) + '" alt="' + esc(x.name) + '" loading="lazy">' : '<span class="sp-ph">\uD83C\uDFA8</span>';
-          var sub = isProduct ? (x.category || '') + (x.type === 'pack' ? ' &middot; pack' : '') : esc(x.pack || '');
+          var sub = (x.type === 'pack' ? (x.contents || []).length + ' items' : '') || esc(x.pack || x.category || '');
           card.innerHTML = badge + '<div class="sp-thumb">' + thumb + '</div>' +
             '<div class="sp-meta"><b>' + esc(x.name) + '</b><small>' + sub + '</small></div>';
-
-          card.addEventListener('click', function () {
-            var body;
-            if (isProduct) {
-              var storeLinks = [];
-              if (x.stores && x.stores.playstation) storeLinks.push('PlayStation Store');
-              if (x.stores && x.stores.xbox) storeLinks.push('Xbox Store');
-              body = (x.description ? '<p style="margin:0 0 14px;line-height:1.65;opacity:.9">' + esc(x.description) + '</p>' : '') +
-                rows([['Category', x.category], ['Type', x.type === 'pack' ? 'pack of ' + (x.contents || []).length : 'single skin'], ['Catalog id', x.id], ['Listed on', storeLinks.join(' and ') || 'the Rust Console store']]) +
-                (x.image ? '<img src="' + esc(x.image) + '" alt="" style="width:100%;border-radius:14px;margin-top:16px">' : '') +
-                contentsHtml(x.contents) + galleryHtml(x.gallery);
-            } else {
-              body = rows([['Category', x.category], ['In the pack', x.pack], ['Catalog id', x.id], ['Rarity', x.rarity ? x.rarity : 'not published']]) +
-                (x.image ? '<img src="' + esc(x.image) + '" alt="" style="width:100%;border-radius:14px;margin-top:16px">' : '');
-            }
-            var box = SP.sheet(x.name, body);
-            if (x.link) {
-              var a = make('a', 'btn sm', 'Official store page');
-              a.href = x.link; a.target = '_blank'; a.rel = 'noopener';
-              a.style.cssText = 'margin-top:16px;display:inline-block';
-              box.appendChild(a);
-            }
+          var pull = make('button', 'sp-own' + (state.owned[keyOf(x)] ? ' is-on' : ''), state.owned[keyOf(x)] ? '\u2713' : '+');
+          pull.type = 'button';
+          pull.title = state.owned[keyOf(x)] ? 'In your collection' : 'Add to my collection';
+          pull.setAttribute('aria-label', pull.title);
+          pull.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            if (state.owned[keyOf(x)]) delete state.owned[keyOf(x)]; else state.owned[keyOf(x)] = 1;
+            ownedSave(state.owned);
+            pull.classList.toggle('is-on', !!state.owned[keyOf(x)]);
+            pull.textContent = state.owned[keyOf(x)] ? '\u2713' : '+';
+            paintMeter();
           });
+          card.appendChild(pull);
+          var open = function () { if (x.type || state.mode === 'products') openProduct(x); else openSkin(x); };
+          card.addEventListener('click', open);
+          card.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
           grid.appendChild(card);
         });
-        if (status) status.textContent = fmt(list.length) + ' ' + (state.mode === 'products' ? 'store products' : 'individual skins') + ' shown';
+        if (status) status.textContent = fmt(list.length) + ' ' + (state.mode === 'products' ? 'store products' : 'individual skins') + ' shown' + (state.order === 'newest' ? ', newest release first' : '');
+        paintMeter();
       }
+
+      SP.openByHash = function () {
+        var m = String(window.location.hash || '').match(/^#(product|skin)=(.+)$/);
+        if (!m) return false;
+        return SP.openSkinByKey((m[1] === 'product' ? 'products:' : 'skins:') + decodeURIComponent(m[2]));
+      };
+      window.addEventListener('hashchange', function () { SP.openByHash(); });
+
+      buildKinds(); buildCats(); paint(); paintTimeline(); paintNews(); paintMeter();
+      SP.openByHash();
     }).catch(function (err) { emptyWall(null, err); });
 
     function emptyWall(data, err) {
