@@ -2,7 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <!-- Marks the page as scripted: reveal-on-scroll only hides content when this is set. -->
     <script>
       /* Marks the page as scripted, and applies the saved light/dark choice
          before the first paint, so there is never a flash of the wrong palette. */
@@ -12,50 +11,46 @@
         if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
       } catch (e) {}
     </script>
+    <meta name="robots" content="noindex">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Sign in — Spinback RCE Dashboard</title>
+    <title>Sign in - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
     <meta name="apple-mobile-web-app-title" content="Spinback">
-    <meta name="description" content="Sign in with Discord to open the Spinback RCE dashboard. The dashboard belongs to the server owner.">
-    <meta name="robots" content="noindex">
+    <meta name="description" content="Sign in with Discord once and reach your servers, your profile and your settings. No slash commands.">
+    <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/login.html">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Spinback RCE">
-    <meta property="og:title" content="Sign in - Spinback RCE Dashboard">
-    <meta property="og:description" content="Sign in with Discord to open the Spinback RCE dashboard. The dashboard belongs to the server owner.">
+    <meta property="og:title" content="Sign in - Spinback RCE">
+    <meta property="og:description" content="Sign in with Discord once and reach your servers, your profile and your settings. No slash commands.">
     <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/login.html">
     <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:type" content="image/jpeg">
     <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Sign in - Spinback RCE">
+    <meta name="twitter:description" content="Sign in with Discord once and reach your servers, your profile and your settings. No slash commands.">
     <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta name="twitter:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Sign in - Spinback RCE Dashboard">
-    <meta name="twitter:description" content="Sign in with Discord to open the Spinback RCE dashboard. The dashboard belongs to the server owner.">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/chakrapetch/v13/cIf6MapbsEk7TDLdtEz1BwkWn6pg.woff2">
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYg.woff2">
-    <!-- One less origin to talk to: the face list is served from here, the woff2 files still stream from fonts.gstatic.com. -->
     <link rel="stylesheet" href="/media/fonts.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/ui-extras.css">
-    <link rel="stylesheet" href="sections.css">
+    <link rel="stylesheet" href="/sections.css">
     <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
     <link rel="shortcut icon" href="/media/spinback-icon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0b0704">
-    <!-- theme.js first (it sets the seasonal logo and device mode), then the rest. -->
     <script src="/theme.js"></script>
-    <script src="/config.js" defer></script>
-    <script src="/apiHelper.js" defer></script>
+    <script src="/config.js"></script>
     <script src="/nav-auth.js" defer></script>
-    <script src="/login.js" defer></script>
     <link rel="stylesheet" href="/theme-spinback.css">
   <link rel="stylesheet" href="/motion.css">
     <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/account.css">
     </head>
   <body data-acct-page="login">
 <div id="rw-fx" aria-hidden="true"></div>
@@ -79,49 +74,61 @@
         <div class="wrap">
           <span class="tag">Your account</span>
           <h1>Sign in to your <span class="accent">Account</span></h1>
-          <p>One sign-in, no slash commands. After this you can see your servers, your profile and your settings straight from this website.</p>
+          <p>One sign-in, no slash commands. Afterwards your servers, your profile and your settings are all here on the website.</p>
         </div>
       </section>
 
       <section>
         <div class="wrap">
-          <nav class="acct-tabs" id="acctTabs" aria-label="Account pages"></nav>
-          <div class="grid u-grid-auto">
-            <div class="panel-box">
+          <div id="acctBar"></div>
+          <div class="acct-grid">
+            <div class="acct-card">
               <h2>Continue with Discord</h2>
-              <p id="loginState" class="note" style="margin:10px 0 18px">Checking your session...</p>
+              <p id="loginState" class="acct-sub">Checking your session...</p>
               <div id="loginCta"></div>
-              <p class="note" style="margin-top:18px">
-                You will land on <span id="loginNext">your servers page</span>. Discord is asked for
-                two things only - <code class="u-ember">identify</code> (your name and avatar) and
-                <code class="u-ember">guilds</code> (the servers you are in). It cannot read your
-                messages, post anything, or see your email.
-              </p>
+              <p class="acct-note">You will land on <span id="loginNext">your servers page</span>. Discord is asked for your name, your avatar and the servers you are in. It cannot read your messages, post anything, or see your email.</p>
             </div>
 
-            <div class="panel-box">
+            <div class="acct-card">
               <h2>What you get</h2>
               <ul class="ks-list" style="margin-top:10px">
                 <li><strong>Servers</strong> - every server you can manage, and whether Spinback is in it</li>
-                <li><strong>Profile</strong> - the account you signed in with and your access</li>
-                <li><strong>Settings</strong> - theme, and your session on this device</li>
+                <li><strong>Profile</strong> - the account you signed in with, your roles and your access</li>
+                <li><strong>Settings</strong> - theme, seasonal look, font, text size and calm mode</li>
                 <li><strong>Dashboard</strong> - the control panel, for the server owner and staff</li>
               </ul>
-              <p class="note" style="margin-top:16px">
-                Inside Discord the bot has a single command, <code class="u-ember">/dashboard</code>,
-                and only the server owner sees it. Everything above is reachable from this website alone.
-              </p>
+              <p class="acct-note">Inside Discord the bot has one command, <code class="u-ember">/dashboard</code>, and only the server owner sees it. Everything above works from the website alone.</p>
             </div>
-          </div>
 
-          <div class="panel-box u-mt-18">
-            <h3 style="margin-bottom:10px">Trouble signing in?</h3>
-            <p class="note">
-              If you are told the dashboard is owner-only, you signed in with a different Discord
-              account than the one that owns the server - sign out and try again. Nothing else on
-              this site needs staff access. For anything else, ask in the
-              <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">support server</a>.
-            </p>
+            <div class="acct-card acct-wide">
+              <h2>How it works</h2>
+              <div class="acct-stats">
+                <div class="acct-stat"><div class="acct-stat-num">1</div><div class="acct-stat-label">Sign in here</div></div>
+                <div class="acct-stat"><div class="acct-stat-num">2</div><div class="acct-stat-label">See your servers</div></div>
+                <div class="acct-stat"><div class="acct-stat-num">3</div><div class="acct-stat-label">Add the bot</div></div>
+                <div class="acct-stat"><div class="acct-stat-num">4</div><div class="acct-stat-label">Set the server up</div></div>
+              </div>
+              <p class="acct-note">The server owner does the last step in the dashboard. If that is not you, the setup page says so rather than pretending.</p>
+            </div>
+
+            <div class="acct-card">
+              <h2>What Discord is asked for</h2>
+              <div class="acct-rows">
+                <div class="acct-row"><span class="acct-row-key">identify</span><span class="acct-row-val">your username, display name and avatar</span></div>
+                <div class="acct-row"><span class="acct-row-key">guilds</span><span class="acct-row-val">the servers you are in, and whether you can manage each</span></div>
+                <div class="acct-row"><span class="acct-row-key">guilds.members.read</span><span class="acct-row-val">your roles in this one server, for staff access</span></div>
+                <div class="acct-row"><span class="acct-row-key">Everything else</span><span class="acct-row-val">never requested</span></div>
+              </div>
+            </div>
+
+            <div class="acct-card">
+              <h2>If something goes wrong</h2>
+              <p>Told the dashboard is owner-only? You signed in with a different Discord account than the one that owns the server - sign out and try again. Nothing else here needs staff access.</p>
+              <p class="acct-note">Your session lasts seven days and lives in this browser, so signing out on a shared computer really does end it.</p>
+              <div class="acct-actions">
+                <a class="btn ghost" href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Ask in the support server</a>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -157,6 +164,7 @@
     </footer>
   <script src="/motion.js" defer></script>
     <script src="/site-plus.js" defer></script>
+    <script src="/account.js" defer></script>
     <script src="/login.js" defer></script>
   </body>
 </html>
