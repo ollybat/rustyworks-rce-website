@@ -47,7 +47,8 @@
       fetch('/data/skins.json', { cache: 'force-cache' }).then(function (r) { return r.json(); }).catch(function () { return null; })
     ];
     return Promise.all(both).then(function (parts) {
-      var items = parts[0];
+      /* items.json is an object carrying its own note, with the catalogue under .items. */
+      var items = Array.isArray(parts[0]) ? parts[0] : (parts[0] && Array.isArray(parts[0].items) ? parts[0].items : []);
       if (Array.isArray(items)) {
         items.forEach(function (item) {
           if (!item || !item.name) return;
