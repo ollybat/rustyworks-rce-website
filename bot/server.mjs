@@ -20,7 +20,27 @@ import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from
 import handler from './interactions-worker.js';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
-const TOKEN = process.env.DISCORD_BOT_TOKEN || '';
+/* Hosts hand the token in as an environment variable, and the name people give it
+   varies. Look for the usual names, then anything token-shaped, and strip the quotes
+   and stray whitespace that come along when a value is pasted into a web form. The
+   value itself is never logged - only which variable it came from and its shape. */
+const TOKEN_NAMES = ['DISCORD_BOT_TOKEN', 'DISCORD_TOKEN', 'BOT_TOKEN', 'TOKEN', 'DISCORD_BOT', 'DISCORD_APPLICATION_BOT_TOKEN', 'SPINBACK_BOT_TOKEN'];
+function cleanEnvValue(v) {
+  return String(v == null ? '' : v).trim().replace(/^["']+/, '').replace(/["']+$/, '').trim();
+}
+function readToken(envVars) {
+  for (const name of TOKEN_NAMES) {
+    const value = cleanEnvValue(envVars[name]);
+    if (value) return { token: value, source: name };
+  }
+  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC/i.test(k));
+  if (loose) return { token: cleanEnvValue(envVars[loose]), source: loose + ' (matched by name)' };
+  return { token: '', source: null };
+}
+const TOKEN_INFO = readToken(process.env);
+const TOKEN = TOKEN_INFO.token;
+const tokenShape = !TOKEN ? 'empty'
+  : (/^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}$/.test(TOKEN) ? 'discord-token' : 'unexpected-shape');
 const GUILD_ID = process.env.DISCORD_GUILD_ID || '';
 const OWNER_ID = process.env.DISCORD_GUILD_OWNER_ID || '';
 const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY || '';
@@ -92,18 +112,35 @@ client.on(Events.Error, (e) => log('gateway error:', String((e && e.message) || 
 client.on(Events.ShardDisconnect, (code) => { state.gateway = 'disconnected'; log('gateway disconnected, code', code); });
 client.on(Events.ShardReconnecting, () => { state.gateway = 'reconnecting'; log('gateway reconnecting'); });
 
-if (!TOKEN) {
-  state.gateway = 'no-token';
-  log('DISCORD_BOT_TOKEN is not set, so the bot cannot log in and will look offline.');
-  log('Railway -> your service -> Variables -> add DISCORD_BOT_TOKEN, then it redeploys.');
-} else {
-  client.login(TOKEN).catch((e) => {
-    state.gateway = 'login-failed';
+let loginAttempts = 0;
+async function connect() {
+  if (!TOKEN) {
+    state.gateway = 'no-token';
+    log('no Discord token found on this service. Looked for: ' + TOKEN_NAMES.join(', '));
+    log('Railway -> the service that owns your domain -> Variables -> DISCORD_BOT_TOKEN, then it redeploys.');
+    return;
+  }
+  loginAttempts += 1;
+  state.gateway = 'logging-in';
+  log('logging in (attempt ' + loginAttempts + ') using ' + TOKEN_INFO.source + ', ' + TOKEN.length + ' characters, shape ' + tokenShape);
+  try {
+    await client.login(TOKEN);
+  } catch (e) {
     state.error = String((e && e.message) || e);
-    log('login failed:', state.error);
-    log('Check the token value, and that nothing else is running this bot with the same token.');
-  });
+    state.gateway = /token|unauthor|401/i.test(state.error) ? 'invalid-token' : 'login-failed';
+    log('login attempt ' + loginAttempts + ' failed:', state.error);
+    if (/token|unauthor|401/i.test(state.error)) {
+      log('That reads like a token problem: copy it again from the Discord developer portal (Bot -> Reset Token), and check nothing else is running this bot with the same token.');
+    }
+    if (loginAttempts < 6) {
+      const waitMs = Math.min(60000, 5000 * loginAttempts);
+      log('retrying in ' + Math.round(waitMs / 1000) + 's');
+      const timer = setTimeout(connect, waitMs);
+      if (timer.unref) timer.unref();
+    }
+  }
 }
+connect();
 
 /* ----------------------------------------------- signed interactions route -- */
 
@@ -148,6 +185,11 @@ createServer(async (req, res) => {
       port: PORT,
       host: HOST,
       tokenPresent: !!TOKEN,
+      tokenSource: TOKEN_INFO.source,
+      tokenShape: tokenShape,
+      tokenLength: TOKEN.length,
+      loginAttempts: loginAttempts,
+      lookedFor: TOKEN_NAMES,
       siteUrl: SITE_URL,
       interactions: !!PUBLIC_KEY,
       guildConfigured: !!GUILD_ID && !!OWNER_ID,
