@@ -143,3 +143,39 @@ in a file, so a redeployed copy still points at the same application.
 
 The dashboard stays closed and says so, with the checklist at /dashboard. Nothing else on
 the site is affected and no private data is exposed while it waits.
+
+## Who is allowed in
+
+Signing in proves identity; it does not grant access. The site reads your roles in the one
+guild the bot serves (OAuth scope `guilds.members.read`) and decides from three things:
+
+1. the guild owner flag - `owner === true` from `/users/@me/guilds`
+2. server permissions on your account - Administrator (`0x8`) or Manage Server (`0x20`)
+3. your role list - matched against the staff rules below
+
+Anything else is refused with a page that names your roles and the user id, so the owner can
+grant access without guessing.
+
+### Staff rules, all optional environment variables on the website app
+
+| Variable | What it matches |
+| --- | --- |
+| `STAFF_ROLE_IDS` | comma-separated role ids, exact |
+| `STAFF_ROLE_NAMES` | comma-separated role names, case-insensitive |
+| `STAFF_USER_IDS` | comma-separated user ids, treated as owner level |
+| `STAFF_USERS` | comma-separated usernames or display names |
+
+The built-in default admits a role or a person named **Astronomator**, so the console works
+before any variable is set. `STAFF_ROLE_IDS` or `STAFF_ROLE_NAMES` is recommended once you
+know the role's id - renaming a role would otherwise change who gets in.
+
+### Finding the ids
+
+1. Sign in at `/login.html` with an account that should have access. If it is refused, the
+   page shows your user id and every role id you hold in the server.
+2. Or read them from the bot: `GET /api/guild` returns the guild's roles as id/name pairs.
+3. To see what the site currently thinks of you: `GET /api/roles` while signed in - it returns
+   your level, your roles and the staff rules in force.
+
+The `roleNames` in `/api/roles` come from the bot's `/api/guild`. If the bot is unreachable,
+sign-in still works and role ids still match - only `STAFF_ROLE_NAMES` cannot be applied.

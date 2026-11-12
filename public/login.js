@@ -84,7 +84,7 @@
     if (year) year.textContent = String(new Date().getFullYear());
 
     if (params.get("signedout")) say("You have been signed out.");
-    if (params.get("denied")) say("That account is not the owner of this server, so the dashboard stayed closed.");
+    if (params.get("denied")) say("That account is not the owner of this server and does not hold a staff role in it, so the console stayed closed. The owner console opens for the server owner, for anyone with Administrator or Manage Server, and for anyone holding a staff role (a role named Astronomator counts by default).");
 
     fetch("/auth/me", { credentials: "same-origin", headers: { accept: "application/json" } })
       .then(function (response) { return response.ok ? response.json() : null; })
