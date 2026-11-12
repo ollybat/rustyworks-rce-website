@@ -179,3 +179,42 @@ know the role's id - renaming a role would otherwise change who gets in.
 
 The `roleNames` in `/api/roles` come from the bot's `/api/guild`. If the bot is unreachable,
 sign-in still works and role ids still match - only `STAFF_ROLE_NAMES` cannot be applied.
+
+## The console
+
+`/dashboard` **is** the console: a rail on the left, four panels behind it. It is served
+from `worker.js` rather than from a file in `public/`, because Cloudflare hands an existing
+asset straight to the visitor without waking the Worker - a file on disk would be readable by
+anybody even though every endpoint behind it is gated.
+
+| Panel | Where its numbers come from |
+| --- | --- |
+| Overview | the bot's own `/api/status` and `/api/guild`, asked at that moment |
+| Rust server | what the owner typed in, stored in R2 |
+| Roles & access | the staff rules in force, plus the Discord server's role list |
+| Logs | one entry per event that really happened, naming who did it |
+
+Endpoints (all need a staff session; anything that writes needs the owner):
+
+```
+GET    /api/owner/overview
+GET    /api/owner/logs?limit=40
+GET    /api/owner/staff
+POST   /api/owner/staff     { kind: roleIds|roleNames|userIds|users, value }
+DELETE /api/owner/staff     { kind, value }
+GET    /api/owner/server
+POST   /api/owner/server    { name, platform, region, rate, wipe, connect, joinUrl, statusUrl, notes }
+POST   /api/owner/probe     { url }
+```
+
+Storage, in the same R2 bucket as the status history (binding `STATUS_LOG`):
+
+```
+spinback-rce/settings/server.json    the Rust server details
+spinback-rce/settings/staff.json     staff rules added from the console
+spinback-rce/logs/<timestamp>.json   one object per event, never overwritten
+```
+
+Honest limits: Console Edition publishes no server query endpoint, so the console shows no
+live player count. "Check status URL" fetches whatever address is saved and reports only what
+that address answered.
