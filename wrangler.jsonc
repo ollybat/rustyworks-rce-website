@@ -6,10 +6,11 @@
     "DISCORD_GUILD_ID": "1553825462315257868"
   },
   "r2_buckets": [
-    { "binding": "STATUS_LOG", "bucket_name": "rustyworks-rce-status-log" }
+    { "binding": "STATUS_LOG", "bucket_name": "spinback-rce-status-log" }
   ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
   }
 }
+@@SHA scripts/build.mjs a8af41cac8d44cb7dac89d95806dc7a6656c4205 SIZE 3089

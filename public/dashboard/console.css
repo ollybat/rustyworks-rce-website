@@ -1,0 +1,129 @@
+/* console.css - the owner console at /dashboard/home.html.
+   Self-contained on purpose: the console is its own screen, and it should not
+   depend on class names that the public pages are free to change. Colours come
+   from the same light-blue family the site already uses (--sp-accent #58c8f5). */
+:root {
+  --sbc-accent: #58c8f5;
+  --sbc-accent-2: #7bdcff;
+  --sbc-ink: #eef6fb;
+  --sbc-dim: #9db0bf;
+  --sbc-panel: rgba(255, 255, 255, 0.045);
+  --sbc-panel-2: rgba(255, 255, 255, 0.075);
+  --sbc-line: rgba(255, 255, 255, 0.11);
+  --sbc-good: #5ad6a0;
+  --sbc-warn: #f2c14e;
+  --sbc-bad: #ff6b6b;
+  --sbc-r: 14px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.sbc {
+  background: #0b1016;
+  color: var(--sbc-ink);
+  font-family: 'Chakra Petch', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+.sbc-shell { display: flex; align-items: stretch; min-height: 100vh; }
+
+/* ---- rail ---- */
+.sbc-rail {
+  width: 248px; flex: 0 0 248px; padding: 18px 14px 24px;
+  background: linear-gradient(180deg, #0e141c, #0b1016 60%);
+  border-right: 1px solid var(--sbc-line);
+  position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto;
+}
+.sbc-brand { display: flex; align-items: center; gap: 10px; padding: 6px 6px 16px; }
+.sbc-brand img { width: 34px; height: 34px; }
+.sbc-brand b { display: block; font-family: 'Oswald', sans-serif; font-size: 15px; letter-spacing: .04em; }
+.sbc-brand span { display: block; font-size: 11px; color: var(--sbc-dim); text-transform: uppercase; letter-spacing: .12em; }
+.sbc-who {
+  border: 1px solid var(--sbc-line); background: var(--sbc-panel); border-radius: var(--sbc-r);
+  padding: 10px 12px; margin: 0 0 16px; font-size: 12.5px;
+}
+.sbc-who b { display: block; font-size: 13.5px; }
+.sbc-who span { color: var(--sbc-dim); }
+.sbc-group { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--sbc-dim); margin: 16px 8px 6px; }
+.sbc-nav a {
+  display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px;
+  color: var(--sbc-ink); text-decoration: none; font-size: 13.5px; border: 1px solid transparent;
+}
+.sbc-nav a:hover { background: var(--sbc-panel); border-color: var(--sbc-line); }
+.sbc-nav a.on { background: rgba(88, 200, 245, .12); border-color: rgba(88, 200, 245, .35); }
+.sbc-nav i { font-style: normal; width: 18px; text-align: center; }
+.sbc-signout { margin-top: 18px; display: block; text-align: center; font-size: 12.5px; color: var(--sbc-dim); text-decoration: none; }
+.sbc-signout:hover { color: var(--sbc-accent); }
+
+/* ---- main ---- */
+.sbc-main { flex: 1 1 auto; min-width: 0; padding: 26px 26px 80px; max-width: 1100px; }
+.sbc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 4px; }
+.sbc-head h1 { font-family: 'Oswald', sans-serif; font-size: 26px; margin: 0; letter-spacing: .01em; }
+.sbc-sub { color: var(--sbc-dim); font-size: 13px; margin: 0 0 20px; }
+.sbc-panel {
+  border: 1px solid var(--sbc-line); background: linear-gradient(180deg, var(--sbc-panel-2), var(--sbc-panel));
+  border-radius: var(--sbc-r); padding: 18px; margin-bottom: 18px;
+}
+.sbc-panel h2 { font-family: 'Oswald', sans-serif; font-size: 17px; margin: 0 0 4px; letter-spacing: .02em; }
+.sbc-panel h2 small { font-family: 'Chakra Petch', sans-serif; font-size: 12px; color: var(--sbc-dim); font-weight: 400; margin-left: 8px; }
+.sbc-panel p.note { color: var(--sbc-dim); font-size: 12.5px; margin: 6px 0 14px; line-height: 1.55; }
+.sbc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.sbc-stat { border: 1px solid var(--sbc-line); border-radius: 12px; padding: 12px 14px; background: rgba(0,0,0,.18); }
+.sbc-stat span { display: block; font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--sbc-dim); }
+.sbc-stat b { display: block; font-size: 17px; font-family: 'Oswald', sans-serif; margin-top: 4px; word-break: break-word; }
+.sbc-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--sbc-line); }
+.sbc-pill.good { color: var(--sbc-good); border-color: rgba(90,214,160,.4); background: rgba(90,214,160,.1); }
+.sbc-pill.warn { color: var(--sbc-warn); border-color: rgba(242,193,78,.4); background: rgba(242,193,78,.1); }
+.sbc-pill.bad { color: var(--sbc-bad); border-color: rgba(255,107,107,.4); background: rgba(255,107,107,.1); }
+
+/* ---- tables ---- */
+.sbc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sbc-table th, .sbc-table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--sbc-line); vertical-align: top; }
+.sbc-table th { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--sbc-dim); font-weight: 500; }
+.sbc-table tr:last-child td { border-bottom: 0; }
+.sbc-table td.mono, .sbc-table code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.sbc-scroll { overflow-x: auto; }
+
+/* ---- forms ---- */
+.sbc-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.sbc-field { display: flex; flex-direction: column; gap: 5px; }
+.sbc-field.wide { grid-column: 1 / -1; }
+.sbc-field label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--sbc-dim); }
+.sbc-field input, .sbc-field select, .sbc-field textarea {
+  background: rgba(0,0,0,.3); color: var(--sbc-ink); border: 1px solid var(--sbc-line);
+  border-radius: 10px; padding: 9px 11px; font-family: inherit; font-size: 13px; width: 100%;
+}
+.sbc-field textarea { min-height: 76px; resize: vertical; }
+.sbc-field input:focus, .sbc-field select:focus, .sbc-field textarea:focus {
+  outline: none; border-color: var(--sbc-accent); box-shadow: 0 0 0 3px rgba(88,200,245,.15);
+}
+.sbc-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.sbc-btn {
+  font-family: inherit; font-size: 13px; padding: 9px 15px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--sbc-line); background: var(--sbc-panel-2); color: var(--sbc-ink);
+}
+.sbc-btn:hover { border-color: var(--sbc-accent); color: var(--sbc-accent); }
+.sbc-btn-go { background: linear-gradient(96deg, var(--sbc-accent), var(--sbc-accent-2)); color: #04131c; border: 0; font-weight: 600; }
+.sbc-btn-go:hover { color: #04131c; filter: brightness(1.06); }
+.sbc-btn-tiny { font-size: 11.5px; padding: 5px 9px; }
+.sbc-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.sbc-msg { font-size: 12.5px; color: var(--sbc-dim); }
+.sbc-msg.good { color: var(--sbc-good); }
+.sbc-msg.bad { color: var(--sbc-bad); }
+.sbc-hidden { display: none !important; }
+
+/* ---- phone / tablet: the rail becomes a strip across the top ---- */
+@media (max-width: 900px) {
+  .sbc-shell { display: block; }
+  .sbc-rail {
+    position: static; width: auto; height: auto; border-right: 0;
+    border-bottom: 1px solid var(--sbc-line); padding: 14px 14px 10px;
+  }
+  .sbc-who { margin-bottom: 12px; }
+  .sbc-group { display: none; }
+  .sbc-nav { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .sbc-nav a { flex: 0 0 auto; white-space: nowrap; border-color: var(--sbc-line); }
+  .sbc-nav a i { display: none; }
+  .sbc-signout { margin-top: 10px; }
+  .sbc-main { padding: 18px 14px 60px; max-width: none; }
+  .sbc-head h1 { font-size: 22px; }
+}
+@@SHA public/dashboard/console.js 8e1eb3eaf6ab20fea0d23487cfc43fda711875cd SIZE 16659

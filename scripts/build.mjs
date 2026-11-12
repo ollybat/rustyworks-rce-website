@@ -43,7 +43,13 @@ const manifest = {
   rules: [{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }],
   compatibility_date: config.compatibility_date,
   compatibility_flags: config.compatibility_flags ?? [],
-  assets: { directory: "../client", binding: "ASSETS" },
+  /* run_worker_first is passed through when wrangler.jsonc sets it: without it Cloudflare
+     serves an existing asset without waking the Worker, so the dashboard gate would never run. */
+  assets: {
+    directory: "../client",
+    binding: "ASSETS",
+    ...(config.assets && config.assets.run_worker_first ? { run_worker_first: config.assets.run_worker_first } : {}),
+  },
   ...(config.vars ? { vars: config.vars } : {}),
   ...(config.durable_objects ? { durable_objects: config.durable_objects } : {}),
   ...(config.migrations ? { migrations: config.migrations } : {}),
