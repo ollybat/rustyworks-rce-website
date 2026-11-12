@@ -48,7 +48,7 @@ const DEFAULT_CLIENT_ID = "1570023832717361213";
 /* Pages under /dashboard/ that are tools rather than the owner control panel.
    The homepage advertises the Kit Studio and Colour Studio as no-login, so they
    stay public; everything else in that tree is gated. */
-const PUBLIC_DASHBOARD_PAGES = new Set(["/dashboard/kitbuilder.html", "/dashboard/colortext.html"]);
+const PUBLIC_DASHBOARD_PAGES = new Set(["/dashboard/kitbuilder.html", "/dashboard/colortext.html", "/dashboard/console.css", "/dashboard/console.js"]);
 const NEXT_COOKIE = "spinback_oauth_next";
 
 /* ---------- small helpers ---------- */
@@ -652,19 +652,16 @@ function csv(value) {
 function hasPermission(permissions, flag) {
   try { return (BigInt(permissions || "0") & flag) === flag; } catch (error) { return false; }
 }
-function accessLevel(env, person) {
+function accessLevel(rules, person) {
   if (person.guildOwner === true) return "owner";
-  if (csv(env.STAFF_USER_IDS).indexOf(String(person.userId).toLowerCase()) !== -1) return "owner";
+  if (rules.userIds.indexOf(String(person.userId).toLowerCase()) !== -1) return "owner";
   if (hasPermission(person.permissions, PERM_ADMINISTRATOR) || hasPermission(person.permissions, PERM_MANAGE_GUILD)) return "staff";
-  const wantedIds = csv(env.STAFF_ROLE_IDS);
   const heldIds = (person.roleIds || []).map((id) => String(id).toLowerCase());
-  if (wantedIds.length && heldIds.some((id) => wantedIds.indexOf(id) !== -1)) return "staff";
-  const wantedNames = csv(env.STAFF_ROLE_NAMES).concat(DEFAULT_STAFF_NAMES);
+  if (rules.roleIds.length && heldIds.some((id) => rules.roleIds.indexOf(id) !== -1)) return "staff";
   const heldNames = (person.roleNames || []).map((n) => String(n).toLowerCase());
-  if (heldNames.some((n) => wantedNames.indexOf(n) !== -1)) return "staff";
-  const wantedUsers = csv(env.STAFF_USERS).concat(DEFAULT_STAFF_NAMES);
+  if (heldNames.some((n) => rules.roleNames.indexOf(n) !== -1)) return "staff";
   const myNames = [person.username, person.globalName].filter(Boolean).map((n) => String(n).toLowerCase());
-  if (myNames.some((n) => wantedUsers.indexOf(n) !== -1)) return "staff";
+  if (myNames.some((n) => rules.users.indexOf(n) !== -1)) return "staff";
   return "none";
 }
 
@@ -765,7 +762,7 @@ async function authCallback(request, env) {
   const nameFor = await guildRoleNames(env);
   const roleNames = roleIds.map((id) => nameFor[id]).filter(Boolean);
 
-  const level = accessLevel(env, {
+  const level = accessLevel(await accessRules(env), {
     guildOwner: Boolean(guild && guild.owner === true),
     permissions: (guild && guild.permissions) || "0",
     userId: user.id,
@@ -790,6 +787,7 @@ async function authCallback(request, env) {
     permissions: (guild && guild.permissions) || "0",
     exp: Date.now() + SESSION_DAYS * 86400000,
   };
+  await appendLog(env, { kind: "sign_in", by: { id: user.id, name: user.global_name || user.username }, detail: "level " + level + " on " + (session.guildName || "the server") });
 
   const sessionHeaders = new Headers();
   sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, await signSession(session, env.SESSION_SECRET), SESSION_DAYS * 86400));
@@ -828,26 +826,28 @@ async function authMe(request, env) {
 
 /* The signed-in person, without the keys they do not need. Used by the staff-only pages
    and by /api/roles, which is how you check what this site thinks your roles are. */
-function sessionRoles(request, env, session) {
+async function sessionRoles(request, env, session) {
+  const rules = await accessRules(env);
   return {
     authenticated: true,
     level: session.level || "none",
     roles: session.roleIds || [],
     roleNames: session.roleNames || [],
-    staffRoleIds: csv(env.STAFF_ROLE_IDS),
-    staffRoleNames: csv(env.STAFF_ROLE_NAMES).concat(DEFAULT_STAFF_NAMES),
-    staffUserIds: csv(env.STAFF_USER_IDS),
-    staffUsers: csv(env.STAFF_USERS).concat(DEFAULT_STAFF_NAMES),
+    staffRoleIds: rules.roleIds,
+    staffRoleNames: rules.roleNames,
+    staffUserIds: rules.userIds,
+    staffUsers: rules.users,
   };
 }
 
 /* Signed in, but not staff: say exactly who we think they are and what would change it.
    No hiding behind a bare 403. */
-function notStaff(session, env) {
+async function notStaff(session, env) {
+  const rules = await accessRules(env);
   const roleList = (session.roleNames && session.roleNames.length)
     ? session.roleNames.join(", ")
     : ((session.roleIds && session.roleIds.length) ? session.roleIds.length + " role(s), none of them recognised as staff" : "no roles in this server");
-  const wanted = csv(env.STAFF_ROLE_NAMES).concat(DEFAULT_STAFF_NAMES).join(", ");
+  const wanted = rules.roleNames.join(", ");
   return html(
     '<!doctype html><html lang="en"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex">'
@@ -868,7 +868,333 @@ function notStaff(session, env) {
   );
 }
 
+/* ---------------------------- dashboard storage ----------------------------
+   Everything the console stores lives in the same R2 bucket as the status history:
+     settings/server.json   what the owner entered about the Rust server
+     settings/staff.json    extra staff rules, on top of the STAFF_* variables
+     logs/<timestamp>.json  one object per event, so nothing is ever overwritten
+   Nothing here is generated on a schedule; an entry exists because somebody did
+   something, and each one records who did it. */
+const SETTINGS_KEY = "spinback-rce/settings/server.json";
+const STAFF_KEY = "spinback-rce/settings/staff.json";
+const LOG_PREFIX = "spinback-rce/logs/";
+
+async function readJson(env, key) {
+  if (!env || !env.STATUS_LOG) return null;
+  try {
+    const object = await env.STATUS_LOG.get(key);
+    if (!object) return null;
+    return await object.json();
+  } catch (error) { return null; }
+}
+
+async function writeJson(env, key, value) {
+  if (!env || !env.STATUS_LOG) return false;
+  try { await env.STATUS_LOG.put(key, JSON.stringify(value)); return true; } catch (error) { return false; }
+}
+
+function logKeyNow() {
+  return LOG_PREFIX + new Date().toISOString().replace(/[:.]/g, "-") + "-" + randomToken(3) + ".json";
+}
+
+async function appendLog(env, entry) {
+  if (!env || !env.STATUS_LOG) return false;
+  try {
+    await env.STATUS_LOG.put(logKeyNow(), JSON.stringify(Object.assign({ t: Date.now() }, entry)));
+    return true;
+  } catch (error) { return false; }
+}
+
+async function recentLogs(env, limit) {
+  if (!env || !env.STATUS_LOG) return [];
+  try {
+    const list = await env.STATUS_LOG.list({ prefix: LOG_PREFIX, limit: 1000 });
+    const keys = list.objects.map((o) => o.key).sort().reverse().slice(0, Math.max(1, Math.min(200, limit)));
+    const out = [];
+    for (const key of keys) {
+      const object = await env.STATUS_LOG.get(key);
+      if (!object) continue;
+      try { out.push(await object.json()); } catch (error) { /* skip a broken entry, keep the rest */ }
+    }
+    return out;
+  } catch (error) { return []; }
+}
+
+/* The staff rules in force: the STAFF_* variables plus whatever the owner saved from the
+   dashboard. Both are read on every sign-in, so a change takes effect on next refresh. */
+async function accessRules(env) {
+  const stored = (await readJson(env, STAFF_KEY)) || {};
+  const join = (a, b) => a.concat(b).map((x) => String(x).toLowerCase()).filter(Boolean);
+  return {
+    roleIds: join(csv(env.STAFF_ROLE_IDS), stored.roleIds || []),
+    roleNames: join(csv(env.STAFF_ROLE_NAMES), stored.roleNames || []).concat(DEFAULT_STAFF_NAMES),
+    userIds: join(csv(env.STAFF_USER_IDS), stored.userIds || []),
+    users: join(csv(env.STAFF_USERS), stored.users || []).concat(DEFAULT_STAFF_NAMES),
+  };
+}
+
+/* A small, strict cleaner for anything the console accepts from a form. */
+function tidy(value, max) {
+  return String(value == null ? "" : value).replace(/<[^>]*>/g, "").trim().slice(0, max || 200);
+}
+
+/* Encrypt-free secret handling: a Bearer token box would be a liability, so the console
+   accepts only an address to probe and reports what it really got back. */
+async function probeUrl(url) {
+  if (!/^https?:\/\//i.test(url)) return { ok: false, reason: "not a web address" };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(url, { method: "GET", headers: { accept: "application/json, text/plain, */*" }, signal: controller.signal });
+    clearTimeout(timer);
+    return { ok: response.ok, status: response.status, at: Date.now() };
+  } catch (error) {
+    return { ok: false, reason: String((error && error.message) || error).slice(0, 120), at: Date.now() };
+  }
+}
+/* ------------------------------- owner API ----------------------------------
+   Read by the console pages. Everything below needs a signed-in staff session;
+   anything that changes stored data needs the owner, and every change writes a log
+   entry naming who made it. */
+async function ownerGuard(request, env, needOwner) {
+  if (!authConfigured(env)) return { error: json({ error: "not_configured" }, 503) };
+  const session = await readSession(request, env);
+  if (!session) return { error: json({ error: "unauthorized" }, 401) };
+  const level = session.level || "none";
+  if (level !== "owner" && level !== "staff") return { error: json({ error: "forbidden", level: level }, 403) };
+  if (needOwner && level !== "owner") return { error: json({ error: "owner_only", level: level }, 403) };
+  return { session: session, level: level };
+}
+
+async function botJson(env, path) {
+  const base = botApiBase(env);
+  if (!base) return null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+    const response = await fetch(base + path, { headers: { accept: "application/json" }, signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) { return null; }
+}
+
+async function ownerApi(request, env) {
+  const url = new URL(request.url);
+  const route = url.pathname.replace("/api/owner/", "");
+  const method = request.method === "HEAD" ? "GET" : request.method;
+  const mutating = method !== "GET";
+  const guard = await ownerGuard(request, env, mutating);
+  if (guard.error) return guard.error;
+  const session = guard.session;
+  const actor = { id: session.userId, name: session.globalName || session.username };
+
+  if (route === "overview" && method === "GET") {
+    const results = await Promise.all([
+      botJson(env, "/api/status"),
+      botJson(env, "/api/guild"),
+      readJson(env, SETTINGS_KEY),
+      accessRules(env),
+    ]);
+    const guild = results[1];
+    return json({
+      you: { id: session.userId, name: session.globalName || session.username, level: guard.level, roles: session.roleNames || [], roleIds: session.roleIds || [] },
+      bot: results[0] || null,
+      guild: (guild && guild.guild) || null,
+      server: results[2] || null,
+      staffRules: results[3],
+      canEdit: guard.level === "owner",
+    }, 200);
+  }
+
+  if (route === "logs" && method === "GET") {
+    const entries = await recentLogs(env, Number(url.searchParams.get("limit") || 40));
+    return json({ entries: entries, count: entries.length }, 200);
+  }
+
+  if (route === "staff" && method === "GET") {
+    const stored = (await readJson(env, STAFF_KEY)) || {};
+    return json({
+      saved: { roleIds: stored.roleIds || [], roleNames: stored.roleNames || [], userIds: stored.userIds || [], users: stored.users || [] },
+      fromEnv: { roleIds: csv(env.STAFF_ROLE_IDS), roleNames: csv(env.STAFF_ROLE_NAMES), userIds: csv(env.STAFF_USER_IDS), users: csv(env.STAFF_USERS) },
+      builtIn: DEFAULT_STAFF_NAMES,
+    }, 200);
+  }
+
+  if (route === "staff" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const kinds = ["roleIds", "roleNames", "userIds", "users"];
+    const kind = kinds.indexOf(String(body.kind || "")) !== -1 ? String(body.kind) : null;
+    const value = tidy(body.value, 120);
+    if (!kind || !value) return json({ error: "bad_request", message: "send kind and value" }, 400);
+    const stored = (await readJson(env, STAFF_KEY)) || {};
+    const list = Array.isArray(stored[kind]) ? stored[kind] : [];
+    const lower = value.toLowerCase();
+    if (list.map(function (x) { return String(x).toLowerCase(); }).indexOf(lower) === -1) list.push(value);
+    stored[kind] = list;
+    await writeJson(env, STAFF_KEY, stored);
+    await appendLog(env, { kind: "staff_add", by: actor, detail: kind + ": " + value });
+    return json({ ok: true, saved: stored }, 200);
+  }
+
+  if (route === "staff" && method === "DELETE") {
+    const body = await request.json().catch(function () { return {}; });
+    const kind = String(body.kind || "");
+    const value = tidy(body.value, 120).toLowerCase();
+    const stored = (await readJson(env, STAFF_KEY)) || {};
+    if (!Array.isArray(stored[kind])) return json({ error: "bad_request" }, 400);
+    stored[kind] = stored[kind].filter(function (x) { return String(x).toLowerCase() !== value; });
+    await writeJson(env, STAFF_KEY, stored);
+    await appendLog(env, { kind: "staff_remove", by: actor, detail: kind + ": " + value });
+    return json({ ok: true, saved: stored }, 200);
+  }
+
+  if (route === "server" && method === "GET") {
+    return json({ settings: (await readJson(env, SETTINGS_KEY)) || null }, 200);
+  }
+
+  if (route === "server" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const previous = (await readJson(env, SETTINGS_KEY)) || {};
+    const settings = {
+      name: tidy(body.name, 80),
+      platform: tidy(body.platform, 30),
+      region: tidy(body.region, 40),
+      rate: tidy(body.rate, 20),
+      wipe: tidy(body.wipe, 120),
+      connect: tidy(body.connect, 120),
+      joinUrl: tidy(body.joinUrl, 300),
+      statusUrl: tidy(body.statusUrl, 300),
+      notes: tidy(body.notes, 600),
+      updatedAt: Date.now(),
+      updatedBy: actor,
+    };
+    if (settings.statusUrl) settings.probe = await probeUrl(settings.statusUrl);
+    await writeJson(env, SETTINGS_KEY, settings);
+    const skip = ["updatedAt", "updatedBy", "probe"];
+    const changed = Object.keys(settings).filter(function (k) {
+      return skip.indexOf(k) === -1 && String(settings[k]) !== String(previous[k] || "");
+    });
+    await appendLog(env, { kind: "server_settings", by: actor, detail: changed.length ? "changed " + changed.join(", ") : "saved with no changes", probe: settings.probe || null });
+    return json({ ok: true, settings: settings }, 200);
+  }
+
+  if (route === "probe" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const target = tidy(body.url, 300);
+    const result = await probeUrl(target);
+    await appendLog(env, { kind: "probe", by: actor, detail: target + " -> " + (result.ok ? "reachable (" + result.status + ")" : "not reachable") });
+    return json({ ok: true, result: result }, 200);
+  }
+
+  return json({ error: "not_found", route: route }, 404);
+}
 /* ---------- the owner-only dashboard ---------- */
+
+const CONSOLE_PAGE = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Owner console - Spinback RCE</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Chakra+Petch:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/ui-extras.css">
+<link rel="stylesheet" href="/dashboard/console.css">
+<link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+</head>
+<body class="sbc">
+<div class="sbc-shell">
+
+  <aside class="sbc-rail">
+    <div class="sbc-brand">
+      <img src="/media/spinback-icon.svg" alt="">
+      <span><b>Spinback RCE</b><span>Owner console</span></span>
+    </div>
+    <div class="sbc-who" id="sbc-who">Signing in&hellip;</div>
+    <nav class="sbc-nav" id="sbc-nav">
+      <div class="sbc-group">Server</div>
+      <a href="#overview" data-panel="overview"><i>&#9632;</i> Overview</a>
+      <a href="#server" data-panel="server"><i>&#9723;</i> Rust server</a>
+      <a href="#roles" data-panel="roles"><i>&#9670;</i> Roles &amp; access</a>
+      <a href="#logs" data-panel="logs"><i>&#9776;</i> Logs</a>
+      <div class="sbc-group">Tools</div>
+      <a href="/dashboard/kitbuilder.html"><i>&#9775;</i> Kit Studio</a>
+      <a href="/status.html"><i>&#9679;</i> Status page</a>
+      <a href="/"><i>&#8962;</i> Public site</a>
+    </nav>
+    <a class="sbc-signout" href="/auth/logout">Sign out</a>
+  </aside>
+
+  <main class="sbc-main">
+
+    <section id="panel-overview" class="sbc-panel">
+      <div class="sbc-head"><h1 id="ov-title">Overview</h1><span id="ov-pill" class="sbc-pill">loading</span></div>
+      <p class="sbc-sub" id="ov-sub">Live state of the bot, straight from its own status endpoint.</p>
+      <div class="sbc-grid" id="ov-grid"></div>
+      <div class="sbc-scroll" style="margin-top:16px"><table class="sbc-table" id="ov-table"><tbody></tbody></table></div>
+    </section>
+
+    <section id="panel-server" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Rust server</h1></div>
+      <p class="sbc-sub">What you enter here is what the console and the public pages show. It is stored in this app's own storage, never invented.</p>
+      <form id="server-form" class="sbc-form">
+        <div class="sbc-field"><label for="f-name">Server name</label><input id="f-name" maxlength="80" placeholder="e.g. the name players see in the server browser"></div>
+        <div class="sbc-field"><label for="f-platform">Platform</label><input id="f-platform" maxlength="30" placeholder="Console Edition"></div>
+        <div class="sbc-field"><label for="f-region">Region</label><input id="f-region" maxlength="40" placeholder="e.g. EU"></div>
+        <div class="sbc-field"><label for="f-rate">Rate</label><input id="f-rate" maxlength="20" placeholder="e.g. 5x"></div>
+        <div class="sbc-field"><label for="f-wipe">Wipe schedule</label><input id="f-wipe" maxlength="120" placeholder="e.g. first Thursday, monthly"></div>
+        <div class="sbc-field"><label for="f-connect">How to join</label><input id="f-connect" maxlength="120" placeholder="e.g. search the name above in-game"></div>
+        <div class="sbc-field"><label for="f-join">Join / invite link</label><input id="f-join" maxlength="300" placeholder="https://"></div>
+        <div class="sbc-field"><label for="f-status">Host status URL</label><input id="f-status" maxlength="300" placeholder="https:// (optional)"></div>
+        <div class="sbc-field wide"><label for="f-notes">Notes</label><textarea id="f-notes" maxlength="600" placeholder="Anything else players should know."></textarea></div>
+      </form>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="server-save" type="button">Save</button>
+        <button class="sbc-btn" id="server-probe" type="button">Check status URL</button>
+        <span class="sbc-msg" id="server-msg"></span>
+      </div>
+      <p class="sbc-note sbc-sub" style="margin-top:14px">Console Edition servers publish no query endpoint, so there is no live player count unless your host gives you a status URL. The button above only reports what that address really answered.</p>
+      <div class="sbc-scroll"><table class="sbc-table" id="server-meta"><tbody></tbody></table></div>
+    </section>
+
+    <section id="panel-roles" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Roles &amp; access</h1><span id="roles-pill" class="sbc-pill"></span></div>
+      <p class="sbc-sub">Who gets into this dashboard. The owner is the Discord server owner plus anyone listed by user id; staff are the people below, plus anyone with Administrator or Manage Server.</p>
+      <div class="sbc-grid" id="roles-you"></div>
+      <h2 style="margin-top:22px">Staff rules in force</h2>
+      <p class="note" id="roles-source"></p>
+      <div class="sbc-scroll"><table class="sbc-table" id="roles-rules"><tbody></tbody></table></div>
+      <h2 style="margin-top:22px">Add someone</h2>
+      <p class="note" id="roles-addnote">Saved rules take effect on the next sign-in or refresh. Entries that came from the app's settings are shown for reference and cannot be removed here.</p>
+      <div class="sbc-form">
+        <div class="sbc-field"><label for="r-kind">Rule</label>
+        <select id="r-kind"><option value="roleIds">Role id</option><option value="roleNames">Role name</option><option value="userIds">User id</option><option value="users">Username</option></select></div>
+        <div class="sbc-field"><label for="r-value">Value</label><input id="r-value" maxlength="120" placeholder="id or exact name"></div>
+      </div>
+      <div class="sbc-row"><button class="sbc-btn sbc-btn-go" id="roles-add" type="button">Add rule</button><span class="sbc-msg" id="roles-msg"></span></div>
+      <h2 style="margin-top:22px">Roles on the Discord server</h2>
+      <p class="note" id="roles-guildnote"></p>
+      <div class="sbc-scroll"><table class="sbc-table" id="roles-guild"><tbody></tbody></table></div>
+    </section>
+
+    <section id="panel-logs" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Logs</h1><span class="sbc-pill" id="logs-count">0 events</span></div>
+      <p class="sbc-sub">One line per event that really happened, with who did it. Nothing here is generated on a schedule.</p>
+      <div class="sbc-row"><button class="sbc-btn" id="logs-refresh" type="button">Refresh</button><span class="sbc-msg" id="logs-msg"></span></div>
+      <div class="sbc-scroll"><table class="sbc-table" id="logs-table"><thead><tr><th>When</th><th>Event</th><th>Who</th><th>Detail</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+  </main>
+</div>
+<script src="/dashboard/console.js" defer></script>
+</body>
+</html>
+`;
+
 
 function avatarUrl(session) {
   if (!session.avatar) return null;
@@ -882,7 +1208,11 @@ async function dashboard(request, env) {
   const session = await readSession(request, env);
   if (!session) return redirect("/auth/login");
   /* Staff and the owner only. A signed-in non-staff account is told why. */
-  if (session.level !== "owner" && session.level !== "staff") return notStaff(session, env);
+  if (session.level !== "owner" && session.level !== "staff") return await notStaff(session, env);
+  /* The console is served from here rather than as a static file: Cloudflare hands an
+     existing asset straight to the visitor without waking the Worker, so a file on disk
+     would be readable by anybody even though every endpoint behind it is gated. */
+  return html(CONSOLE_PAGE);
 
   /* Live numbers straight from the bot API (server-side, so no CORS involved). */
   let stats = null;
@@ -1004,11 +1334,12 @@ export default {
       });
     }
     if (url.pathname === "/api/history") return statusHistory(request, env);
+    if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
     /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
     if (url.pathname === "/api/roles") {
       const roleSession = await readSession(request, env);
       if (!roleSession) return json({ authenticated: false }, 200);
-      return json(sessionRoles(request, env, roleSession), 200);
+      return json(await sessionRoles(request, env, roleSession), 200);
     }
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
@@ -1024,7 +1355,7 @@ export default {
         return redirect("/auth/login?next=" + encodeURIComponent(url.pathname + url.search));
       }
       /* Staff or the owner, for every page under /dashboard/, not just the front page. */
-      if (treeSession.level !== "owner" && treeSession.level !== "staff") return notStaff(treeSession, env);
+      if (treeSession.level !== "owner" && treeSession.level !== "staff") return await notStaff(treeSession, env);
       if (url.pathname === "/dashboard") return dashboard(request, env);
       return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
     }
