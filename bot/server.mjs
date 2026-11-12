@@ -243,6 +243,22 @@ const env = {
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
   const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  /* Every server the bot is in right now. The website asks this before it will set anything
+     up: a server Spinback is not in cannot be configured, so the page says so plainly and
+     offers the invite instead of pretending otherwise. */
+  if (req.method === 'GET' && url === '/api/guilds') {
+    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    const guilds = [...client.guilds.cache.values()].map((g) => ({
+      id: g.id,
+      name: g.name,
+      memberCount: g.memberCount,
+      ownerId: g.ownerId || null,
+    }));
+    res.writeHead(200, cors);
+    res.end(JSON.stringify({ ready: state.gateway === 'online', gateway: state.gateway, count: guilds.length, guilds }));
+    return;
+  }
+
   if (req.method === 'GET' && url === '/api/guild') {
     const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
