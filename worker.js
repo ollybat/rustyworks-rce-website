@@ -131,10 +131,20 @@ async function signSession(session, secret) {
   return payload + "." + signature;
 }
 
+/* This host does not keep cookies: a real browser visited /auth/login and the very next
+   request arrived with no cookie header at all - the platform does not pass Set-Cookie
+   through. So a session also travels as a header, and the console page reads it out of the
+   address once after sign-in. A cookie is still accepted whenever a browser sends one. */
+function bearerToken(request) {
+  const auth = request.headers.get("authorization") || "";
+  if (/^bearer /i.test(auth)) return auth.slice(7).trim();
+  return (request.headers.get("x-spinback-session") || "").trim();
+}
+
 async function readSession(request, env) {
   const sessionSecret = await ensureSessionSecret(env);
   if (!sessionSecret) return null;
-  const raw = cookies(request)[SESSION_COOKIE];
+  const raw = bearerToken(request) || cookies(request)[SESSION_COOKIE];
   if (!raw) return null;
   const dot = raw.lastIndexOf(".");
   if (dot < 1) return null;
@@ -862,11 +872,23 @@ async function authCallback(request, env) {
    carries. */
 async function authFinish(request, env) {
   const url = new URL(request.url);
-  const token = String(url.searchParams.get("t") || "");
-  const next = safeNext(url.searchParams.get("next"));
+  const token = tidy(url.searchParams.get("t"), 4000);
+  const next = tidy(safeNext(url.searchParams.get("next")), 300);
   const headers = new Headers();
   if (token) headers.append("set-cookie", cookieHeader(SESSION_COOKIE, token, SESSION_DAYS * 86400));
-  return redirect(next, headers);
+  /* Handing the session to the page as well as to a cookie, because the cookie is dropped
+     on this host. The page keeps it and sends it with every request it makes. */
+  return html('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+    + '<meta name="robots" content="noindex">'
+    + '<title>Signing in - Spinback RCE</title>'
+    + '<link rel="stylesheet" href="/style.css"></head><body>'
+    + '<div class="wrap" style="padding:48px 0;max-width:640px"><h1 style="font-family:Oswald,sans-serif">Signing you in&hellip;</h1>'
+    + '<p>Keeping you signed in for this browser, then opening the console.</p>'
+    + '<p><a class="btn" href="' + escapeHtml(next) + '">Continue to the console</a></p></div>'
+    + '<script>(function(){try{localStorage.setItem("spinback-session",' + JSON.stringify(token) + ');}catch(e){}'
+    + 'location.replace(' + JSON.stringify(next) + ');})();<\/script>'
+    + '</body></html>', 200, headers);
 }
 
 function authLogout(request) {
@@ -1365,7 +1387,8 @@ const CONSOLE_PAGE = `<!DOCTYPE html>
       <a href="/status.html"><i>&#9679;</i> Status page</a>
       <a href="/"><i>&#8962;</i> Public site</a>
     </nav>
-    <a class="sbc-signout" href="/auth/logout">Sign out</a>
+    <a class="sbc-signout" href="/auth/login?next=/dashboard">Sign in</a>
+      <a class="sbc-signout" href="/auth/logout">Sign out</a>
   </aside>
 
   <main class="sbc-main">
@@ -1445,7 +1468,10 @@ async function dashboard(request, env) {
   if (!(await authReady(env))) return needsSetup(env, request);
 
   const session = await readSession(request, env);
-  if (!session) return redirect("/auth/login");
+  /* The shell is served without a session on purpose: the session cannot always live in a
+     cookie on this host. It carries no data of its own - every panel fetches, and every
+     fetch is checked. */
+  if (!session) return html(CONSOLE_PAGE);
   /* Staff and the owner only. A signed-in non-staff account is told why. */
   if (session.level !== "owner" && session.level !== "staff") return await notStaff(session, env);
   /* The console is served from here rather than as a static file: Cloudflare hands an
@@ -1573,6 +1599,10 @@ export default {
         botExchangeAvailable: (await resolveSecrets(env)).botExchange,
         /* Recent sign-in outcomes, reason codes only - no ids, no tokens - so a failure can
            be read straight off this endpoint instead of guessing. */
+        /* Whether this very request arrived carrying our cookies. Names and yes/no only. */
+        sawStateCookie: Boolean(cookies(request).spinback_oauth_state),
+        sawSessionCookie: Boolean(cookies(request)[SESSION_COOKIE]),
+        cookieHeaderCount: (request.headers.get("cookie") || "").split(";").filter(Boolean).length,
         signInLog: (await recentLogs(env, 12)).map(function (e) { return { t: e.t, kind: e.kind, detail: e.detail }; })
           .filter(function (e) { return String(e.kind || "").indexOf("sign_in") === 0; }).slice(0, 6),
         statusLogBound: Boolean(env.STATUS_LOG),
@@ -1600,11 +1630,9 @@ export default {
       }
       if (!(await authReady(env))) return needsSetup(env, request);
       const treeSession = await readSession(request, env);
-      if (!treeSession) {
-        return redirect("/auth/login?next=" + encodeURIComponent(url.pathname + url.search));
-      }
-      /* Staff or the owner, for every page under /dashboard/, not just the front page. */
-      if (treeSession.level !== "owner" && treeSession.level !== "staff") return await notStaff(treeSession, env);
+      /* Anyone signed in who is not staff gets the explanation page. Without a session the
+         page is still served: it holds no data, and the endpoints it calls do the checking. */
+      if (treeSession && treeSession.level !== "owner" && treeSession.level !== "staff") return await notStaff(treeSession, env);
       if (url.pathname === "/dashboard") return dashboard(request, env);
       return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
     }
