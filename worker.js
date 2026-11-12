@@ -548,6 +548,23 @@ async function kitAsset(url, ctx, env) {
 
 /* ---------- Discord sign-in ---------- */
 
+/* Only the permissions this dashboard has any use for, named the way Discord names them. */
+const PERMISSION_NAMES = [
+  [8, "Administrator"],
+  [32, "Manage Server"],
+  [268435456, "Manage Roles"],
+  [16, "Manage Channels"],
+  [128, "View Audit Log"],
+  [8192, "Manage Messages"],
+  [2, "Kick Members"],
+  [4, "Ban Members"],
+];
+function permissionNames(raw) {
+  let bits = 0;
+  try { bits = Number(BigInt(String(raw || "0"))); } catch (error) { bits = 0; }
+  return PERMISSION_NAMES.filter(function (p) { return (bits & p[0]) === p[0]; }).map(function (p) { return p[1]; });
+}
+
 /* Discord's own invite screen for this application - the only way a server owner can put
    Spinback into their server, so every page that needs the bot present links to it. */
 function inviteUrl(env, guildId) {
@@ -849,8 +866,16 @@ async function authCallback(request, env) {
      session should stay small. */
   const adminGuilds = (Array.isArray(guilds) ? guilds : [])
     .filter(function (g) { return g && (g.owner === true || (Number(g.permissions || 0) & 32) === 32); })
-    .slice(0, 25)
-    .map(function (g) { return { id: String(g.id), name: tidy(g.name, 80), owner: g.owner === true }; });
+    .slice(0, 20)
+    .map(function (g) {
+      return {
+        id: String(g.id),
+        name: tidy(g.name, 60),
+        owner: g.owner === true,
+        access: g.owner === true ? "owner" : "manage",
+        icon: tidy(g.icon, 64) || null,
+      };
+    });
 
   const level = accessLevel(await accessRules(env), {
     guildOwner: Boolean(guild && guild.owner === true),
@@ -927,6 +952,10 @@ async function authMe(request, env) {
   if (!(await authReady(env))) return json({ authenticated: false, configured: false }, 200);
   const session = await readSession(request, env);
   if (!session) return json({ authenticated: false, configured: true }, 200);
+  /* What the bot reports about the server, purely so the profile can show its picture and
+     size. If the bot is quiet this is null and the page says as much. */
+  const reported = await botJson(env, "/api/guild");
+  const reportedGuild = (reported && reported.guild) || null;
   return json({
     authenticated: true,
     configured: true,
@@ -935,8 +964,20 @@ async function authMe(request, env) {
       username: session.username,
       name: session.globalName || session.username,
       avatar: avatarUrl(session),
+      avatarBig: avatarUrlSize(session, 256),
     },
-    guild: { id: session.guildId, name: session.guildName },
+    guild: {
+      id: session.guildId,
+      name: session.guildName,
+      icon: (reportedGuild && reportedGuild.icon) || null,
+      memberCount: (reportedGuild && reportedGuild.memberCount) || null,
+      reported: Boolean(reportedGuild),
+    },
+    permissions: String(session.permissions || "0"),
+    permissionNames: permissionNames(session.permissions),
+    expiresAt: session.exp || null,
+    sessionDays: SESSION_DAYS,
+    servers: session.adminGuilds || [],
     role: session.level || "none",
     level: session.level || "none",
     roles: session.roleIds || [],
@@ -1273,7 +1314,15 @@ async function setupStatus(request, env) {
   const known = await botGuilds(env);
   const manageable = (session && Array.isArray(session.adminGuilds) ? session.adminGuilds : []).map(function (g) {
     const inIt = known === null ? null : known.some(function (k) { return k.id === g.id; });
-    return { id: g.id, name: g.name, owner: Boolean(g.owner), botPresent: inIt, invite: inviteUrl(env, g.id) };
+    return {
+      id: g.id,
+      name: g.name,
+      owner: Boolean(g.owner),
+      access: g.access || (g.owner ? "owner" : "manage"),
+      icon: g.icon || null,
+      botPresent: inIt,
+      invite: inviteUrl(env, g.id),
+    };
   });
   return json({
     signedIn: Boolean(session),
@@ -1526,6 +1575,12 @@ const CONSOLE_PAGE = `<!DOCTYPE html>
 </html>
 `;
 
+
+function avatarUrlSize(session, size) {
+  if (!session.avatar) return null;
+  const kind = session.avatar.startsWith("a_") ? "gif" : "png";
+  return "https://cdn.discordapp.com/avatars/" + session.userId + "/" + session.avatar + "." + kind + "?size=" + (size || 128);
+}
 
 function avatarUrl(session) {
   if (!session.avatar) return null;
