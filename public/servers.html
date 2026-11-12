@@ -16,13 +16,13 @@
     <title>Your Servers - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
     <meta name="apple-mobile-web-app-title" content="Spinback">
-    <meta name="description" content="Sign in and Spinback shows every Discord server you can manage, and whether the bot is in it yet. No slash command needed.">
+    <meta name="description" content="Sign in and Spinback lists every Discord server you can manage, with the bot explained server by server. No slash command needed.">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/servers.html">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Spinback RCE">
     <meta property="og:title" content="Your Servers - Spinback RCE">
-    <meta property="og:description" content="Sign in and Spinback shows every Discord server you can manage, and whether the bot is in it yet. No slash command needed.">
+    <meta property="og:description" content="Sign in and Spinback lists every Discord server you can manage, with the bot explained server by server. No slash command needed.">
     <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/servers.html">
     <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta property="og:image:width" content="1200">
@@ -31,7 +31,7 @@
     <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Your Servers - Spinback RCE">
-    <meta name="twitter:description" content="Sign in and Spinback shows every Discord server you can manage, and whether the bot is in it yet. No slash command needed.">
+    <meta name="twitter:description" content="Sign in and Spinback lists every Discord server you can manage, with the bot explained server by server. No slash command needed.">
     <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta name="twitter:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -75,23 +75,29 @@
         <div class="wrap">
           <span class="tag">Your account</span>
           <h1>Your <span class="accent">Servers</span></h1>
-          <p>Signing in is all it takes - there is no Discord command to remember. This page lists every server you can manage and says, for each one, whether Spinback is in it yet.</p>
+          <p>Signing in is all it takes - there is no Discord command to remember. Every server you can manage is listed here, and each one says plainly whether Spinback is in it yet.</p>
+          <p>Nothing can be set up in a server the bot is not in, so this is the first step, and it is answered by the bot itself rather than guessed.</p>
         </div>
       </section>
 
       <section>
         <div class="wrap">
+          <div id="acctBar"></div>
           <nav class="acct-tabs" id="acctTabs" aria-label="Account pages"></nav>
+
           <div class="panel-box">
             <h2>Servers you can manage</h2>
-            <p class="note" style="margin-top:10px">Answered by the bot itself, never guessed. When the bot cannot be reached this says so instead of pretending.</p>
+            <p class="note" style="margin-top:10px">The invite buttons below open Discord with that server already chosen, so there is no list to search through.</p>
             <div class="sb-setup" id="sb-setup"></div>
           </div>
 
           <div class="panel-box u-mt-18">
-            <h2>What happens once it is there</h2>
-            <p class="note" style="margin-top:10px">The server owner opens the dashboard and fills in the details players see: rates, wipe schedule and how to join. Nothing can be set up before the bot is in the server, so this page is the first step rather than a form.</p>
-            <div class="u-mt-18"><a class="btn ghost" href="/servers.html">Check again</a></div>
+            <h2>What happens once Spinback is in</h2>
+            <p class="note" style="margin-top:10px">The server owner opens the dashboard and fills in the details players see: platform, region, rates, wipe schedule and how to join. This page stays the honest check on where the bot actually is.</p>
+            <div class="u-mt-18">
+              <a class="btn ghost" href="/servers.html">Check again</a>
+              <a class="btn ghost" href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Ask in the support server</a>
+            </div>
           </div>
         </div>
       </section>
