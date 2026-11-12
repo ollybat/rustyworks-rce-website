@@ -1,0 +1,23 @@
+/* Measured uptime panel for the status page. Every figure is read from /api/history. */
+.stp-wrap { padding: 34px 0 0; }
+.stp-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 22px; display: grid; gap: 18px; }
+.stp-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; }
+.stp-head h2 { margin: 0; font-size: 21px; }
+.stp-live { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px; }
+.stp-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: stp-pulse 2s infinite; }
+@keyframes stp-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.stp-stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.stp-stat { border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; background: rgba(255,255,255,.02); }
+.stp-num { font-size: 26px; font-weight: 600; line-height: 1.15; }
+.stp-num.good { color: var(--green); }
+.stp-num.warn { color: var(--ember); }
+.stp-label { color: var(--text-dim); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.stp-chart { display: flex; align-items: flex-end; gap: 3px; height: 96px; padding: 6px 0 0; }
+.stp-bar { flex: 1 1 0; min-width: 3px; border-radius: 3px 3px 0 0; background: rgba(108,194,74,.65); transition: height .3s ease; }
+.stp-bar.odd { background: rgba(244,162,89,.75); }
+.stp-bar.none { background: rgba(255,255,255,.06); height: 4px !important; }
+.stp-axis { display: flex; justify-content: space-between; color: var(--text-dim); font-size: 12px; }
+.stp-note { color: var(--text-dim); font-size: 13px; line-height: 1.6; margin: 0; }
+.stp-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.stp-msg { font-size: 13px; color: var(--text-dim); min-height: 18px; }
+@media (prefers-reduced-motion: reduce) { .stp-live i { animation: none; } .stp-bar { transition: none; } }
