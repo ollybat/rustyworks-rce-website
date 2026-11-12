@@ -132,7 +132,7 @@ async function signSession(session, secret) {
 }
 
 async function readSession(request, env) {
-  const sessionSecret = (await resolveSecrets(env)).sessionSecret;
+  const sessionSecret = await ensureSessionSecret(env);
   if (!sessionSecret) return null;
   const raw = cookies(request)[SESSION_COOKIE];
   if (!raw) return null;
@@ -562,6 +562,7 @@ async function needsSetup(env, request, notice) {
     ["DISCORD_CLIENT_SECRET", Boolean(sec.clientSecret)],
     ["DISCORD_GUILD_ID", Boolean(env.DISCORD_GUILD_ID)],
     ["SESSION_SECRET", Boolean(sec.sessionSecret)],
+    ["Bot can exchange codes", sec.botExchange],
     ["Status storage", Boolean(env.STATUS_LOG)]
   ];
   let live = null;
@@ -731,19 +732,31 @@ async function authCallback(request, env) {
     return html("<p>That sign-in link is stale or came from somewhere else. <a href=\"/dashboard\">Start again</a>.</p>", 400);
   }
 
-  const tokenResponse = await fetch(DISCORD_API + "/oauth2/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId(env),
-      client_secret: (await resolveSecrets(env)).clientSecret,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: url.origin + "/auth/callback",
-    }),
-  });
-  if (!tokenResponse.ok) return html("<p>Discord would not exchange that sign-in code. <a href=\"/dashboard\">Try again</a>.</p>", 502);
-  const token = await tokenResponse.json();
+  const redirectUri = url.origin + "/auth/callback";
+  const sec = await resolveSecrets(env);
+  let token = null;
+  if (sec.clientSecret) {
+    const tokenResponse = await fetch(DISCORD_API + "/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId(env),
+        client_secret: sec.clientSecret,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+      }),
+    });
+    token = tokenResponse.ok ? await tokenResponse.json() : { error: "local_exchange_failed_" + tokenResponse.status };
+  } else {
+    /* The secret lives on the bot, so the bot performs the exchange. Codes belong to this
+       application, so one issued anywhere else fails at Discord and never reaches us. */
+    token = await botExchange(env, code, redirectUri);
+  }
+  if (!token || !token.access_token) {
+    const why = token && token.error ? String(token.error) : "no_answer";
+    return html("<p>Discord would not exchange that sign-in code (" + escapeHtml(why) + "). <a href=\"/dashboard\">Try again</a>.</p>", 502);
+  }
 
   const headers = { authorization: "Bearer " + token.access_token };
   const [userResponse, guildsResponse] = await Promise.all([
@@ -798,7 +811,7 @@ async function authCallback(request, env) {
   await appendLog(env, { kind: "sign_in", by: { id: user.id, name: user.global_name || user.username }, detail: "level " + level + " on " + (session.guildName || "the server") });
 
   const sessionHeaders = new Headers();
-  sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, await signSession(session, (await resolveSecrets(env)).sessionSecret), SESSION_DAYS * 86400));
+  sessionHeaders.append("set-cookie", cookieHeader(SESSION_COOKIE, await signSession(session, await ensureSessionSecret(env)), SESSION_DAYS * 86400));
   sessionHeaders.append("set-cookie", cookieHeader(NEXT_COOKIE, "", 0));
   return redirect(safeNext(cookies(request)[NEXT_COOKIE]), sessionHeaders);
 }
@@ -968,16 +981,82 @@ async function probeUrl(url) {
 const SECRETS_KEY = "spinback-rce/settings/auth.json";
 let secretsCache = { at: 0, value: null };
 
+/* Whether the bot's service can swap an OAuth code. The secret only ever had to exist in
+   one place, and that place is the bot, so this is checked once a minute and cached. */
+const EXCHANGE_CACHE = { at: 0, value: null };
+
+async function botExchangeReady(env) {
+  const now = Date.now();
+  if (EXCHANGE_CACHE.value !== null && now - EXCHANGE_CACHE.at < 60000) return EXCHANGE_CACHE.value;
+  const base = botApiBase(env);
+  let ready = false;
+  if (base) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+      const response = await fetch(base + "/api/status", { headers: { accept: "application/json" }, signal: controller.signal });
+      clearTimeout(timer);
+      if (response.ok) {
+        const data = await response.json().catch(function () { return {}; });
+        ready = Boolean(data && data.oauthExchange === true);
+      }
+    } catch (error) { ready = false; }
+  }
+  EXCHANGE_CACHE.at = now;
+  EXCHANGE_CACHE.value = ready;
+  return ready;
+}
+
+async function botExchange(env, code, redirectUri) {
+  const base = botApiBase(env);
+  if (!base) return { error: "bot_not_configured" };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+    const response = await fetch(base + "/api/oauth/exchange", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ code: code, redirectUri: redirectUri }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = await response.json().catch(function () { return {}; });
+    if (data && data.access_token) return data;
+    return { error: (data && data.error) || ("bot_http_" + response.status) };
+  } catch (error) { return { error: "bot_unreachable" }; }
+}
+
+/* Sessions need a signing key even when nobody pasted one, so it is generated here and kept
+   in this app's own storage. An app variable always wins if it is set. */
+let sessionSecretCache = null;
+
+async function ensureSessionSecret(env) {
+  if (env.SESSION_SECRET) return env.SESSION_SECRET;
+  if (sessionSecretCache) return sessionSecretCache;
+  const stored = await readJson(env, SECRETS_KEY);
+  if (stored && stored.sessionSecret) { sessionSecretCache = stored.sessionSecret; return sessionSecretCache; }
+  const fresh = base64url(crypto.getRandomValues(new Uint8Array(48)));
+  const merged = Object.assign({}, stored || {});
+  merged.sessionSecret = fresh;
+  await writeJson(env, SECRETS_KEY, merged);
+  sessionSecretCache = fresh;
+  return fresh;
+}
+
 async function resolveSecrets(env) {
   const now = Date.now();
   if (secretsCache.value && now - secretsCache.at < 60000) return secretsCache.value;
   let stored = null;
   if (!env.DISCORD_CLIENT_SECRET || !env.SESSION_SECRET) stored = await readJson(env, SECRETS_KEY);
+  const botExchange = await botExchangeReady(env);
   const value = {
-    clientId: env.DISCORD_CLIENT_ID || (stored && stored.clientId) || DEFAULT_CLIENT_ID,
+    clientId: env.DISCORD_CLIENT_ID || DEFAULT_CLIENT_ID,
     clientSecret: env.DISCORD_CLIENT_SECRET || (stored && stored.clientSecret) || null,
-    sessionSecret: env.SESSION_SECRET || (stored && stored.sessionSecret) || null,
-    source: env.DISCORD_CLIENT_SECRET && env.SESSION_SECRET ? "the app's variables" : (stored ? "saved on this site" : "nowhere yet"),
+    sessionSecret: env.SESSION_SECRET || (stored && stored.sessionSecret) || sessionSecretCache || null,
+    botExchange: botExchange,
+    source: env.DISCORD_CLIENT_SECRET && env.SESSION_SECRET
+      ? "this app's variables"
+      : (stored && stored.clientSecret ? "this site's own storage" : (botExchange ? "the bot's service" : "nowhere yet")),
   };
   secretsCache = { at: now, value: value };
   return value;
@@ -987,7 +1066,11 @@ function forgetSecrets() { secretsCache = { at: 0, value: null }; }
 
 async function authReady(env) {
   const sec = await resolveSecrets(env);
-  return Boolean(sec.clientId && sec.clientSecret && env.DISCORD_GUILD_ID && sec.sessionSecret);
+  if (!sec.clientId || !env.DISCORD_GUILD_ID) return false;
+  if (sec.clientSecret) return Boolean(await ensureSessionSecret(env));
+  /* No secret here: the bot holds it, so delegating is enough. */
+  if (sec.botExchange) { await ensureSessionSecret(env); return true; }
+  return false;
 }
 
 /* Ask Discord whether the pasted secret belongs to this application. A wrong secret comes
@@ -1434,6 +1517,7 @@ export default {
         clientSecretSet: Boolean((await resolveSecrets(env)).clientSecret),
         sessionSecretSet: Boolean((await resolveSecrets(env)).sessionSecret),
         secretsSource: (await resolveSecrets(env)).source,
+        botExchangeAvailable: (await resolveSecrets(env)).botExchange,
         statusLogBound: Boolean(env.STATUS_LOG),
         /* Names only - never values. This is the definitive answer to which variables the
            running worker actually receives. */
