@@ -548,6 +548,22 @@ async function kitAsset(url, ctx, env) {
 
 /* ---------- Discord sign-in ---------- */
 
+/* Discord's own invite screen for this application - the only way a server owner can put
+   Spinback into their server, so every page that needs the bot present links to it. */
+function inviteUrl(env, guildId) {
+  const base = "https://discord.com/oauth2/authorize?client_id=" + encodeURIComponent(clientId(env))
+    + "&scope=bot%20applications.commands&permissions=8";
+  return base + (guildId ? "&guild_id=" + encodeURIComponent(guildId) + "&disable_guild_select=true" : "");
+}
+
+/* The servers the bot reports it is in. null means "could not ask" - which is reported as
+   unknown, never as "not there". */
+async function botGuilds(env) {
+  const answer = await botJson(env, "/api/guilds");
+  if (!answer || !Array.isArray(answer.guilds)) return null;
+  return answer.guilds.map(function (g) { return { id: String(g.id), name: g.name || "" }; });
+}
+
 function clientId(env) {
   return env.DISCORD_CLIENT_ID || DEFAULT_CLIENT_ID;
 }
@@ -828,6 +844,14 @@ async function authCallback(request, env) {
   const nameFor = await guildRoleNames(env);
   const roleNames = roleIds.map((id) => nameFor[id]).filter(Boolean);
 
+  /* The servers this account can actually manage. The setup page needs them, and a session
+     is the only place the sign-in result can be kept, so they ride along - capped, because a
+     session should stay small. */
+  const adminGuilds = (Array.isArray(guilds) ? guilds : [])
+    .filter(function (g) { return g && (g.owner === true || (Number(g.permissions || 0) & 32) === 32); })
+    .slice(0, 25)
+    .map(function (g) { return { id: String(g.id), name: tidy(g.name, 80), owner: g.owner === true }; });
+
   const level = accessLevel(await accessRules(env), {
     guildOwner: Boolean(guild && guild.owner === true),
     permissions: (guild && guild.permissions) || "0",
@@ -851,6 +875,7 @@ async function authCallback(request, env) {
     roleIds,
     roleNames,
     permissions: (guild && guild.permissions) || "0",
+    adminGuilds: adminGuilds,
     exp: Date.now() + SESSION_DAYS * 86400000,
   };
   await appendLog(env, { kind: "sign_in", by: { id: user.id, name: user.global_name || user.username }, detail: "level " + level + " on " + (session.guildName || "the server") });
@@ -1240,7 +1265,29 @@ async function botJson(env, path) {
   } catch (error) { return null; }
 }
 
+/* What the setup page is allowed to know: whether you are signed in, which servers you can
+   manage, and for each of those whether Spinback is already in it. Read-only, and it only
+   ever describes servers the person asking can already see in their own Discord client. */
+async function setupStatus(request, env) {
+  const session = await readSession(request, env);
+  const known = await botGuilds(env);
+  const manageable = (session && Array.isArray(session.adminGuilds) ? session.adminGuilds : []).map(function (g) {
+    const inIt = known === null ? null : known.some(function (k) { return k.id === g.id; });
+    return { id: g.id, name: g.name, owner: Boolean(g.owner), botPresent: inIt, invite: inviteUrl(env, g.id) };
+  });
+  return json({
+    signedIn: Boolean(session),
+    you: session ? { name: session.globalName || session.username, level: session.level } : null,
+    configuredGuildId: String(env.DISCORD_GUILD_ID || ""),
+    botReporting: known !== null,
+    botGuildCount: known === null ? null : known.length,
+    manageable: manageable,
+    invite: inviteUrl(env),
+  }, 200);
+}
+
 async function ownerApi(request, env) {
+
   const url = new URL(request.url);
   const route = url.pathname.replace("/api/owner/", "");
   const method = request.method === "HEAD" ? "GET" : request.method;
@@ -1311,10 +1358,31 @@ async function ownerApi(request, env) {
   }
 
   if (route === "server" && method === "GET") {
-    return json({ settings: (await readJson(env, SETTINGS_KEY)) || null }, 200);
+    const known = await botGuilds(env);
+    const configured = String(env.DISCORD_GUILD_ID || "");
+    return json({
+      settings: (await readJson(env, SETTINGS_KEY)) || null,
+      /* Server settings mean nothing while the bot is not in the server, so this tells the
+         panel the truth about that and how to fix it. null = could not ask, not "absent". */
+      botInGuild: known === null ? null : known.some(function (g) { return g.id === configured; }),
+      botReporting: known !== null,
+      guildId: configured,
+      invite: inviteUrl(env, configured),
+    }, 200);
   }
 
   if (route === "server" && method === "POST") {
+    /* Nothing can be set up in a server the bot is not in: the settings would save and do
+       nothing. Refused outright, with the invite, rather than stored and forgotten. */
+    const knownNow = await botGuilds(env);
+    const configuredNow = String(env.DISCORD_GUILD_ID || "");
+    if (knownNow !== null && !knownNow.some(function (g) { return g.id === configuredNow; })) {
+      return json({
+        error: "bot_missing",
+        message: "Spinback is not in that server yet, so there is nothing to set up.",
+        invite: inviteUrl(env, configuredNow),
+      }, 409);
+    }
     const body = await request.json().catch(function () { return {}; });
     const previous = (await readJson(env, SETTINGS_KEY)) || {};
     const settings = {
@@ -1419,6 +1487,7 @@ const CONSOLE_PAGE = `<!DOCTYPE html>
         <button class="sbc-btn" id="server-probe" type="button">Check status URL</button>
         <span class="sbc-msg" id="server-msg"></span>
       </div>
+      <div class="sbc-gate" id="server-gate"></div>
       <p class="sbc-note sbc-sub" style="margin-top:14px">Console Edition servers publish no query endpoint, so there is no live player count unless your host gives you a status URL. The button above only reports what that address really answered.</p>
       <div class="sbc-scroll"><table class="sbc-table" id="server-meta"><tbody></tbody></table></div>
     </section>
@@ -1615,6 +1684,7 @@ export default {
     if (url.pathname === "/api/setup") return authSetup(request, env);
     if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
     /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
+    if (url.pathname === "/api/setup-status") return setupStatus(request, env);
     if (url.pathname === "/api/roles") {
       const roleSession = await readSession(request, env);
       if (!roleSession) return json({ authenticated: false }, 200);
