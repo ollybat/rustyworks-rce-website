@@ -26,10 +26,16 @@
 /* Your bot's API address, set as BOT_API_ORIGIN on this app. It is deliberately not
    defaulted to anything: the site must never quietly read a third party's API and
    present its numbers as yours. Empty means "not connected", and it says so. */
+const BOT_API_FALLBACK = "https://rustyworks-rce-website-production.up.railway.app";
 function botApiBase(env) {
-  return ((env && env.BOT_API_ORIGIN) || "").replace(/\/+$/, "");
+  /* BOT_API_ORIGIN still wins if it is set; otherwise use the bot's Railway domain so
+     the site reads live status out of the box. */
+  const configured = ((env && env.BOT_API_ORIGIN) || "").trim();
+  return (configured || BOT_API_FALLBACK).replace(/\/+$/, "");
 }
-const API_TIMEOUT_MS = 8000;
+/* The bot sleeps between requests on its host, so its first answer after an idle
+   spell can take a while. Give it room instead of reporting a false outage. */
+const API_TIMEOUT_MS = 20000;
 const DISCORD_API = "https://discord.com/api/v10";
 const SESSION_COOKIE = "spinback_session";
 const SESSION_DAYS = 7;
@@ -415,13 +421,18 @@ async function proxyApi(request, env, ctx) {
     return new Response(body, {
       status: upstream.status,
       headers: {
-        "content-type": source.headers.get("content-type") || "application/json; charset=utf-8",
+        "content-type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
         "cache-control": "public, max-age=60",
         "access-control-allow-origin": "*",
       },
     });
   } catch (error) {
-    return json({ error: "api_unreachable" }, 502);
+    return json({
+      error: "api_unreachable",
+      reason: String((error && error.message) || error).slice(0, 140),
+      target: base,
+      timeoutMs: API_TIMEOUT_MS,
+    }, 502);
   } finally {
     clearTimeout(timer);
   }
