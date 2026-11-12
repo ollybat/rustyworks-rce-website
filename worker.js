@@ -696,6 +696,25 @@ async function guildRoleNames(env) {
   }
 }
 
+/* The CSRF nonce is signed with the session key as well as stored in a cookie. The cookie
+   can be lost on the way back from Discord - a different browser, a phone scanning the
+   login code, a second tab - and when that happens a cookie-only check tells a real person
+   their own link is stale. A signed value verifies on its own. */
+async function signValue(env, value) {
+  const key = await hmacKey(await ensureSessionSecret(env));
+  const raw = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return value + "." + base64url(new Uint8Array(raw));
+}
+
+async function verifySigned(env, token) {
+  const text = String(token || "");
+  const at = text.lastIndexOf(".");
+  if (at <= 0) return null;
+  const value = text.slice(0, at);
+  const expect = await signValue(env, value);
+  return sameString(text, expect) ? value : null;
+}
+
 async function authLogin(request, env) {
   if (!(await authReady(env))) return needsSetup(env, request);
   const url = new URL(request.url);
@@ -704,7 +723,7 @@ async function authLogin(request, env) {
   /* Already signed in? Go straight where they were headed. */
   if (await readSession(request, env)) return redirect(next);
 
-  const state = randomToken(16);
+  const state = await signValue(env, randomToken(12));
   const authorize = new URL("https://discord.com/oauth2/authorize");
   authorize.searchParams.set("client_id", clientId(env));
   authorize.searchParams.set("response_type", "code");
@@ -713,7 +732,6 @@ async function authLogin(request, env) {
      which is what decides whether they count as staff. */
   authorize.searchParams.set("scope", "identify guilds guilds.members.read");
   authorize.searchParams.set("state", state);
-  authorize.searchParams.set("prompt", "none");
   const headers = new Headers();
   headers.append("set-cookie", cookieHeader("spinback_oauth_state", state, 600));
   headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));
@@ -728,8 +746,12 @@ async function authCallback(request, env) {
   const expectedState = cookies(request).spinback_oauth_state;
 
   if (url.searchParams.get("error")) return html("<p>Discord refused the sign-in. <a href=\"/dashboard\">Try again</a>.</p>", 400);
-  if (!code || !state || !expectedState || !sameString(state, expectedState)) {
-    return html("<p>That sign-in link is stale or came from somewhere else. <a href=\"/dashboard\">Start again</a>.</p>", 400);
+  /* Either proof is enough: the signature always travels in the URL, the cookie only
+     when the browser that started the sign-in is the one finishing it. */
+  const signedState = await verifySigned(env, state);
+  const cookieMatches = Boolean(expectedState) && sameString(String(state), String(expectedState));
+  if (!code || !state || (!signedState && !cookieMatches)) {
+    return html("<p>That sign-in link is stale or already used. <a href=\"/dashboard\">Start again</a>.</p>", 400);
   }
 
   const redirectUri = url.origin + "/auth/callback";
