@@ -49,6 +49,7 @@
     <link rel="stylesheet" href="/theme-spinback.css">
   <link rel="stylesheet" href="/motion.css">
     <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/setup.css">
   </head>
   <body>
     <div id="rw-fx" aria-hidden="true"></div>
@@ -73,6 +74,15 @@
           <span class="tag">Building now</span>
           <h1>Server <span class="accent">Browser</span></h1>
           <p>Search every official and community Rust Console server, filter it down to what you like, and check a map before you join. The browsing interface is still being built.</p>
+        </div>
+      </section>
+      <section>
+        <div class="wrap">
+          <div class="panel-box">
+            <h2>Set up your server</h2>
+            <p class="note" style="margin-top:10px">Spinback has to be in your server before anything can be set up there. Sign in and this shows, server by server, whether the bot is already in it - answered by the bot itself.</p>
+            <div class="sb-setup" id="sb-setup"></div>
+          </div>
         </div>
       </section>
       <section style="padding-top:0">
@@ -135,6 +145,7 @@
       </div>
     </footer>
     <script src="/page.js" defer></script>
+    <script src="/setup.js" defer></script>
   <script src="/motion.js" defer></script>
     <script src="/site-plus.js" defer></script>
   </body>
