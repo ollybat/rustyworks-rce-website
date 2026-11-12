@@ -86,6 +86,19 @@ client.once(Events.ClientReady, async (c) => {
     });
     state.command = cmd.id;
     log('/dashboard registered in ' + guild.name + ' (visible to administrators only)');
+    /* The website reads this to turn the role ids Discord gives it into names, so it can
+       tell a staff role from any other. Role names are already visible to every member. */
+    state.guildInfo = {
+      id: guild.id,
+      name: guild.name,
+      ownerId: guild.ownerId,
+      memberCount: guild.memberCount,
+      roles: guild.roles.cache
+        .filter((r) => r.name !== '@everyone')
+        .sort((a, b) => b.position - a.position)
+        .map((r) => ({ id: r.id, name: r.name, position: r.position })),
+    };
+    log('exposed ' + state.guildInfo.roles.length + ' role(s) for the website');
   } catch (e) {
     state.error = String((e && e.message) || e);
     log('command registration failed:', state.error);
@@ -169,6 +182,13 @@ const env = {
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
   const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  if (req.method === 'GET' && url === '/api/guild') {
+    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
+    res.writeHead(200, cors);
+    res.end(JSON.stringify({ ready: true, guild: state.guildInfo }));
+    return;
+  }
   /* The status page asks this endpoint straight from the browser as well as through the
      site's own proxy, so the read-only status routes have to allow cross-origin reads. */
   const CORS = {
@@ -209,6 +229,7 @@ createServer(async (req, res) => {
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
       /* Only what this process really knows, so the site never shows invented numbers. */
       stats: { guilds: state.guilds, gateway: state.gateway },
+      guildInfo: state.guildInfo || null,
     }));
     return;
   }
