@@ -274,11 +274,42 @@
   var FIELDS = ['name', 'platform', 'region', 'rate', 'wipe', 'connect', 'joinUrl', 'statusUrl', 'notes'];
 
   function loadServer() {
-    api('/api/owner/server').then(function (data) { fillServer(data.settings); }).catch(function (error) { msg($('server-msg'), explain(error), false); });
+    api('/api/owner/server').then(function (data) { fillServer(data); }).catch(function (error) { msg($('server-msg'), explain(error), false); });
   }
 
-  function fillServer(settings) {
-    settings = settings || {};
+  /* Whether Spinback is really in the server these settings describe. Nothing can be set up
+     until it is, so the panel says so and leaves the buttons shut. */
+  function renderServerGate(inGuild, invite) {
+    var gate = $('server-gate');
+    if (gate) {
+      clear(gate);
+      gate.className = 'sbc-gate ' + (inGuild === true ? 'ok' : inGuild === false ? 'bad' : '');
+      if (inGuild === true) {
+        gate.appendChild(el('span', null, 'Spinback is in this server, so these settings apply to it.'));
+      } else if (inGuild === false) {
+        gate.appendChild(el('span', null, 'Spinback is not in this server yet. Add it first: settings saved before it is there would save and do nothing.'));
+        if (invite) {
+          var link = el('a', 'sbc-btn sbc-btn-go', 'Add Spinback to this server');
+          link.href = invite;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          gate.appendChild(link);
+        }
+      } else {
+        gate.appendChild(el('span', null, 'The bot did not report which servers it is in, so this cannot be checked right now.'));
+      }
+    }
+    var shut = inGuild === false;
+    ['server-save', 'server-probe'].forEach(function (id) {
+      var button = $(id);
+      if (button) button.disabled = shut;
+    });
+  }
+
+  function fillServer(data) {
+    data = data || {};
+    if (data.botInGuild !== undefined) renderServerGate(data.botInGuild, data.invite);
+    var settings = data.settings || {};
     FIELDS.forEach(function (key) { var input = $('f-' + key); if (input) input.value = settings[key] || ''; });
     var body = $('server-meta').querySelector('tbody');
     clear(body);
@@ -300,7 +331,7 @@
     FIELDS.forEach(function (key) { var input = $('f-' + key); payload[key] = input ? input.value : ''; });
     msg($('server-msg'), 'Saving\u2026');
     api('/api/owner/server', { method: 'POST', body: JSON.stringify(payload) })
-      .then(function (data) { fillServer(data.settings); msg($('server-msg'), 'Saved.', true); })
+      .then(function (data) { fillServer(data); msg($('server-msg'), 'Saved.', true); })
       .catch(function (error) { msg($('server-msg'), explain(error), false); });
   }
 
