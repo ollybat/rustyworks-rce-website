@@ -698,7 +698,8 @@ const DEFAULT_STAFF_NAMES = ["astronomator"];
 const PERM_ADMINISTRATOR = 0x8n;
 const PERM_MANAGE_GUILD = 0x20n;
 
-function csv(value) {
+
+[1351 more lines in file. Use offset=701 to continue.]function csv(value) {
   return String(value || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 }
 function hasPermission(permissions, flag) {
@@ -1309,6 +1310,28 @@ async function botJson(env, path) {
 /* What the setup page is allowed to know: whether you are signed in, which servers you can
    manage, and for each of those whether Spinback is already in it. Read-only, and it only
    ever describes servers the person asking can already see in their own Discord client. */
+/* What the bot reads, with the shared token, so the panels actually take effect. It holds
+   the RCON passwords, so it stays shut until BOT_SETTINGS_TOKEN is set on both sides. */
+async function botSettings(request, env) {
+  const expected = String(env.BOT_SETTINGS_TOKEN || "").trim();
+  if (!expected) {
+    return json({ ok: false, reason: "no-token", detail: "Set BOT_SETTINGS_TOKEN on the website and the same value on the bot." }, 503);
+  }
+  const given = String(request.headers.get("x-settings-token") || "");
+  if (given !== expected) return json({ ok: false, reason: "bad-token" }, 403);
+  const servers = await storedServers(env);
+  return json({
+    ok: true,
+    readAt: Date.now(),
+    staffRoles: (await readJson(env, ROLES_KEY)) || null,
+    logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
+    staffRules: await accessRules(env),
+    servers: servers.servers.map(function (row) {
+      return { id: row.id, name: row.name, host: row.host, port: row.port, password: row.password };
+    }),
+  }, 200);
+}
+
 async function setupStatus(request, env) {
   const session = await readSession(request, env);
   const known = await botGuilds(env);
@@ -1333,6 +1356,62 @@ async function setupStatus(request, env) {
     manageable: manageable,
     invite: inviteUrl(env),
   }, 200);
+}
+
+/* Named staff roles, the log channels, and the RCON connections a server owner keeps.
+   These live in R2 beside the other settings, and one endpoint hands them to the bot when
+   it asks with the shared token. */
+const ROLES_KEY = "spinback-rce/settings/roles.json";
+const LOGCHANNELS_KEY = "spinback-rce/settings/logchannels.json";
+const SERVERS_KEY = "spinback-rce/settings/servers.json";
+const ROLE_SLOTS = [
+  ["owner", "Owner role", true],
+  ["coOwner", "Co-Owner role", false],
+  ["headAdmin", "Head Admin role", false],
+  ["admin", "Admin role", false],
+  ["moderator", "Moderator role", false],
+  ["linked", "Linked role", true],
+];
+const LOG_SLOTS = [
+  ["server", "Server log"],
+  ["console", "Console log"],
+  ["command", "Command log"],
+  ["rcon", "RCON command usage"],
+  ["linking", "Linking log"],
+  ["killfeed", "Killfeed log"],
+  ["eventfeed", "EventFeed log"],
+  ["emoteKits", "Emote Kits log"],
+  ["admin", "Admin log"],
+  ["zorp", "Zorp log"],
+  ["teleport", "Teleport log"],
+  ["clan", "Clan log"],
+  ["catchARide", "Catch-A-Ride log"],
+  ["joinLeave", "Join/Leave log"],
+  ["errors", "Error log"],
+];
+const MAX_SERVERS = 3;
+
+function isSnowflake(value) {
+  return /^\d{5,25}$/.test(String(value || "").trim());
+}
+
+async function storedServers(env) {
+  const stored = await readJson(env, SERVERS_KEY);
+  return { servers: (stored && Array.isArray(stored.servers)) ? stored.servers : [] };
+}
+
+[651 more lines in file. Use offset=1401 to continue.]
+/* A connection as the dashboard may see it: never the password itself, only whether one is held. */
+function publicServer(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    host: row.host,
+    port: row.port,
+    passwordSet: Boolean(row.password),
+    addedAt: row.addedAt || null,
+    lastTest: row.lastTest || null,
+  };
 }
 
 async function ownerApi(request, env) {
@@ -1465,6 +1544,129 @@ async function ownerApi(request, env) {
     return json({ ok: true, result: result }, 200);
   }
 
+  /* ---------------------------------------------------------------- roles --- */
+  if (route === "roles" && method === "GET") {
+    const saved = (await readJson(env, ROLES_KEY)) || {};
+    return json({
+      slots: ROLE_SLOTS.map(function (slot) {
+        return { key: slot[0], label: slot[1], required: slot[2], roleId: saved[slot[0]] || "", savedAt: saved.updatedAt || null };
+      }),
+      canEdit: guard.level === "owner",
+      note: "Saved here immediately. The bot applies them once it can read these settings - it asks the website for them when BOT_SETTINGS_TOKEN is set on both sides.",
+    }, 200);
+  }
+
+  if (route === "roles" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const next = { updatedAt: Date.now(), updatedBy: actor };
+    const cleared = [];
+    ROLE_SLOTS.forEach(function (slot) {
+      const value = tidy(body[slot[0]], 25);
+      if (value && !isSnowflake(value)) cleared.push(slot[1] + " was not a Discord id, so it was left out");
+      else next[slot[0]] = isSnowflake(value) ? value : "";
+    });
+    const missing = ROLE_SLOTS.filter(function (slot) { return slot[2] && !next[slot[0]]; }).map(function (slot) { return slot[1]; });
+    await writeJson(env, ROLES_KEY, next);
+    await appendLog(env, { kind: "staff_roles", by: actor, detail: "saved " + ROLE_SLOTS.filter(function (s) { return next[s[0]]; }).length + " of " + ROLE_SLOTS.length + " role slots" + (missing.length ? " (still empty: " + missing.join(", ") + ")" : "") });
+    return json({ ok: true, saved: next, missing: missing, rejected: cleared }, 200);
+  }
+
+  /* --------------------------------------------------------- log channels --- */
+  if (route === "logchannels" && method === "GET") {
+    const saved = (await readJson(env, LOGCHANNELS_KEY)) || {};
+    const set = LOG_SLOTS.filter(function (slot) { return isSnowflake(saved[slot[0]]); }).length;
+    return json({
+      slots: LOG_SLOTS.map(function (slot) {
+        return { key: slot[0], label: slot[1], channelId: saved[slot[0]] || "" };
+      }),
+      set: set,
+      total: LOG_SLOTS.length,
+      canEdit: guard.level === "owner",
+      note: "Leave a box empty to switch that log off. A log with no channel is simply not sent.",
+    }, 200);
+  }
+
+  if (route === "logchannels" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const next = { updatedAt: Date.now(), updatedBy: actor };
+    const rejected = [];
+    LOG_SLOTS.forEach(function (slot) {
+      const value = tidy(body[slot[0]], 25);
+      if (value && !isSnowflake(value)) rejected.push(slot[1]);
+      else next[slot[0]] = isSnowflake(value) ? value : "";
+    });
+    await writeJson(env, LOGCHANNELS_KEY, next);
+    await appendLog(env, { kind: "log_channels", by: actor, detail: "saved " + LOG_SLOTS.filter(function (s) { return next[s[0]]; }).length + " of " + LOG_SLOTS.length + " log channels" });
+    return json({ ok: true, saved: next, rejected: rejected }, 200);
+  }
+
+  /* ------------------------------------------------------ rust connections --- */
+  if (route === "servers" && method === "GET") {
+    const held = await storedServers(env);
+    return json({
+      servers: held.servers.map(publicServer),
+      max: MAX_SERVERS,
+      canEdit: guard.level === "owner",
+      note: "RCON is the console Rust servers speak when rcon.web is 0. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check says so instead of guessing.",
+    }, 200);
+  }
+
+  if (route === "servers" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const held = await storedServers(env);
+    const name = tidy(body.name, 60);
+    const host = tidy(body.host, 120).toLowerCase();
+    const port = Number(body.port);
+    const password = tidy(body.password, 200);
+    if (!name) return json({ error: "name_required", message: "Give the connection a name you will recognise." }, 400);
+    if (!/^[a-z0-9][a-z0-9.-]*$/.test(host)) return json({ error: "host_invalid", message: "That host does not look like an address the bot could reach." }, 400);
+    if (!(port >= 1 && port <= 65535)) return json({ error: "port_invalid", message: "The RCON port has to be between 1 and 65535." }, 400);
+    if (!password) return json({ error: "password_required", message: "RCON needs the password your server was started with." }, 400);
+    if (held.servers.length >= MAX_SERVERS) return json({ error: "limit", message: "Three connections is the limit. Remove one first." }, 409);
+    const row = { id: "srv_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), name: name, host: host, port: port, password: password, addedAt: Date.now(), addedBy: actor, lastTest: null };
+    const next = held.servers.concat([row]);
+    await writeJson(env, SERVERS_KEY, { servers: next, updatedAt: Date.now() });
+    await appendLog(env, { kind: "rcon_server", by: actor, detail: "added " + name + " (" + host + ":" + port + ")" });
+    return json({ ok: true, server: publicServer(row), servers: next.map(publicServer) }, 200);
+  }
+
+  if (route === "servers" && method === "DELETE") {
+    const id = tidy(url.searchParams.get("id"), 40);
+    const held = await storedServers(env);
+    const found = held.servers.filter(function (s) { return s.id === id; })[0];
+    if (!found) return json({ error: "not_found" }, 404);
+    const next = held.servers.filter(function (s) { return s.id !== id; });
+    await writeJson(env, SERVERS_KEY, { servers: next, updatedAt: Date.now() });
+    await appendLog(env, { kind: "rcon_server", by: actor, detail: "removed " + found.name });
+    return json({ ok: true, servers: next.map(publicServer) }, 200);
+  }
+
+  /* Ask the server, over RCON, whether it is there. The password stays on this side of the
+     request: the browser only ever names the connection. */
+  if (route === "rcon-test" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const held = await storedServers(env);
+    const row = held.servers.filter(function (s) { return s.id === tidy(body.id, 40); })[0];
+    if (!row) return json({ error: "not_found", message: "That connection is not saved." }, 404);
+    const command = ["serverinfo", "playerlist", "status", "gettime"].indexOf(tidy(body.command, 20)) > -1 ? tidy(body.command, 20) : "serverinfo";
+    let answer = null;
+    try {
+      const response = await fetch(botApiBase(env) + "/api/rcon/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ host: row.host, port: row.port, password: row.password, command: command }),
+      });
+      answer = await response.json();
+    } catch (error) {
+      answer = { ok: false, reason: "bot-unreachable", detail: "The website could not reach the bot to ask it." };
+    }
+    const record = { at: Date.now(), ok: answer && answer.ok === true, reason: (answer && answer.reason) || "unknown", command: command, ms: (answer && answer.ms) || null };
+    row.lastTest = record;
+    await writeJson(env, SERVERS_KEY, { servers: held.servers, updatedAt: Date.now() });
+    await appendLog(env, { kind: "rcon_test", by: actor, detail: row.name + ": " + (record.ok ? "answered " + command + " in " + record.ms + " ms" : "no answer (" + record.reason + ")") });
+    return json({ ok: true, result: answer, record: record }, 200);
+  }
+
   return json({ error: "not_found", route: route }, 404);
 }
 /* ---------- the owner-only dashboard ---------- */
@@ -1497,6 +1699,9 @@ const CONSOLE_PAGE = `<!DOCTYPE html>
       <div class="sbc-group">Server</div>
       <a href="#overview" data-panel="overview"><i>&#9632;</i> Overview</a>
       <a href="#server" data-panel="server"><i>&#9723;</i> Rust server</a>
+      <a href="#staff" data-panel="staff"><i>&#9823;</i> Staff roles</a>
+      <a href="#channels" data-panel="channels"><i>&#9993;</i> Log channels</a>
+      <a href="#rcon" data-panel="rcon"><i>&#8644;</i> Rust connections</a>
       <a href="#roles" data-panel="roles"><i>&#9670;</i> Roles &amp; access</a>
       <a href="#logs" data-panel="logs"><i>&#9776;</i> Logs</a>
       <div class="sbc-group">Tools</div>
@@ -1559,6 +1764,49 @@ const CONSOLE_PAGE = `<!DOCTYPE html>
       <h2 style="margin-top:22px">Roles on the Discord server</h2>
       <p class="note" id="roles-guildnote"></p>
       <div class="sbc-scroll"><table class="sbc-table" id="roles-guild"><tbody></tbody></table></div>
+    </section>
+
+    <section id="panel-staff" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Staff roles</h1><span id="staff-pill" class="sbc-pill"></span></div>
+      <p class="sbc-sub">Which Discord role counts as each staff rank. Paste a role id - with Developer Mode on, right-click a role in Discord and choose Copy Role ID. Required slots are the two the bot leans on hardest: the owner rank and the rank given to linked players.</p>
+      <div class="sbc-grid" id="staff-slots"></div>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="staff-save" type="button">Save roles</button>
+        <span class="sbc-msg" id="staff-msg"></span>
+      </div>
+      <p class="sbc-note" id="staff-note"></p>
+      <h2 style="margin-top:22px">Where does the bot get these?</h2>
+      <p class="note">The dashboard saves them straight away. The bot reads them from the website once <span class="mono">BOT_SETTINGS_TOKEN</span> is set to the same value on the website and on the bot - until then they are stored, not applied, and this page will not pretend otherwise.</p>
+    </section>
+
+    <section id="panel-channels" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Log channels</h1><span id="channels-pill" class="sbc-pill"></span></div>
+      <p class="sbc-sub">One Discord text channel per kind of log. Leave a box empty and that log is simply never sent - nothing is posted to a channel you did not name.</p>
+      <div class="sbc-grid" id="channels-slots"></div>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="channels-save" type="button">Save channels</button>
+        <span class="sbc-msg" id="channels-msg"></span>
+      </div>
+      <p class="sbc-note" id="channels-note"></p>
+    </section>
+
+    <section id="panel-rcon" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Rust server connections</h1><span class="sbc-pill" id="rcon-count">0/3 connected</span></div>
+      <p class="sbc-sub">Connect a Rust server over RCON and the bot can ask it things. RCON is what a Rust server speaks when it is started with <span class="mono">rcon.web 0</span>. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check tells you exactly what happened rather than pretending.</p>
+      <div id="rcon-list" class="sbc-conns"></div>
+      <h2 style="margin-top:22px">Add a connection</h2>
+      <form class="sbc-grid" id="rcon-form" autocomplete="off">
+        <div class="sbc-field"><label for="rcon-name">Server name</label><input id="rcon-name" maxlength="60" placeholder="e.g. Main server"></div>
+        <div class="sbc-field"><label for="rcon-host">Server IP or host</label><input id="rcon-host" maxlength="120" placeholder="e.g. 203.0.113.10"></div>
+        <div class="sbc-field"><label for="rcon-port">RCON port</label><input id="rcon-port" maxlength="5" placeholder="28016"></div>
+        <div class="sbc-field"><label for="rcon-password">RCON password</label><input id="rcon-password" type="password" maxlength="200" placeholder="from server.cfg"></div>
+      </form>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="rcon-add" type="button">Add server</button>
+        <span class="sbc-msg" id="rcon-msg"></span>
+      </div>
+      <p class="sbc-note" id="rcon-note"></p>
+      <p class="sbc-note sbc-sub">Checks send one harmless command - <span class="mono">serverinfo</span> - and nothing else. Passwords stay on the server side: the browser never receives one back.</p>
     </section>
 
     <section id="panel-logs" class="sbc-panel sbc-hidden">
@@ -1740,6 +1988,7 @@ export default {
     if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
     /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
     if (url.pathname === "/api/setup-status") return setupStatus(request, env);
+    if (url.pathname === "/api/bot/settings") return botSettings(request, env);
     if (url.pathname === "/api/roles") {
       const roleSession = await readSession(request, env);
       if (!roleSession) return json({ authenticated: false }, 200);
