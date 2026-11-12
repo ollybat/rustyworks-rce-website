@@ -16,13 +16,13 @@
     <title>Your Profile - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
     <meta name="apple-mobile-web-app-title" content="Spinback">
-    <meta name="description" content="The Discord account you signed in with, what Spinback knows about it, and your access on the server.">
+    <meta name="description" content="The Discord account you signed in with: your name, avatar, roles, permissions and access on the server.">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/profile.html">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Spinback RCE">
     <meta property="og:title" content="Your Profile - Spinback RCE">
-    <meta property="og:description" content="The Discord account you signed in with, what Spinback knows about it, and your access on the server.">
+    <meta property="og:description" content="The Discord account you signed in with: your name, avatar, roles, permissions and access on the server.">
     <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/profile.html">
     <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta property="og:image:width" content="1200">
@@ -31,7 +31,7 @@
     <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Your Profile - Spinback RCE">
-    <meta name="twitter:description" content="The Discord account you signed in with, what Spinback knows about it, and your access on the server.">
+    <meta name="twitter:description" content="The Discord account you signed in with: your name, avatar, roles, permissions and access on the server.">
     <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta name="twitter:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -74,14 +74,16 @@
         <div class="wrap">
           <span class="tag">Your account</span>
           <h1>Your <span class="accent">Profile</span></h1>
-          <p>What Spinback knows about the account you signed in with. It is read from Discord each time you open this page, and nothing here is stored by the site.</p>
+          <p>The account you signed in with, exactly as Discord describes it: your name, avatar, the roles you hold and what you are allowed to do.</p>
+          <p>Nothing on this page is stored by the site. It is read fresh each time you open it, from what Discord sent at sign-in and from what the bot reports about the server.</p>
         </div>
       </section>
 
       <section>
         <div class="wrap">
+          <div id="acctBar"></div>
           <nav class="acct-tabs" id="acctTabs" aria-label="Account pages"></nav>
-          <div id="acctProfile"><p class="acct-skeleton">Reading your Discord account...</p></div>
+          <div class="acct-grid" id="acctProfile"></div>
         </div>
       </section>
     </main>
