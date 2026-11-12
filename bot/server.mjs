@@ -130,8 +130,9 @@ const env = {
 };
 
 createServer(async (req, res) => {
-  const url = req.url || '/';
-  if (req.method === 'GET' && (url === '/healthz' || url === '/' || url === '/health')) {
+  const url = (req.url || '/').split('?')[0];
+  const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
@@ -148,6 +149,8 @@ createServer(async (req, res) => {
       guildConfigured: !!GUILD_ID && !!OWNER_ID,
       error: state.error,
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
+      /* Only what this process really knows, so the site never shows invented numbers. */
+      stats: { guilds: state.guilds, gateway: state.gateway },
     }));
     return;
   }
