@@ -87,7 +87,7 @@
             <div class="sp-stat" data-sp-reveal><b data-sp-count="29">0</b><span>Store products</span></div>
             <div class="sp-stat" data-sp-reveal style="--sp-i:1"><b data-sp-count="59">0</b><span>Individual skins</span></div>
             <div class="sp-stat" data-sp-reveal style="--sp-i:2"><b data-sp-count="299">0</b><span>Items in the kit catalogue</span></div>
-            <div class="sp-stat" data-sp-reveal style="--sp-i:3"><b>Free</b><span>No account, no fee</span></div>
+            <div class="sp-stat" data-sp-reveal style="--sp-i:3"><b data-sp-count="21">0</b><span>Published release dates</span></div>
           </div>
         </div>
       </section>
@@ -97,14 +97,17 @@
           <div class="sp-head" data-sp-reveal>
             <span class="sp-kicker">Skin catalogue</span>
             <h2 class="sp-title">The skin wall</h2>
-            <p class="sp-lede">Every product the official Rust Console Edition store lists, read from rust.double11.com on 11 November 2026: the name, its category, the product's own promotional image, and a link straight to its store page. Search, category chips and sorting all work on it. Fields the store does not publish - price, rarity, release date - are left blank here instead of guessed.</p>
+            <p class="sp-lede">Every product the official Rust Console Edition store lists, read from rust.double11.com on 11 November 2026, joined to the release date each one carries on its own PlayStation or Xbox store listing. Real dates only: 21 of the 29 products publish one, and the eight that do not are shown without a date rather than given an invented one. Search, category filters, type filters and a run down the release timeline all work on the same data, and you can mark what you own without an account - it stays in this browser.</p>
           </div>
           <div data-sp-skins>
             <div id="spSkinTabs"></div>
+            <div class="sp-chips" id="spSkinKinds" style="margin:10px 0 4px"></div>
             <div class="sp-toolbar">
               <label class="sp-search">&#128269;<input id="spSkinSearch" type="search" placeholder="Search products, packs, individual skins and descriptions" aria-label="Search the skin catalogue"></label>
               <div class="sp-chips" id="spSkinCats"></div>
               <select class="sp-select" id="spSkinSort" aria-label="Sort the skin catalogue">
+                <option value="newest">Sort: newest release first</option>
+                <option value="oldest">Sort: oldest release first</option>
                 <option value="name">Sort: name A-Z</option>
                 <option value="category">Sort: category</option>
                 <option value="pack">Sort: pack</option>
@@ -112,7 +115,13 @@
             </div>
             <div class="sp-cards-skins" id="spSkinGrid"></div>
             <p class="sp-note" id="spSkinStatus" style="margin-top:16px" role="status"></p>
-            <p class="sp-note" style="margin-top:12px">Source: the official Rust Console Edition store, rust.double11.com/store, read on 11 November 2026. Names, descriptions and images belong to Double Eleven and Facepunch; this site is not affiliated with them and sells nothing. Prices, rarities and release dates are left blank because the store does not publish them in a readable form - this page does not guess.</p>
+            <p class="sp-note" id="spSkinMeter" style="margin-top:14px" role="status"></p>
+            <h3 class="sp-subtitle" style="margin-top:32px">When it came out</h3>
+            <p class="sp-lede" style="margin-bottom:16px">The real sale dates, read from each product's own PlayStation or Xbox listing. Newest first. Products the stores list without a date sit together at the end so you can see exactly which ones they are.</p>
+            <div id="spSkinTimeline" class="sp-timeline"></div>
+            <h3 class="sp-subtitle" style="margin-top:32px">Official updates</h3>
+            <div id="spSkinNews" style="margin-bottom:8px"></div>
+            <p class="sp-note" style="margin-top:12px">Source: the official Rust Console Edition store (rust.double11.com/store), each product's own PlayStation or Xbox store listing for its release date, and the dated posts on rust.double11.com/news. Names, descriptions and images belong to Double Eleven and Facepunch; this site is not affiliated with them and sells nothing. Prices and rarities are left blank because the store does not publish them in a readable form - this page does not guess.</p>
           </div>
         </div>
       </section>
