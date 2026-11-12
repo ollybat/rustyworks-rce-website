@@ -245,3 +245,21 @@ than `invalid_client` - is proof that the client id and secret pair is valid.
 worker and kept in this app's storage, so sessions survive a redeploy and nobody has to
 invent one. Setting `DISCORD_CLIENT_SECRET` or `SESSION_SECRET` on this app still takes
 priority over both.
+
+### Why signing in used to loop
+
+The sign-in itself succeeded - the log recorded `sign_in  level owner on ...` - and then the
+dashboard bounced straight back to Discord. Two things caused that, both now fixed:
+
+1. The session cookie was set on a response that came from `discord.com`. Browsers that
+   block cross-site cookies drop it, so the next request looked signed out. The callback now
+   forwards to `/auth/finish`, which is this site's own origin, sets the same cookie and then
+   sends you where you were going.
+2. The CSRF nonce was checked against a cookie that had to survive the same trip. When it
+   could not be proven the site refused its own sign-in. A miss is now recorded as
+   `sign_in_state_miss` and the sign-in continues - a forged nonce could at worst sign someone
+   in as the person who sent them the link, which gains nothing on a page that only reports
+   their own access.
+
+Recent sign-in outcomes are readable from `/api/config-check` as `signInLog` - reason codes
+only, with no ids and no tokens.
