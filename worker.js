@@ -1434,7 +1434,10 @@ export default {
         clientSecretSet: Boolean((await resolveSecrets(env)).clientSecret),
         sessionSecretSet: Boolean((await resolveSecrets(env)).sessionSecret),
         secretsSource: (await resolveSecrets(env)).source,
-        statusLogBound: Boolean(env.STATUS_LOG)
+        statusLogBound: Boolean(env.STATUS_LOG),
+        /* Names only - never values. This is the definitive answer to which variables the
+           running worker actually receives. */
+        envKeys: Object.keys(env).sort()
       });
     }
     if (url.pathname === "/api/history") return statusHistory(request, env);
