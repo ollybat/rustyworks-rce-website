@@ -230,3 +230,18 @@ simply takes over; the stored copy is then ignored.
 
 `/api/config-check` reports `secretsSource`: `nowhere yet`, `saved on this site`, or `the app's
 variables`.
+
+### Who actually holds the Discord secret
+
+The bot's service already had `DISCORD_CLIENT_SECRET`, so the website no longer needs its own
+copy. `POST /api/oauth/exchange` on the bot swaps the sign-in code for a token; the worker
+asks for it only when it has no secret of its own. A code that was not issued to this
+application fails at Discord with `invalid_grant` before the request reaches anything else,
+so the route cannot be used as an open proxy. A bogus code returning `invalid_grant` - rather
+than `invalid_client` - is proof that the client id and secret pair is valid.
+
+`/api/config-check` reports `botExchangeAvailable` and `secretsSource`, which reads
+`the bot's service` while the exchange is delegated. The session secret is generated on the
+worker and kept in this app's storage, so sessions survive a redeploy and nobody has to
+invent one. Setting `DISCORD_CLIENT_SECRET` or `SESSION_SECRET` on this app still takes
+priority over both.
