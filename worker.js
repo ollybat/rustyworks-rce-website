@@ -696,7 +696,9 @@ function redirect(location, headers = {}) {
    of those variables to change it without touching this file. */
 const DEFAULT_STAFF_NAMES = ["astronomator"];
 const PERM_ADMINISTRATOR = 0x8n;
-const PERM_MANAGE_GUILD = 0x20n;function csv(value) {
+const PERM_MANAGE_GUILD = 0x20n;
+
+function csv(value) {
   return String(value || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 }
 function hasPermission(permissions, flag) {
@@ -1396,6 +1398,7 @@ async function storedServers(env) {
   const stored = await readJson(env, SERVERS_KEY);
   return { servers: (stored && Array.isArray(stored.servers)) ? stored.servers : [] };
 }
+
 /* A connection as the dashboard may see it: never the password itself, only whether one is held. */
 function publicServer(row) {
   return {
