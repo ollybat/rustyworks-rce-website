@@ -169,8 +169,20 @@ const env = {
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
   const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  /* The status page asks this endpoint straight from the browser as well as through the
+     site's own proxy, so the read-only status routes have to allow cross-origin reads. */
+  const CORS = {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'content-type, x-signature-ed25519, x-signature-timestamp',
+  };
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, CORS);
+    res.end();
+    return;
+  }
   if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
-    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
       /* online is the field the status page reads. Without it the page assumed the bot
