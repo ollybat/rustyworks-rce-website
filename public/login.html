@@ -56,121 +56,107 @@
     <link rel="stylesheet" href="/theme-spinback.css">
   <link rel="stylesheet" href="/motion.css">
     <link rel="stylesheet" href="/site-plus.css">
-  </head>
-  <body>
-    <!-- Seasonal overlay layer: theme.js fills this with the pieces the stylesheet animates. -->
-    <div id="rw-fx" aria-hidden="true"></div>
+    </head>
+  <body data-acct-page="login">
+<div id="rw-fx" aria-hidden="true"></div>
     <a class="skip-link" href="#main">Skip to content</a>
     <header>
       <div class="wrap">
         <nav>
-          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+          <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
           <div class="nav-links" id="navLinks">
-            <a href="status.html">Status</a>
-            <a
-              href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
-              target="_blank"
-              rel="noopener"
-              class="btn">
-              Add to Discord
-            </a>
-            <!-- Signed-in capsule or "Login" pill, drawn by nav-auth.js. -->
+            <a href="/status.html">Status</a>
+            <a href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands" target="_blank" rel="noopener" class="btn">Add to Discord</a>
             <div class="rw-auth" id="rwAuth"></div>
           </div>
-          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
         </nav>
       </div>
     </header>
 
-
     <main id="main" tabindex="-1">
-    <section class="page-hero">
-      <div class="wrap">
-        <span class="tag">Owner sign-in</span>
-        <h1>Sign in to your <span class="accent">Dashboard</span></h1>
-        <p>
-          The dashboard controls one Discord server — the one this bot runs in. Signing in with
-          Discord is how the site checks whether you belong in it: the server owner, anyone with Administrator or Manage Server, and anyone holding a staff role.
-        </p>
-      </div>
-    </section>
+      <section class="page-hero">
+        <div class="wrap">
+          <span class="tag">Your account</span>
+          <h1>Sign in to your <span class="accent">Account</span></h1>
+          <p>One sign-in, no slash commands. After this you can see your servers, your profile and your settings straight from this website.</p>
+        </div>
+      </section>
 
-    <section>
-      <div class="wrap">
-        <div class="grid u-grid-auto">
-          <div class="panel-box">
-            <h2>Continue with Discord</h2>
-            <p id="loginState" class="note" style="margin:10px 0 18px">Checking your session…</p>
-            <div id="loginCta"></div>
-            <p class="note" style="margin-top:18px">
-              You will land on <span id="loginNext">your dashboard</span>. The site asks Discord for
-              two things only — <code class="u-ember">identify</code> (your username and avatar) and
-              <code class="u-ember">guilds</code> (the servers you own). It cannot read messages,
-              post anything, or see your email.
-            </p>
-          </div>
+      <section>
+        <div class="wrap">
+          <nav class="acct-tabs" id="acctTabs" aria-label="Account pages"></nav>
+          <div class="grid u-grid-auto">
+            <div class="panel-box">
+              <h2>Continue with Discord</h2>
+              <p id="loginState" class="note" style="margin:10px 0 18px">Checking your session...</p>
+              <div id="loginCta"></div>
+              <p class="note" style="margin-top:18px">
+                You will land on <span id="loginNext">your servers page</span>. Discord is asked for
+                two things only - <code class="u-ember">identify</code> (your name and avatar) and
+                <code class="u-ember">guilds</code> (the servers you are in). It cannot read your
+                messages, post anything, or see your email.
+              </p>
+            </div>
 
-          <div class="panel-box">
-            <h2>Who can get in</h2>
-            <ul class="ks-list" style="margin-top:10px">
-              <li>Only the owner of the server the bot runs in — one server, one owner</li>
-              <li>Any other Discord account is refused, whatever they sign in with</li>
-              <li>The session lasts 7 days, then you sign in again</li>
-              <li>Signing out clears it on this device straight away</li>
-            </ul>
-            <p class="note" style="margin-top:16px">
-              Inside Discord, the bot has a single command — <code class="u-ember">/dashboard</code>.
-              Only the owner can see it, and it answers privately with a link back here.
-            </p>
-            <div class="u-mt-18">
-              <a href="status.html" class="btn ghost">Check bot status →</a>
+            <div class="panel-box">
+              <h2>What you get</h2>
+              <ul class="ks-list" style="margin-top:10px">
+                <li><strong>Servers</strong> - every server you can manage, and whether Spinback is in it</li>
+                <li><strong>Profile</strong> - the account you signed in with and your access</li>
+                <li><strong>Settings</strong> - theme, and your session on this device</li>
+                <li><strong>Dashboard</strong> - the control panel, for the server owner and staff</li>
+              </ul>
+              <p class="note" style="margin-top:16px">
+                Inside Discord the bot has a single command, <code class="u-ember">/dashboard</code>,
+                and only the server owner sees it. Everything above is reachable from this website alone.
+              </p>
             </div>
           </div>
-        </div>
 
-        <div class="panel-box u-mt-18">
-          <h3 style="margin-bottom:10px">Trouble signing in?</h3>
-          <p class="note">
-            If you are told the dashboard is owner-only, you signed in with a different Discord
-            account than the one that owns the server — sign out and try again. If the browser
-            blocks the round trip to Discord, make sure cookies are allowed for this site, then
-            start again. Anything else, ask in the
-            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">support server</a>.
-          </p>
+          <div class="panel-box u-mt-18">
+            <h3 style="margin-bottom:10px">Trouble signing in?</h3>
+            <p class="note">
+              If you are told the dashboard is owner-only, you signed in with a different Discord
+              account than the one that owns the server - sign out and try again. Nothing else on
+              this site needs staff access. For anything else, ask in the
+              <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">support server</a>.
+            </p>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
     </main>
 
     <footer>
       <div class="wrap">
         <div class="foot-grid">
           <div class="foot-col foot-brand">
-            <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+            <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
             <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
           </div>
           <div class="foot-col">
             <h4>Bot Help</h4>
-            <a href="rustservers.html">Server Browser</a>
-            <a href="rustskins.html">Skin Store</a>
-            <a href="dashboard/kitbuilder.html">Kit Studio</a>
-            <a href="dashboard/colortext.html">Colour Studio</a>
+            <a href="/rustservers.html">Server Browser</a>
+            <a href="/rustskins.html">Skin Store</a>
+            <a href="/dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="/dashboard/colortext.html">Colour Studio</a>
           </div>
           <div class="foot-col">
             <h4>Community</h4>
             <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
-            <a href="status.html">Status</a>
+            <a href="/status.html">Status</a>
           </div>
           <div class="foot-col">
             <h4>Legal</h4>
-            <a href="legal/privacy.html">Privacy Policy</a>
-            <a href="legal/terms.html">Terms of Service</a>
+            <a href="/legal/privacy.html">Privacy Policy</a>
+            <a href="/legal/terms.html">Terms of Service</a>
           </div>
         </div>
-        <div class="foot-bottom">© <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</div>
+        <div class="foot-bottom">&#169; <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</div>
       </div>
     </footer>
   <script src="/motion.js" defer></script>
     <script src="/site-plus.js" defer></script>
+    <script src="/login.js" defer></script>
   </body>
 </html>
