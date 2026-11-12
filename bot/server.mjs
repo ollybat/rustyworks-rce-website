@@ -127,7 +127,10 @@ client.once(Events.ClientReady, async (c) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
   if (interaction.commandName !== 'dashboard') return;
-  const isOwner = !!OWNER_ID && interaction.user.id === OWNER_ID;
+  /* The guild's own owner record is the fallback, so the command works even before the
+     owner id variable has been set. */
+  const ownerId = OWNER_ID || (state.guildInfo && state.guildInfo.ownerId) || '';
+  const isOwner = !!ownerId && interaction.user.id === ownerId;
   const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
   if (!isOwner || !rightGuild) {
     await interaction.reply({ content: 'This command is only for the server owner.', ephemeral: true }).catch(() => {});
@@ -143,6 +146,45 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.Error, (e) => log('gateway error:', String((e && e.message) || e)));
 client.on(Events.ShardDisconnect, (code) => { state.gateway = 'disconnected'; log('gateway disconnected, code', code); });
 client.on(Events.ShardReconnecting, () => { state.gateway = 'reconnecting'; log('gateway reconnecting'); });
+
+/* ------------------------------------------------ gateway watchdog ---------- */
+/* Discord drops a gateway connection from time to time and discord.js retries by itself.
+   Sometimes a reconnect never completes: the process stays healthy, its HTTP routes answer,
+   but no command can ever arrive. This notices that and forces a fresh login, slowly, so a
+   real Discord outage is not turned into a login storm. */
+
+let forcedLogins = 0;
+let lastForced = 0;
+let gatewayDownSince = 0;
+
+async function relogin(reason) {
+  if (!TOKEN) return;
+  if (Date.now() - lastForced < 120000) {
+    log('relogin skipped for now (' + reason + ') - last attempt was under two minutes ago');
+    return;
+  }
+  lastForced = Date.now();
+  forcedLogins += 1;
+  log('forcing a fresh login: ' + reason + ' (attempt ' + forcedLogins + ')');
+  state.gateway = 'forcing-login';
+  try { client.destroy(); } catch (e) { /* already gone */ }
+  try {
+    await client.login(TOKEN);
+  } catch (e) {
+    state.error = String((e && e.message) || e);
+    state.gateway = /token|unauthor|401/i.test(state.error) ? 'invalid-token' : 'login-failed';
+    log('forced login failed:', state.error);
+  }
+}
+
+setInterval(() => {
+  if (!TOKEN) return;
+  if (state.gateway === 'online') { gatewayDownSince = 0; return; }
+  if (!gatewayDownSince) gatewayDownSince = Date.now();
+  const downFor = Date.now() - gatewayDownSince;
+  if (downFor > 180000) relogin('gateway down for ' + Math.round(downFor / 1000) + ' seconds');
+}, 30000);
+
 
 let loginAttempts = 0;
 async function connect() {
@@ -220,6 +262,18 @@ createServer(async (req, res) => {
     res.end();
     return;
   }
+  /* A stuck gateway cannot ask for help itself, so this exists for a poke. It is rate
+     limited inside relogin() and it only ever makes the bot try to log in again. */
+  if (url === '/api/reconnect') {
+    const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+    req.resume();
+    if (!TOKEN) { res.writeHead(503, cors); res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
+    if (state.gateway === 'online') { res.writeHead(200, cors); res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
+    await relogin('asked by a request');
+    res.writeHead(200, cors);
+    res.end(JSON.stringify({ ok: true, gateway: state.gateway, forcedLogins: forcedLogins }));
+    return;
+  }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
@@ -292,7 +346,11 @@ createServer(async (req, res) => {
       lookedFor: TOKEN_NAMES,
       siteUrl: SITE_URL,
       interactions: !!PUBLIC_KEY,
-      guildConfigured: !!GUILD_ID && !!OWNER_ID,
+      guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
+      ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
+      ownerSource: OWNER_ID ? 'DISCORD_GUILD_OWNER_ID' : (state.guildInfo && state.guildInfo.ownerId ? 'the guild owner record' : null),
+      forcedLogins: forcedLogins,
+      gatewayDownSeconds: gatewayDownSince ? Math.round((Date.now() - gatewayDownSince) / 1000) : 0,
       error: state.error,
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
       /* Only what this process really knows, so the site never shows invented numbers. */
