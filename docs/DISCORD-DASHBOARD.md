@@ -218,3 +218,15 @@ spinback-rce/logs/<timestamp>.json   one object per event, never overwritten
 Honest limits: Console Edition publishes no server query endpoint, so the console shows no
 live player count. "Check status URL" fetches whatever address is saved and reports only what
 that address answered.
+
+### Turning sign-in on without variables
+
+`POST /api/setup` accepts the Discord client secret once, when the two secrets are not already
+present as app variables. It is checked against Discord's token endpoint first - a wrong value
+comes back as `invalid_client` and is refused - and only then stored in
+`spinback-rce/settings/auth.json`, together with a session secret generated on the worker.
+App variables still win whenever they are set, so moving the secrets into the platform later
+simply takes over; the stored copy is then ignored.
+
+`/api/config-check` reports `secretsSource`: `nowhere yet`, `saved on this site`, or `the app's
+variables`.
