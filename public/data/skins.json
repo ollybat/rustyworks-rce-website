@@ -1,5 +1,5 @@
 {
-"note": "The official Rust Console Edition store, read from rust.double11.com/store on 2026-11-11. products[] holds one entry per store product with its gallery images and, where the product page lists them, the individual skins inside the pack. skins[] flattens that to one entry per individual skin. Nothing is invented: fields the store does not publish (price, rarity, release date) stay empty. Names and images belong to Double Eleven and Facepunch; Spinback RCE is not affiliated with them and sells nothing.",
+"note": "The official Rust Console Edition store, read from rust.double11.com/store on 11 November 2026, joined to the release date each product carries on its own PlayStation or Xbox store listing. products[] holds one entry per store product with its gallery images, the skins inside it and its published release date where one exists. skins[] flattens that to one entry per skin. 21 of 29 products have a published release date; the rest are listed by the store without one, so the date is left empty rather than guessed. Prices and rarities are left empty too, because the store does not publish them in a readable form. Names and images belong to Double Eleven and Facepunch; Spinback RCE is not affiliated with them and sells nothing.",
 "updated": "2026-11-11",
 "source": "https://rust.double11.com/store",
 "fields": {
@@ -11,12 +11,17 @@
 "gallery": "the other images on the product page",
 "contents": "the individual skins listed inside the pack, with images where the page shows them",
 "link": "the official product page",
-"stores": "whether the product page links to the PlayStation and Xbox stores"
+"stores": "the product's PlayStation and Xbox store listing URLs, empty when it has none",
+"released": "the release date shown on the product's own PlayStation or Xbox store listing, as YYYY-MM-DD, empty when no listing publishes one",
+"releasedFrom": "which store listing the date came from",
+"releasedUrl": "the store listing the date was read from",
+"news": "dated official Rust Console Edition posts, for the updates strip"
 },
 "counts": {
 "products": 29,
 "skins": 59,
-"packs": 7
+"packs": 7,
+"dated": 21
 },
 "products": [
 {
@@ -30,9 +35,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/adobe-building-skin",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-kw/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5",
+"xbox": ""
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "",
+"storeListing": false
 },
 {
 "id": "adobe-external",
@@ -45,9 +54,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/adobe-external",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "",
+"xbox": "https://www.xbox.com/en-US/games/store/rust-console-edition-xs/9PJVJ4WF031H"
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "",
+"storeListing": false
 },
 {
 "id": "brick-building-skin",
@@ -60,9 +73,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/brick-building-skin",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-tr/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5",
+"xbox": ""
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "",
+"storeListing": false
 },
 {
 "id": "brutalist-building-skin",
@@ -81,9 +98,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/brutalist-building-skin",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0773206789710401",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-brutalist-building-skin/9NBHFB8FXL5B"
+},
+"released": "2025-06-26",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-brutalist-building-skin/9NBHFB8FXL5B",
+"storeListing": true
 },
 {
 "id": "crypt-building-skin",
@@ -99,9 +120,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/crypt-building-skin",
 "stores": {
-"playstation": true,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-CRYPT05141333893",
+"xbox": ""
+},
+"released": "2026-10-15",
+"releasedFrom": "PlayStation",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-CRYPT05141333893",
+"storeListing": true
 },
 {
 "id": "legacy-wood-building-skin",
@@ -114,9 +139,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/legacy-wood-building-skin",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0903281175737194",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-legacy-wood-building-skin/9NPWQ3P8PKPB/0010"
+},
+"released": "2025-06-26",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-legacy-wood-building-skin/9NPWQ3P8PKPB/0010",
+"storeListing": true
 },
 {
 "id": "legacy-wood-external",
@@ -129,9 +158,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/legacy-wood-external",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5",
+"xbox": ""
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5",
+"storeListing": false
 },
 {
 "id": "shipping-container",
@@ -149,9 +182,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/shipping-container",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0962679102355915",
+"xbox": "https://www.xbox.com/en-gb/games/store/rust-console-edition-x-s-shipping-container-building-skin/9plj6kr7md4p"
+},
+"released": "2025-07-31",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-gb/games/store/rust-console-edition-x-s-shipping-container-building-skin/9plj6kr7md4p",
+"storeListing": true
 },
 {
 "id": "space-station",
@@ -168,9 +205,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/space-station",
 "stores": {
-"playstation": true,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0305720570316173",
+"xbox": ""
+},
+"released": "2026-06-25",
+"releasedFrom": "PlayStation",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0305720570316173",
+"storeListing": true
 },
 {
 "id": "coconut-underwear",
@@ -187,9 +228,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/coconut-underwear",
 "stores": {
-"playstation": true,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0006370599438599",
+"xbox": ""
+},
+"released": "2026-07-30",
+"releasedFrom": "PlayStation",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0006370599438599",
+"storeListing": true
 },
 {
 "id": "nomad-hazmat",
@@ -207,9 +252,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/nomad-hazmat",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0280625728021324",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-nomad-hazmat/9PK1HV2CX62C/0010"
+},
+"released": "2026-02-26",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-nomad-hazmat/9PK1HV2CX62C/0010",
+"storeListing": true
 },
 {
 "id": "space-suit",
@@ -226,9 +275,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/space-suit",
 "stores": {
-"playstation": true,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0772564969436995",
+"xbox": ""
+},
+"released": "2026-06-25",
+"releasedFrom": "PlayStation",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0772564969436995",
+"storeListing": true
 },
 {
 "id": "exhibit-pack",
@@ -250,9 +303,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/exhibit-pack",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5?pubDate=20250622",
+"xbox": ""
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5?pubDate=20250622",
+"storeListing": false
 },
 {
 "id": "floor-and-ceiling-wp",
@@ -271,9 +328,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/floor-and-ceiling-wp",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0210363274381018",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-floor-and-ceiling-wallpaper-pack/9PMDL3Q9CG0H/0010"
+},
+"released": "2025-10-30",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-floor-and-ceiling-wallpaper-pack/9PMDL3Q9CG0H/0010",
+"storeListing": true
 },
 {
 "id": "frontier-decor-pack",
@@ -336,9 +397,13 @@
 ],
 "link": "https://rust.double11.com/store/frontier-decor-pack",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5?pubDate=20250622",
+"xbox": ""
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5?pubDate=20250622",
+"storeListing": false
 },
 {
 "id": "industrial-lights",
@@ -357,9 +422,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/industrial-lights",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0984613534249996",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-industrial-lights/9PMHZZZFFK35/0010"
+},
+"released": "2026-03-26",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-industrial-lights/9PMHZZZFFK35/0010",
+"storeListing": true
 },
 {
 "id": "wallpaper-starter-pack",
@@ -418,9 +487,13 @@
 ],
 "link": "https://rust.double11.com/store/wallpaper-starter-pack",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "",
+"xbox": ""
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "",
+"storeListing": false
 },
 {
 "id": "weapon-racks",
@@ -439,9 +512,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/weapon-racks",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0723121714735179",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-weapon-racks/9N5T8S1V96K6/0010"
+},
+"released": "2025-10-30",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-weapon-racks/9N5T8S1V96K6/0010",
+"storeListing": true
 },
 {
 "id": "arctic-pack",
@@ -471,9 +548,13 @@
 ],
 "link": "https://rust.double11.com/store/arctic-pack",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0981899481298812",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-arctic-pack/9NPBZ86G31LR/0010"
+},
+"released": "2025-12-04",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-arctic-pack/9NPBZ86G31LR/0010",
+"storeListing": true
 },
 {
 "id": "frontiersman-pack",
@@ -501,9 +582,13 @@
 ],
 "link": "https://rust.double11.com/store/frontiersman-pack",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0563440028133052",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-frontiersman-pack/9NRB5TTN5PVD/0010"
+},
+"released": "2025-09-25",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-frontiersman-pack/9NRB5TTN5PVD/0010",
+"storeListing": true
 },
 {
 "id": "gesture-pack",
@@ -516,9 +601,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/gesture-pack",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-0781775036851115",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-gesture-pack/9N9P0V20TN5C/0010"
+},
+"released": "2025-07-31",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-gesture-pack/9N9P0V20TN5C/0010",
+"storeListing": true
 },
 {
 "id": "ice-king-pack",
@@ -548,9 +637,13 @@
 ],
 "link": "https://rust.double11.com/store/ice-king-pack",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0602101563536526",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-ice-king-pack/9P6M95MMR183/0010"
+},
+"released": "2025-12-04",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-ice-king-pack/9P6M95MMR183/0010",
+"storeListing": true
 },
 {
 "id": "lumberjack-pack",
@@ -590,9 +683,13 @@
 ],
 "link": "https://rust.double11.com/store/lumberjack-pack",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-0102669591640499",
+"xbox": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-lumberjack-pack/9N6LLSJ9T3FW"
+},
+"released": "2025-10-30",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-GB/games/store/rust-console-edition-xs-lumberjack-pack/9N6LLSJ9T3FW",
+"storeListing": true
 },
 {
 "id": "pilot-pack",
@@ -612,9 +709,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/pilot-pack",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5?pubDate=20250622",
+"xbox": ""
+},
+"released": "",
+"releasedFrom": "",
+"releasedUrl": "https://store.playstation.com/en-us/product/EP4415-PPSA24616_00-RUSTCONSOLEBASE5?pubDate=20250622",
+"storeListing": false
 },
 {
 "id": "storage-box-pack",
@@ -630,9 +731,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/storage-box-pack",
 "stores": {
-"playstation": true,
-"xbox": true
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0074222482345311",
+"xbox": "https://www.xbox.com/en-gb/games/store/storage-box-pack/9PDW07T8SLCN"
+},
+"released": "2026-09-24",
+"releasedFrom": "Xbox",
+"releasedUrl": "https://www.xbox.com/en-gb/games/store/storage-box-pack/9PDW07T8SLCN",
+"storeListing": true
 },
 {
 "id": "sunburn-pack",
@@ -648,9 +753,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/sunburn-pack",
 "stores": {
-"playstation": true,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0877453776821931",
+"xbox": ""
+},
+"released": "2026-08-27",
+"releasedFrom": "PlayStation",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0877453776821931",
+"storeListing": true
 },
 {
 "id": "warhammer-pack",
@@ -693,9 +802,13 @@
 ],
 "link": "https://rust.double11.com/store/warhammer-pack",
 "stores": {
-"playstation": false,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/ja-jp/product/EP4415-PPSA24616_00-0028143634544717",
+"xbox": ""
+},
+"released": "2026-05-21",
+"releasedFrom": "PlayStation (UK)",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0028143634544717",
+"storeListing": true
 },
 {
 "id": "rpg-launcher",
@@ -711,9 +824,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/rpg-launcher",
 "stores": {
-"playstation": true,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0906455814308000",
+"xbox": ""
+},
+"released": "2026-05-27",
+"releasedFrom": "PlayStation",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0906455814308000",
+"storeListing": true
 },
 {
 "id": "space-lr300",
@@ -730,9 +847,13 @@
 "contents": [],
 "link": "https://rust.double11.com/store/space-lr300",
 "stores": {
-"playstation": true,
-"xbox": false
-}
+"playstation": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0890993918406464",
+"xbox": ""
+},
+"released": "2026-06-25",
+"releasedFrom": "PlayStation",
+"releasedUrl": "https://store.playstation.com/en-gb/product/EP4415-PPSA24616_00-0890993918406464",
+"storeListing": true
 }
 ],
 "skins": [
@@ -742,7 +863,9 @@
 "category": "Building skins",
 "pack": "Adobe Building Skin",
 "packId": "adobe-building-skin",
-"link": "https://rust.double11.com/store/adobe-building-skin"
+"link": "https://rust.double11.com/store/adobe-building-skin",
+"released": "",
+"releasedVia": ""
 },
 {
 "name": "Adobe External",
@@ -750,7 +873,9 @@
 "category": "Building skins",
 "pack": "Adobe External",
 "packId": "adobe-external",
-"link": "https://rust.double11.com/store/adobe-external"
+"link": "https://rust.double11.com/store/adobe-external",
+"released": "",
+"releasedVia": ""
 },
 {
 "name": "BAR DOOR",
@@ -758,7 +883,9 @@
 "category": "Building skins",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Brick Building Skin",
@@ -766,7 +893,9 @@
 "category": "Building skins",
 "pack": "Brick Building Skin",
 "packId": "brick-building-skin",
-"link": "https://rust.double11.com/store/brick-building-skin"
+"link": "https://rust.double11.com/store/brick-building-skin",
+"released": "",
+"releasedVia": ""
 },
 {
 "name": "Brutalist Building Skin",
@@ -774,7 +903,9 @@
 "category": "Building skins",
 "pack": "Brutalist Building Skin",
 "packId": "brutalist-building-skin",
-"link": "https://rust.double11.com/store/brutalist-building-skin"
+"link": "https://rust.double11.com/store/brutalist-building-skin",
+"released": "2025-06-26",
+"releasedVia": ""
 },
 {
 "name": "Crypt Building Skin",
@@ -782,7 +913,9 @@
 "category": "Building skins",
 "pack": "Crypt Building Skin",
 "packId": "crypt-building-skin",
-"link": "https://rust.double11.com/store/crypt-building-skin"
+"link": "https://rust.double11.com/store/crypt-building-skin",
+"released": "2026-10-15",
+"releasedVia": ""
 },
 {
 "name": "DEATH KORPS OF KRIEG STORAGE CONTAINERS",
@@ -790,7 +923,9 @@
 "category": "Building skins",
 "pack": "Warhammer Pack",
 "packId": "warhammer-pack",
-"link": "https://rust.double11.com/store/warhammer-pack"
+"link": "https://rust.double11.com/store/warhammer-pack",
+"released": "2026-05-21",
+"releasedVia": "Warhammer Pack"
 },
 {
 "name": "Legacy Wood Building Skin",
@@ -798,7 +933,9 @@
 "category": "Building skins",
 "pack": "Legacy Wood Building Skin",
 "packId": "legacy-wood-building-skin",
-"link": "https://rust.double11.com/store/legacy-wood-building-skin"
+"link": "https://rust.double11.com/store/legacy-wood-building-skin",
+"released": "2025-06-26",
+"releasedVia": ""
 },
 {
 "name": "Legacy Wood External",
@@ -806,7 +943,9 @@
 "category": "Building skins",
 "pack": "Legacy Wood External",
 "packId": "legacy-wood-external",
-"link": "https://rust.double11.com/store/legacy-wood-external"
+"link": "https://rust.double11.com/store/legacy-wood-external",
+"released": "",
+"releasedVia": ""
 },
 {
 "name": "Shipping Container Building Skin",
@@ -814,7 +953,9 @@
 "category": "Building skins",
 "pack": "Shipping Container Building Skin",
 "packId": "shipping-container",
-"link": "https://rust.double11.com/store/shipping-container"
+"link": "https://rust.double11.com/store/shipping-container",
+"released": "2025-07-31",
+"releasedVia": ""
 },
 {
 "name": "Space Station Building Skin",
@@ -822,7 +963,9 @@
 "category": "Building skins",
 "pack": "Space Station Building Skin",
 "packId": "space-station",
-"link": "https://rust.double11.com/store/space-station"
+"link": "https://rust.double11.com/store/space-station",
+"released": "2026-06-25",
+"releasedVia": ""
 },
 {
 "name": "Arctic Hazmat Suit",
@@ -830,7 +973,9 @@
 "category": "Clothing",
 "pack": "Arctic Pack",
 "packId": "arctic-pack",
-"link": "https://rust.double11.com/store/arctic-pack"
+"link": "https://rust.double11.com/store/arctic-pack",
+"released": "2025-12-04",
+"releasedVia": "Arctic Pack"
 },
 {
 "name": "Coconut Underwear",
@@ -838,7 +983,9 @@
 "category": "Clothing",
 "pack": "Coconut Underwear",
 "packId": "coconut-underwear",
-"link": "https://rust.double11.com/store/coconut-underwear"
+"link": "https://rust.double11.com/store/coconut-underwear",
+"released": "2026-07-30",
+"releasedVia": ""
 },
 {
 "name": "DEATH KORPS OF KRIEG BACKPACK",
@@ -846,7 +993,9 @@
 "category": "Clothing",
 "pack": "Warhammer Pack",
 "packId": "warhammer-pack",
-"link": "https://rust.double11.com/store/warhammer-pack"
+"link": "https://rust.double11.com/store/warhammer-pack",
+"released": "2026-05-21",
+"releasedVia": "Warhammer Pack"
 },
 {
 "name": "DEATH KORPS OF KRIEG HAZMAT SUIT",
@@ -854,7 +1003,9 @@
 "category": "Clothing",
 "pack": "Warhammer Pack",
 "packId": "warhammer-pack",
-"link": "https://rust.double11.com/store/warhammer-pack"
+"link": "https://rust.double11.com/store/warhammer-pack",
+"released": "2026-05-21",
+"releasedVia": "Warhammer Pack"
 },
 {
 "name": "Ice Chestplate",
@@ -862,7 +1013,9 @@
 "category": "Clothing",
 "pack": "Ice King Pack",
 "packId": "ice-king-pack",
-"link": "https://rust.double11.com/store/ice-king-pack"
+"link": "https://rust.double11.com/store/ice-king-pack",
+"released": "2025-12-04",
+"releasedVia": "Ice King Pack"
 },
 {
 "name": "Ice Facemask",
@@ -870,7 +1023,9 @@
 "category": "Clothing",
 "pack": "Ice King Pack",
 "packId": "ice-king-pack",
-"link": "https://rust.double11.com/store/ice-king-pack"
+"link": "https://rust.double11.com/store/ice-king-pack",
+"released": "2025-12-04",
+"releasedVia": "Ice King Pack"
 },
 {
 "name": "Lumberjack",
@@ -878,7 +1033,9 @@
 "category": "Clothing",
 "pack": "Lumberjack Pack",
 "packId": "lumberjack-pack",
-"link": "https://rust.double11.com/store/lumberjack-pack"
+"link": "https://rust.double11.com/store/lumberjack-pack",
+"released": "2025-10-30",
+"releasedVia": "Lumberjack Pack"
 },
 {
 "name": "Nomad Hazmat Suit",
@@ -886,7 +1043,9 @@
 "category": "Clothing",
 "pack": "Nomad Hazmat Suit",
 "packId": "nomad-hazmat",
-"link": "https://rust.double11.com/store/nomad-hazmat"
+"link": "https://rust.double11.com/store/nomad-hazmat",
+"released": "2026-02-26",
+"releasedVia": ""
 },
 {
 "name": "Space Suit",
@@ -894,7 +1053,9 @@
 "category": "Clothing",
 "pack": "Space Suit",
 "packId": "space-suit",
-"link": "https://rust.double11.com/store/space-suit"
+"link": "https://rust.double11.com/store/space-suit",
+"released": "2026-06-25",
+"releasedVia": ""
 },
 {
 "name": "Blue Diamonds",
@@ -902,7 +1063,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "Clouds",
@@ -910,7 +1073,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "Exhibit Decor Pack",
@@ -918,7 +1083,9 @@
 "category": "Decor & base",
 "pack": "Exhibit Decor Pack",
 "packId": "exhibit-pack",
-"link": "https://rust.double11.com/store/exhibit-pack"
+"link": "https://rust.double11.com/store/exhibit-pack",
+"released": "",
+"releasedVia": ""
 },
 {
 "name": "FISH TROPHY",
@@ -926,7 +1093,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Floor and Ceiling Wallpaper Pack",
@@ -934,7 +1103,9 @@
 "category": "Decor & base",
 "pack": "Floor and Ceiling Wallpaper Pack",
 "packId": "floor-and-ceiling-wp",
-"link": "https://rust.double11.com/store/floor-and-ceiling-wp"
+"link": "https://rust.double11.com/store/floor-and-ceiling-wp",
+"released": "2025-10-30",
+"releasedVia": ""
 },
 {
 "name": "FRONTIER PLANTER",
@@ -942,7 +1113,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Geometric",
@@ -950,7 +1123,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "HUNTING TROPHY",
@@ -958,7 +1133,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Ice King Throne",
@@ -966,7 +1143,9 @@
 "category": "Decor & base",
 "pack": "Ice King Pack",
 "packId": "ice-king-pack",
-"link": "https://rust.double11.com/store/ice-king-pack"
+"link": "https://rust.double11.com/store/ice-king-pack",
+"released": "2025-12-04",
+"releasedVia": "Ice King Pack"
 },
 {
 "name": "Industrial Lights",
@@ -974,7 +1153,9 @@
 "category": "Decor & base",
 "pack": "Industrial Lights",
 "packId": "industrial-lights",
-"link": "https://rust.double11.com/store/industrial-lights"
+"link": "https://rust.double11.com/store/industrial-lights",
+"released": "2026-03-26",
+"releasedVia": ""
 },
 {
 "name": "Polka",
@@ -982,7 +1163,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "RAIL ROAD PLANTER",
@@ -990,7 +1173,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "ROCKING CHAIR",
@@ -998,7 +1183,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Royal",
@@ -1006,7 +1193,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "STORAGE BARRELS",
@@ -1014,7 +1203,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Subway Tiles",
@@ -1022,7 +1213,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "TORCH HOLDER",
@@ -1030,7 +1223,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "TRIANGLE PLANTER",
@@ -1038,7 +1233,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Venetian Plaster",
@@ -1046,7 +1243,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "Wainscotting",
@@ -1054,7 +1253,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "WEAPON RACK",
@@ -1062,7 +1263,9 @@
 "category": "Decor & base",
 "pack": "Frontier Decor Pack",
 "packId": "frontier-decor-pack",
-"link": "https://rust.double11.com/store/frontier-decor-pack"
+"link": "https://rust.double11.com/store/frontier-decor-pack",
+"released": "",
+"releasedVia": "Frontier Decor Pack"
 },
 {
 "name": "Weapon Racks",
@@ -1070,7 +1273,9 @@
 "category": "Decor & base",
 "pack": "Weapon Racks",
 "packId": "weapon-racks",
-"link": "https://rust.double11.com/store/weapon-racks"
+"link": "https://rust.double11.com/store/weapon-racks",
+"released": "2025-10-30",
+"releasedVia": ""
 },
 {
 "name": "Yellow Stripes",
@@ -1078,7 +1283,9 @@
 "category": "Decor & base",
 "pack": "Wallpaper-Starter-Pack",
 "packId": "wallpaper-starter-pack",
-"link": "https://rust.double11.com/store/wallpaper-starter-pack"
+"link": "https://rust.double11.com/store/wallpaper-starter-pack",
+"released": "",
+"releasedVia": "Wallpaper-Starter-Pack"
 },
 {
 "name": "Gesture Pack",
@@ -1086,7 +1293,9 @@
 "category": "Packs & bundles",
 "pack": "Gesture Pack",
 "packId": "gesture-pack",
-"link": "https://rust.double11.com/store/gesture-pack"
+"link": "https://rust.double11.com/store/gesture-pack",
+"released": "2025-07-31",
+"releasedVia": ""
 },
 {
 "name": "Pilot Pack",
@@ -1094,7 +1303,9 @@
 "category": "Packs & bundles",
 "pack": "Pilot Pack",
 "packId": "pilot-pack",
-"link": "https://rust.double11.com/store/pilot-pack"
+"link": "https://rust.double11.com/store/pilot-pack",
+"released": "",
+"releasedVia": ""
 },
 {
 "name": "Storage Box Pack",
@@ -1102,7 +1313,9 @@
 "category": "Packs & bundles",
 "pack": "Storage Box Pack",
 "packId": "storage-box-pack",
-"link": "https://rust.double11.com/store/storage-box-pack"
+"link": "https://rust.double11.com/store/storage-box-pack",
+"released": "2026-09-24",
+"releasedVia": ""
 },
 {
 "name": "Sunburn Pack",
@@ -1110,7 +1323,9 @@
 "category": "Packs & bundles",
 "pack": "Sunburn Pack",
 "packId": "sunburn-pack",
-"link": "https://rust.double11.com/store/sunburn-pack"
+"link": "https://rust.double11.com/store/sunburn-pack",
+"released": "2026-08-27",
+"releasedVia": ""
 },
 {
 "name": "Concrete Hatchet",
@@ -1118,7 +1333,9 @@
 "category": "Tools",
 "pack": "Lumberjack Pack",
 "packId": "lumberjack-pack",
-"link": "https://rust.double11.com/store/lumberjack-pack"
+"link": "https://rust.double11.com/store/lumberjack-pack",
+"released": "2025-10-30",
+"releasedVia": "Lumberjack Pack"
 },
 {
 "name": "Concrete Pickaxe",
@@ -1126,7 +1343,9 @@
 "category": "Tools",
 "pack": "Lumberjack Pack",
 "packId": "lumberjack-pack",
-"link": "https://rust.double11.com/store/lumberjack-pack"
+"link": "https://rust.double11.com/store/lumberjack-pack",
+"released": "2025-10-30",
+"releasedVia": "Lumberjack Pack"
 },
 {
 "name": "FRONTIER HATCHET",
@@ -1134,7 +1353,9 @@
 "category": "Tools",
 "pack": "Frontiersman",
 "packId": "frontiersman-pack",
-"link": "https://rust.double11.com/store/frontiersman-pack"
+"link": "https://rust.double11.com/store/frontiersman-pack",
+"released": "2025-09-25",
+"releasedVia": "Frontiersman"
 },
 {
 "name": "Prototype Hatchet",
@@ -1142,7 +1363,9 @@
 "category": "Tools",
 "pack": "Lumberjack Pack",
 "packId": "lumberjack-pack",
-"link": "https://rust.double11.com/store/lumberjack-pack"
+"link": "https://rust.double11.com/store/lumberjack-pack",
+"released": "2025-10-30",
+"releasedVia": "Lumberjack Pack"
 },
 {
 "name": "Prototype Pickaxe",
@@ -1150,7 +1373,9 @@
 "category": "Tools",
 "pack": "Lumberjack Pack",
 "packId": "lumberjack-pack",
-"link": "https://rust.double11.com/store/lumberjack-pack"
+"link": "https://rust.double11.com/store/lumberjack-pack",
+"released": "2025-10-30",
+"releasedVia": "Lumberjack Pack"
 },
 {
 "name": "Tomaha Snowmobile Skin",
@@ -1158,7 +1383,9 @@
 "category": "Vehicles",
 "pack": "Arctic Pack",
 "packId": "arctic-pack",
-"link": "https://rust.double11.com/store/arctic-pack"
+"link": "https://rust.double11.com/store/arctic-pack",
+"released": "2025-12-04",
+"releasedVia": "Arctic Pack"
 },
 {
 "name": "Arctic Assault Rifle",
@@ -1166,7 +1393,9 @@
 "category": "Weapons",
 "pack": "Arctic Pack",
 "packId": "arctic-pack",
-"link": "https://rust.double11.com/store/arctic-pack"
+"link": "https://rust.double11.com/store/arctic-pack",
+"released": "2025-12-04",
+"releasedVia": "Arctic Pack"
 },
 {
 "name": "BLUNDERBUSS",
@@ -1174,7 +1403,9 @@
 "category": "Weapons",
 "pack": "Frontiersman",
 "packId": "frontiersman-pack",
-"link": "https://rust.double11.com/store/frontiersman-pack"
+"link": "https://rust.double11.com/store/frontiersman-pack",
+"released": "2025-09-25",
+"releasedVia": "Frontiersman"
 },
 {
 "name": "DEATH KORPS OF KRIEG CHAINSWORD",
@@ -1182,7 +1413,9 @@
 "category": "Weapons",
 "pack": "Warhammer Pack",
 "packId": "warhammer-pack",
-"link": "https://rust.double11.com/store/warhammer-pack"
+"link": "https://rust.double11.com/store/warhammer-pack",
+"released": "2026-05-21",
+"releasedVia": "Warhammer Pack"
 },
 {
 "name": "DEATH KORPS OF KRIEG SHOTGUN",
@@ -1190,7 +1423,9 @@
 "category": "Weapons",
 "pack": "Warhammer Pack",
 "packId": "warhammer-pack",
-"link": "https://rust.double11.com/store/warhammer-pack"
+"link": "https://rust.double11.com/store/warhammer-pack",
+"released": "2026-05-21",
+"releasedVia": "Warhammer Pack"
 },
 {
 "name": "RPG Launcher",
@@ -1198,7 +1433,9 @@
 "category": "Weapons",
 "pack": "RPG Launcher",
 "packId": "rpg-launcher",
-"link": "https://rust.double11.com/store/rpg-launcher"
+"link": "https://rust.double11.com/store/rpg-launcher",
+"released": "2026-05-27",
+"releasedVia": ""
 },
 {
 "name": "Space LR-300 Assault Rifle",
@@ -1206,7 +1443,86 @@
 "category": "Weapons",
 "pack": "Space LR-300 Assault Rifle",
 "packId": "space-lr300",
-"link": "https://rust.double11.com/store/space-lr300"
+"link": "https://rust.double11.com/store/space-lr300",
+"released": "2026-06-25",
+"releasedVia": ""
+}
+],
+"news": [
+{
+"title": "What’s Ahead",
+"date": "2026-11-04",
+"url": "https://rust.double11.com/news/whats-ahead"
+},
+{
+"title": "Dev Blog #56 - Overground Trains",
+"date": "2026-10-27",
+"url": "https://rust.double11.com/news/dev-blog-56"
+},
+{
+"title": "Halloween 2026",
+"date": "2026-10-14",
+"url": "https://rust.double11.com/news/halloween-2026"
+},
+{
+"title": "Dev Blog #55 - 1.16 Patch Notes",
+"date": "2026-09-23",
+"url": "https://rust.double11.com/news/dev-blog-55"
+},
+{
+"title": "Evolving our Public Test Branch",
+"date": "2026-09-01",
+"url": "https://rust.double11.com/news/evolving-our-public-test-branch"
+},
+{
+"title": "Dev Blog #54",
+"date": "2026-08-26",
+"url": "https://rust.double11.com/news/dev-blog-54"
+},
+{
+"title": "Rapid Patch 1.14",
+"date": "2026-08-07",
+"url": "https://rust.double11.com/news/rapid-patch-114"
+},
+{
+"title": "Patch Notes 1.14",
+"date": "2026-07-30",
+"url": "https://rust.double11.com/news/patch-notes-114"
+},
+{
+"title": "Dev Blog #53",
+"date": "2026-07-29",
+"url": "https://rust.double11.com/news/dev-blog-53"
+},
+{
+"title": "Patch Notes 1.13",
+"date": "2026-06-25",
+"url": "https://rust.double11.com/news/patch-notes-113"
+},
+{
+"title": "Dev Blog #52",
+"date": "2026-06-25",
+"url": "https://rust.double11.com/news/dev-blog-52"
+},
+{
+"title": "Dev Blog #51",
+"date": "2026-05-28",
+"url": "https://rust.double11.com/news/dev-blog-51"
+},
+{
+"title": "Dev Blog #49",
+"date": "2026-03-25",
+"url": "https://rust.double11.com/news/dev-blog-49"
+},
+{
+"title": "Dev Blog #47",
+"date": "2026-01-29",
+"url": "https://rust.double11.com/news/dev-blog-47"
+},
+{
+"title": "Dev Blog #46",
+"date": "2025-12-11",
+"url": "https://rust.double11.com/news/dev-blog-46"
 }
 ]
 }
