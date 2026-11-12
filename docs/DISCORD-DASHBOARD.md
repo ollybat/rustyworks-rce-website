@@ -263,3 +263,22 @@ dashboard bounced straight back to Discord. Two things caused that, both now fix
 
 Recent sign-in outcomes are readable from `/api/config-check` as `signInLog` - reason codes
 only, with no ids and no tokens.
+
+### Sessions do not use cookies on this host
+
+Measured, not assumed: a real browser loaded `/auth/login` and the next request on the same
+origin arrived with **no cookie header at all** (`cookieHeaderCount: 0`). This platform does
+not pass `Set-Cookie` through to the browser, so a cookie session is impossible here however
+it is written.
+
+How a session travels instead:
+
+1. Discord returns to `/auth/callback`, which mints the signed session.
+2. It forwards to `/auth/finish`, which hands that value to the page and to a cookie.
+3. The page keeps it in `localStorage` under `spinback-session` and removes it from the address.
+4. The console sends it as an `x-spinback-session` header on every request, and the Worker
+   accepts a session from that header or from a cookie, whichever arrives.
+
+The console shell at `/dashboard` is served without a session because it holds no data of its
+own; every endpoint behind it checks the session it is given. Signing out clears the stored
+session as well as the cookie.
