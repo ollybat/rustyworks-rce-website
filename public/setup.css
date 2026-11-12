@@ -1,0 +1,19 @@
+/* Setup assistant - shows whether Spinback is in a server before anything can be set up.
+   Loaded after style.css and site-plus.css, so it only ever adds. */
+.sb-setup { display: grid; gap: 14px; margin-top: 6px; }
+.sb-setup-loading { color: var(--text-dim); font-size: 14px; }
+.sb-setup-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 16px 18px; display: grid; gap: 10px; }
+.sb-setup-card h3 { margin: 0; font-size: 17px; }
+.sb-setup-card p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.55; }
+.sb-setup-who { color: var(--text-dim); font-size: 13px; }
+.sb-server { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 14px 16px; }
+.sb-server-main { display: grid; gap: 4px; min-width: 220px; }
+.sb-server-name { font-weight: 600; }
+.sb-presence { font-size: 13px; display: inline-flex; align-items: center; gap: 7px; }
+.sb-presence::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--steel); }
+.sb-presence-yes { color: var(--green); } .sb-presence-yes::before { background: var(--green); }
+.sb-presence-no { color: var(--ember); } .sb-presence-no::before { background: var(--ember); }
+.sb-server-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.sb-setup-msg { font-size: 13px; color: var(--text-dim); min-height: 18px; }
+.sb-setup-msg.good { color: var(--green); } .sb-setup-msg.bad { color: var(--ember); }
+@media (max-width: 560px) { .sb-server { flex-direction: column; align-items: stretch; } }
