@@ -136,6 +136,10 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
+      /* online is the field the status page reads. Without it the page assumed the bot
+         was up whenever it got an answer at all, which is how a tokenless process could
+         be announced as online. */
+      online: state.gateway === 'online',
       ok: state.gateway === 'online',
       gateway: state.gateway,
       tag: state.tag,
