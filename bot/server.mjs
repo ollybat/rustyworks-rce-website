@@ -112,6 +112,8 @@ client.once(Events.ClientReady, async (c) => {
       name: guild.name,
       ownerId: guild.ownerId,
       memberCount: guild.memberCount,
+      /* The icon hash, so the website can show a server's real picture. */
+      icon: guild.icon || null,
       roles: guild.roles.cache
         .filter((r) => r.name !== '@everyone')
         .sort((a, b) => b.position - a.position)
