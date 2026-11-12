@@ -1,0 +1,22 @@
+/* Account pages: Servers, Profile, Settings. Loaded after style.css and site-plus.css. */
+.acct-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.acct-tabs a { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-dim); text-decoration: none; font-size: 14px; }
+.acct-tabs a:hover { color: var(--text); border-color: var(--rust); }
+.acct-tabs a[aria-current='page'] { color: var(--text); border-color: var(--rust); background: rgba(207, 106, 46, 0.12); }
+.acct-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 20px; display: grid; gap: 14px; }
+.acct-who { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.acct-avatar { width: 72px; height: 72px; border-radius: 50%; border: 2px solid var(--line); background: var(--bg); object-fit: cover; }
+.acct-name { font-size: 22px; font-weight: 600; margin: 0; }
+.acct-sub { color: var(--text-dim); font-size: 14px; margin: 0; }
+.acct-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid var(--line); color: var(--text-dim); }
+.acct-badge.owner { border-color: rgba(244, 162, 89, 0.55); color: var(--ember); }
+.acct-badge.staff { border-color: rgba(108, 194, 74, 0.5); color: var(--green); }
+.acct-rows { display: grid; gap: 10px; }
+.acct-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 10px; font-size: 15px; }
+.acct-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.acct-row span:first-child { color: var(--text-dim); }
+.acct-row span:last-child { text-align: right; word-break: break-word; }
+.acct-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.acct-msg { font-size: 14px; color: var(--text-dim); min-height: 18px; }
+.acct-msg.good { color: var(--green); } .acct-msg.bad { color: var(--ember); }
+.acct-skeleton { color: var(--text-dim); font-size: 15px; }
