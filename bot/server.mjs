@@ -25,6 +25,9 @@ const GUILD_ID = process.env.DISCORD_GUILD_ID || '';
 const OWNER_ID = process.env.DISCORD_GUILD_OWNER_ID || '';
 const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY || '';
 const PORT = Number(process.env.PORT || 8080);
+/* Bind every interface: Railway's proxy reaches the container from outside it, so a
+   server on 127.0.0.1 would answer nothing and the public domain would 502. */
+const HOST = process.env.HOST || '0.0.0.0';
 
 const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null };
 const log = (...a) => console.log('[spinback]', ...a);
@@ -137,6 +140,10 @@ createServer(async (req, res) => {
       tag: state.tag,
       guilds: state.guilds,
       command: state.command,
+      port: PORT,
+      host: HOST,
+      tokenPresent: !!TOKEN,
+      siteUrl: SITE_URL,
       interactions: !!PUBLIC_KEY,
       guildConfigured: !!GUILD_ID && !!OWNER_ID,
       error: state.error,
@@ -160,7 +167,12 @@ createServer(async (req, res) => {
       res.end('{"error":"handler failed"}');
     }
   });
-}).listen(PORT, () => log('listening on ' + PORT + ' — health at /healthz'));
+}).listen(PORT, HOST, () => {
+  log('listening on ' + HOST + ':' + PORT + ' — health at /healthz');
+  log('config: token=' + (TOKEN ? 'set' : 'MISSING') + ' guild=' + (GUILD_ID || 'unset') + ' owner=' + (OWNER_ID || 'unset') + ' publicKey=' + (PUBLIC_KEY ? 'set' : 'unset'));
+  log('PORT was provided by the platform as "' + String(process.env.PORT || '(not set, defaulted to 8080)') + '"');
+  if (!TOKEN) log('the bot has no token, so it will not come online — set DISCORD_BOT_TOKEN on this Railway service');
+});
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
