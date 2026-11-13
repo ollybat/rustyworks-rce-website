@@ -36,6 +36,7 @@ const initial = {
   servers: [{ id: "srv1", name: "Main", host: "203.0.113.10", port: 28016, hasPassword: true, password: "secret" }],
   kits: { binds: [{ emote: "salute", kits: ["STARTER"], cooldown: 60, roleId: null }], locked: false, authSpawn: {},
     giveCommand: 'kit givetoplayer {kit} "{player}"', listCommand: "kit list", known: [] },
+  installs: {},
   links,
   pending: [],
   linkPanel: null,
@@ -47,6 +48,7 @@ const store = JSON.parse(JSON.stringify(initial));
 function merge(into, body) {
   for (const key of ["staffRoles", "logChannels", "kits"]) if (body[key] && typeof body[key] === "object") into[key] = Object.assign({}, into[key], body[key]);
   for (const key of ["servers", "links", "pending"]) if (Array.isArray(body[key])) into[key] = body[key];
+  if (body.installs && typeof body.installs === "object") into.installs = Object.assign({}, into.installs || {}, body.installs);
   if ("linkPanel" in body) into.linkPanel = body.linkPanel;
 }
 const writes = [];
@@ -212,6 +214,7 @@ let saved = null;
 try { saved = JSON.parse(readFileSync(SETTINGS_FILE, "utf8")); } catch (e) { saved = null; }
 between.push(["the settings file is written", !!saved]);
 between.push(["it holds the saved roles and servers", !!(saved && saved.staffRoles && saved.staffRoles.owner && Array.isArray(saved.servers) && saved.servers.length)]);
+between.push(["kit-code previews survive in the settings file", !!(saved && saved.installs && Object.keys(saved.installs).length)]);
 between.push(["it is readable by the bot's own user only (0600)", process.platform === "win32" || (existsSync(SETTINGS_FILE) && (statSync(SETTINGS_FILE).mode & 0o077) === 0)]);
 between.push(["no half-written temp file is left", !existsSync(SETTINGS_FILE + ".tmp")]);
 
