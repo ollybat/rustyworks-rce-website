@@ -191,8 +191,10 @@ export async function run({ world, make, interact }) {
   expect("Read kit names answers from the panel", it.firstAckAt !== null && text(last(it)).length > 10, text(last(it)).slice(0, 300));
 
   /* 20. an install code teaches the bot its kit names */
+  const invalidCode = await go(make.modal(ADMIN, "modal:kitcode", { install_code: "%%%not-base64%%%" }), "submit malformed kit code");
+  expect("malformed Base64 is rejected without storing a preview", text(last(invalidCode)).includes("not valid") && Object.keys(store.installs || {}).length === 0, text(last(invalidCode)));
   const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
-  it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "install a kit code");
+  it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "preview a kit code");
   expect("the kit names in an install code are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
   it = await go(make.command(ADMIN, "kits", "give", { kit: "rai" }, "kit"), "autocomplete an installed kit");
   expect("an installed kit is suggested straight away", [].concat(last(it) || []).some((c) => c.value === "RAIDER"), text(last(it)));
