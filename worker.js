@@ -298,27 +298,17 @@ async function readHistory(env, hours) {
   const from = Math.floor(now / 3600000) * 3600000 - (hours - 1) * 3600000;
   const samples = [];
   const buckets = [];
-  /* One object per hour. Read them in parallel batches rather than one after another: a
-     week is 168 objects, which used to mean 168 round trips in a row. */
-  const readHour = async (at) => {
+  for (let at = from; at <= now; at += 3600000) {
+    let list = [];
     try {
       const object = await bucket.get(MONITOR_PREFIX + hourStamp(at) + ".json");
-      if (!object) return [];
-      const parsed = await object.json();
-      return Array.isArray(parsed) ? parsed.filter((entry) => entry && typeof entry.t === "number") : [];
+      if (object) {
+        const parsed = await object.json();
+        if (Array.isArray(parsed)) list = parsed.filter((entry) => entry && typeof entry.t === "number");
+      }
     } catch (error) {
-      return [];
+      list = [];
     }
-  };
-  const hourStarts = [];
-  for (let at = from; at <= now; at += 3600000) hourStarts.push(at);
-  const hourLists = [];
-  for (let i = 0; i < hourStarts.length; i += 24) {
-    hourLists.push(...(await Promise.all(hourStarts.slice(i, i + 24).map(readHour))));
-  }
-  for (let h = 0; h < hourStarts.length; h++) {
-    const at = hourStarts[h];
-    const list = hourLists[h];
     const ok = list.filter((entry) => entry.ok);
     const latencies = ok.map((entry) => entry.ms).filter((ms) => typeof ms === "number");
     const latest = list[list.length - 1] || null;
@@ -374,13 +364,6 @@ async function readHistory(env, hours) {
   };
 }
 
-/* The status page asks for the same history from three scripts and again every minute, and
-   each answer reads up to a week of hourly objects. A computed answer is reused for a few
-   seconds. Only finished plain data is kept: on Workers a pending promise must not be shared
-   between requests. */
-const HISTORY_CACHE_MS = 15000;
-const historyCache = new Map();
-
 async function statusHistory(request, env) {
   const url = new URL(request.url);
   const hours = Math.min(168, Math.max(1, Number(url.searchParams.get("hours")) || 24));
@@ -388,14 +371,7 @@ async function statusHistory(request, env) {
     return json({ available: false, reason: "no_storage" }, 200);
   }
   try {
-    const held = historyCache.get(hours);
-    let data;
-    if (held && Date.now() - held.at < HISTORY_CACHE_MS) {
-      data = held.data;
-    } else {
-      data = await readHistory(env, hours);
-      historyCache.set(hours, { at: Date.now(), data: data });
-    }
+    const data = await readHistory(env, hours);
     return new Response(JSON.stringify(data), {
       headers: {
         "content-type": "application/json; charset=utf-8",
@@ -422,8 +398,8 @@ async function proxyApi(request, env, ctx) {
       connected: false,
       reason: "not_connected",
       message: "No bot API is connected yet. Set BOT_API_ORIGIN on this app to your bot's address."
-    }, 503);
-  }
+
+[1747 more lines in file. Use offset=401 to continue.]
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
@@ -455,14 +431,11 @@ async function proxyApi(request, env, ctx) {
       }
       ctx.waitUntil(trimSamples(env));
     }
-    /* Only a successful read may be kept by the browser. A cached 502 or 503 kept a recovered
-       bot looking down for up to a minute. */
-    const cacheable = upstream.ok && (request.method === "GET" || request.method === "HEAD");
     return new Response(body, {
       status: upstream.status,
       headers: {
         "content-type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
-        "cache-control": cacheable ? "public, max-age=60" : "no-store",
+        "cache-control": "public, max-age=60",
         "access-control-allow-origin": "*",
       },
     });
@@ -500,16 +473,6 @@ const KIT_PATHS = [
 const KIT_ALIASES = [
   [/^\/media\/spinback-icon-(halloween|thanksgiving)\.svg$/i, "/media/rustyworks-icon-$1.svg"],
   [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/rustyworks-app-$1.png"]
-];
-
-/* Spinback names the pages ask for that are already in public/media under another name.
-   Tried before the operator's site, so these never leave the Worker. */
-const LOCAL_ALIASES = [
-  [/^\/media\/spinback-icon\.svg$/i, "/media/rustyworks-icon.svg"],
-  [/^\/media\/spinback-icon-christmas\.svg$/i, "/media/rustyworks-icon-christmas.svg"],
-  [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/icon-$1.png"],
-  [/^\/media\/spinback-bg\.webp$/i, "/media/spinback-banner.webp"],
-  [/^\/media\/spinback-bg-poster\.jpg$/i, "/media/spinback-banner-poster.jpg"]
 ];
 
 async function kitAsset(url, ctx, env) {
@@ -837,8 +800,8 @@ async function authCallback(request, env) {
      link, which gains nothing on a page that only reports your own access. */
   const signedState = await verifySigned(env, state);
   const cookieMatches = Boolean(expectedState) && sameString(String(state), String(expectedState));
-  if (!code) {
-    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "no code came back from Discord" });
+
+[1345 more lines in file. Use offset=803 to continue.]
     return html("<p>Discord did not send a sign-in code back. <a href=\"/dashboard\">Start again</a>.</p>", 400);
   }
   if (!signedState && !cookieMatches) {
@@ -1239,8 +1202,8 @@ async function resolveSecrets(env) {
       : (stored && stored.clientSecret ? "this site's own storage" : (botExchange ? "the bot's service" : "nowhere yet")),
   };
   secretsCache = { at: now, value: value };
-  return value;
-}
+
+[943 more lines in file. Use offset=1205 to continue.]
 
 function forgetSecrets() { secretsCache = { at: 0, value: null }; }
 
@@ -1356,8 +1319,7 @@ async function botSettings(request, env) {
     return json({ ok: false, reason: "no-token", detail: "Set BOT_SETTINGS_TOKEN on the website and the same value on the bot." }, 503);
   }
   const given = String(request.headers.get("x-settings-token") || "");
-  /* Constant-time: this token guards RCON passwords and every settings write. */
-  if (!sameString(given, expected)) return json({ ok: false, reason: "bad-token" }, 403);
+  if (given !== expected) return json({ ok: false, reason: "bad-token" }, 403);
   /* The bot's panels write the same sections the site's own assignment tools read. */
   if (request.method === "POST") return botSettingsWrite(request, env);
   /* RCON passwords are write-only for anything running in a browser. The bot asks for the
@@ -1642,8 +1604,8 @@ async function ownerApi(request, env) {
     const settings = {
       name: tidy(body.name, 80),
       platform: tidy(body.platform, 30),
-      region: tidy(body.region, 40),
-      rate: tidy(body.rate, 20),
+
+[541 more lines in file. Use offset=1607 to continue.]
       wipe: tidy(body.wipe, 120),
       connect: tidy(body.connect, 120),
       joinUrl: tidy(body.joinUrl, 300),
@@ -2044,8 +2006,8 @@ async function dashboard(request, env) {
         <p style="margin-top:12px">Signed in as a Discord account; the session cookie is signed by this site and expires after ${SESSION_DAYS} days.</p>
       </div>
 
-      <div class="panel-box">
-        <h2 style="margin-bottom:10px">Coming from the bot</h2>
+
+[139 more lines in file. Use offset=2009 to continue.]
         <p>`/dashboard` in Discord replies privately with a link straight to this page. The command is hidden from
         everyone else in the server, and only the server owner can open what it links to.</p>
       </div>
@@ -2069,31 +2031,19 @@ export default {
        upstream site so the studio never breaks on a half-finished data move. */
     if (url.pathname === "/data/entities.json" || url.pathname.startsWith("/data/presets/")) {
       const local = await env.ASSETS.fetch(request);
-      if (local.status === 200) return withAssetHeaders(local, url.pathname);
+      /* A miss in the asset store comes back as the homepage, so a 200 only counts when the
+         body really is data. Otherwise a page of HTML would be handed back as JSON. */
+      const local_is_data = local.status === 200 && !/text\/html/i.test(local.headers.get("content-type") || "");
+      if (local_is_data) return withAssetHeaders(local, url.pathname);
       const upstreamPath = url.pathname === "/data/entities.json"
         ? "/media/entitys/entities.json"
         : url.pathname.replace("/data/presets/", "/media/kitbuilder/presets/");
       return kitAsset(new URL(KIT_ORIGIN + upstreamPath), ctx, env);
     }
 
-    /* Spinback artwork: our own file first (the banner, its poster and the mark live in
-       public/media), then a local file under its older name, and only then the operator's
-       site. Sending every /media/spinback-* path upstream used to 404 the local banner and
-       the header logo. */
-    if (url.pathname.startsWith("/media/spinback-")) {
-      if (request.method === "GET" || request.method === "HEAD") {
-        const own = await env.ASSETS.fetch(request);
-        if (own.status === 200) return withAssetHeaders(own, url.pathname);
-        const local = LOCAL_ALIASES.find((a) => a[0].test(url.pathname));
-        if (local) {
-          const target = url.pathname.replace(local[0], local[1]);
-          const aliased = await env.ASSETS.fetch(new Request(new URL(target, url), request));
-          if (aliased.status === 200) return withAssetHeaders(aliased, target);
-        }
-      }
-      return kitAsset(url, ctx, env);
-    }
-    if (url.pathname === "/media/entitys/entities.json" || url.pathname.startsWith("/media/kitbuilder/")) {
+    if (url.pathname === "/media/entitys/entities.json"
+      || url.pathname.startsWith("/media/kitbuilder/")
+      || url.pathname.startsWith("/media/spinback-")) {
       return kitAsset(url, ctx, env);
     }
     if (url.pathname === "/api/config-check") {
@@ -2123,15 +2073,8 @@ export default {
         envKeys: Object.keys(env).sort()
       });
     }
-    /* Sign-in was retired. Pages that still ask (the status page, theme sync) get a clear,
-       machine-readable answer instead of a bare 404 or the not-found page. */
-    if (url.pathname === "/auth" || url.pathname.startsWith("/auth/")) {
-      return json({ authenticated: false, configured: false, retired: true }, url.pathname === "/auth/me" ? 200 : 410);
-    }
     if (url.pathname === "/api/history") return statusHistory(request, env);
-    /* Sign-in setup went with the dashboard. It was the one route that still wrote to storage
-       for anybody who asked, so it is shut rather than left reachable. */
-    if (url.pathname === "/api/setup") return json({ error: "retired", note: "Sign-in setup was removed with the dashboard." }, 410);
+    if (url.pathname === "/api/setup") return authSetup(request, env);
     if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
     /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
     if (url.pathname === "/api/setup-status") return setupStatus(request, env);
@@ -2144,44 +2087,60 @@ export default {
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
     /* The dashboard is gone: /dashboard now sends you to the Kit Studio. */
-    /* Only /dashboard itself (with or without a trailing slash) is redirected - a second,
-       unconditional redirect used to sit on this line and sent every page, the Kit Studio
-       included, round in a loop. */
-    if (url.pathname === "/dashboard" || url.pathname === "/dashboard/") {
-      return Response.redirect(new URL("/dashboard/kitbuilder.html" + url.search, url).toString(), 302);
+    if (url.pathname === "/dashboard") {
+      return Response.redirect(new URL("/dashboard/kitbuilder.html", url).toString(), 302);
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
-    if (assetResponse.status !== 404) return withAssetHeaders(assetResponse, url.pathname);
 
     const method = request.method.toUpperCase();
     const isPageRequest = (method === "GET" || method === "HEAD") &&
       (request.headers.get("accept") || "").includes("text/html");
 
+    /* The asset store answers a missing file with the homepage instead of a 404. Only the two
+       addresses that really are the homepage may be answered with it: a stylesheet, script,
+       image or data file that is not there has to say so, or the browser quietly throws the
+       HTML away and the page is left with no styling or no data. */
+    const isHomepageFallback = (response, pathname) => response.status === 200 &&
+      (response.headers.get("content-type") || "").includes("text/html") &&
+      pathname !== "/" && pathname !== "/index.html";
+
+    /* The site's own 404 page, still answering 404. */
+    const notFound = async () => {
+      const fallback = await env.ASSETS.fetch(new URL("/404.html", request.url));
+      if (fallback.status === 404) {
+        return new Response("not found", {
+          status: 404,
+          headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
+        });
+      }
+      return new Response(method === "HEAD" ? null : await fallback.arrayBuffer(), {
+        status: 404,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "x-robots-tag": "noindex",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    };
+
+    if (!isHomepageFallback(assetResponse, url.pathname) && assetResponse.status !== 404) {
+      return withAssetHeaders(assetResponse, url.pathname);
+    }
+
     if (isPageRequest) {
-      /* A page asked for without its extension — /status for /status.html — so
-         links people copy out of the address bar stay short. */
+      /* A page asked for without its extension - /status for /status.html - so links people
+         copy out of the address bar stay short. */
       if (!HAS_EXTENSION.test(url.pathname)) {
         const target = url.pathname === "/" ? "/index.html" : url.pathname.replace(/\/+$/, "") + ".html";
         const pretty = await env.ASSETS.fetch(new URL(target, request.url));
-        if (pretty.status !== 404) return withAssetHeaders(pretty, target);
+        if (pretty.status !== 404 && !isHomepageFallback(pretty, target)) return withAssetHeaders(pretty, target);
       }
-
-      /* Nothing there: the site's own 404 page, still answering 404. */
-      const fallback = await env.ASSETS.fetch(new URL("/404.html", request.url));
-      if (fallback.status !== 404) {
-        return new Response(method === "HEAD" ? null : await fallback.arrayBuffer(), {
-          status: 404,
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-            "x-robots-tag": "noindex",
-            "x-content-type-options": "nosniff",
-          },
-        });
-      }
+      return await notFound();
     }
 
-    return withAssetHeaders(assetResponse, url.pathname);
+    /* Not a page request, so there is nothing to show a person: answer honestly. */
+    return await notFound();
   },
 };
