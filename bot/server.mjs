@@ -506,6 +506,24 @@ async function postLinkPanel(channelId) {
 /* When a kit is given by picking a player first, the picked gamertag is remembered here for
    the next screen. Held in memory only: a restart just means picking again. */
 const pendingGive = new Map();
+const PENDING_GIVE_TTL_MS = 10 * 60 * 1000;
+function rememberPendingGive(userId, gamertag) {
+  const now = Date.now();
+  pendingGive.forEach(function (entry, key) {
+    if (!entry || entry.expiresAt <= now) pendingGive.delete(key);
+  });
+  if (pendingGive.size >= 500 && !pendingGive.has(String(userId))) {
+    const oldest = pendingGive.keys().next().value;
+    if (oldest !== undefined) pendingGive.delete(oldest);
+  }
+  pendingGive.set(String(userId), { gamertag: String(gamertag || ''), expiresAt: now + PENDING_GIVE_TTL_MS });
+}
+function takePendingGive(userId) {
+  const key = String(userId);
+  const entry = pendingGive.get(key);
+  pendingGive.delete(key);
+  return entry && entry.expiresAt > Date.now() ? entry.gamertag : '';
+}
 
 function botCtx(interaction) {
   const actor = interaction && interaction.user ? { id: interaction.user.id, tag: interaction.user.tag || interaction.user.username || interaction.user.id } : null;
@@ -761,29 +779,43 @@ const ACK_AFTER_MS = 1500;
 async function respond(interaction, work, kind) {
   let deferring = null;
   const timer = setTimeout(function () {
-    deferring = (kind === 'update' ? interaction.deferUpdate() : interaction.deferReply(kind === 'public' ? {} : { flags: 64 }))
-      .catch(function (error) { log('defer failed:', String((error && error.message) || error)); });
+    /* Deferral can throw synchronously if an interaction has already expired. Wrap
+       the call itself, not just its returned promise, so timer callbacks cannot leak. */
+    deferring = Promise.resolve().then(function () {
+      return kind === 'update'
+        ? interaction.deferUpdate()
+        : interaction.deferReply(kind === 'public' ? {} : { flags: 64 });
+    }).then(function () { return true; }).catch(function (error) {
+      log('defer failed:', String((error && error.message) || error));
+      return false;
+    });
   }, ACK_AFTER_MS);
+
   let payload;
   try {
     payload = await Promise.resolve(typeof work === 'function' ? work() : work);
   } catch (error) {
-    const message = String((error && error.message) || error);
-    log('handler failed:', message);
-    logLater('errors', 'A command failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error.', [{ name: 'Error', value: message.slice(0, 900) }]);
-    payload = { embeds: [panelEmbed(0xdc4c4c, 'That did not work', message.slice(0, 400))] };
+    const reference = Date.now().toString(36);
+    const detail = String((error && (error.stack || error.message)) || error);
+    log('handler failed [' + reference + ']:', detail.slice(0, 1200));
+    logLater('errors', 'A command failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error. Reference: ' + reference,
+      [{ name: 'Error', value: detail.slice(0, 900) }]);
+    /* Never expose internal exception messages, hostnames or request details in a
+       Discord response. The private error log carries the reference for staff. */
+    payload = { embeds: [panelEmbed(0xdc4c4c, 'That did not work',
+      'The bot could not complete this action. Please try again. Reference: ' + reference)] };
   } finally {
     clearTimeout(timer);
   }
+
   const body = dress(Object.assign({}, payload || { content: 'Done.' }), { siteUrl: SITE_URL });
   try {
-    if (deferring) {
-      await deferring;
+    const deferSucceeded = deferring ? await deferring : false;
+    if (deferSucceeded || interaction.deferred || interaction.replied) {
       delete body.flags;
       if (kind === 'update' && body.components === undefined) body.components = [];
       await interaction.editReply(body);
     } else if (kind === 'update') {
-      delete body.flags;
       if (body.components === undefined) body.components = [];
       await interaction.update(body);
     } else {
@@ -792,7 +824,7 @@ async function respond(interaction, work, kind) {
       await interaction.reply(body);
     }
   } catch (error) {
-    log('answer failed:', String((error && error.message) || error));
+    log('answer failed:', String((error && (error.message || error)) || error).slice(0, 300));
   }
 }
 function answerModal(interaction, payload) { return respond(interaction, payload, 'reply'); }
@@ -818,11 +850,13 @@ async function routeInteraction(interaction) {
     if (typeof interaction.isUserSelectMenu === 'function' && interaction.isUserSelectMenu()) return await runSelect(interaction);
     return;
   } catch (error) {
-    const message = String((error && error.message) || error);
-    log('interaction failed:', message);
-    logLater('errors', 'An interaction failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error.', [{ name: 'Error', value: message.slice(0, 900) }]);
-    /* After a deferral a second reply is refused, so the error is edited in instead of lost. */
-    const body = { embeds: [panelEmbed(0xdc4c4c, 'That failed', message.slice(0, 300))] };
+    const reference = Date.now().toString(36);
+    const message = String((error && (error.stack || error.message)) || error);
+    log('interaction failed [' + reference + ']:', message.slice(0, 1200));
+    logLater('errors', 'An interaction failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error. Reference: ' + reference,
+      [{ name: 'Error', value: message.slice(0, 900) }]);
+    /* Keep stack traces and internal request details out of Discord responses. */
+    const body = { embeds: [panelEmbed(0xdc4c4c, 'That failed', 'The bot could not complete this action. Please try again. Reference: ' + reference)] };
     try {
       if (interaction.deferred || interaction.replied) await interaction.editReply(body);
       else await interaction.reply(Object.assign({ flags: 64 }, body));
@@ -854,7 +888,7 @@ async function runCommand(interaction) {
     return await interaction.reply({ content: 'That command is no longer used here.', flags: 64 }).catch(function () {});
   }
   const ctx = botCtx(interaction);
-  if (name !== 'ping' && !permitted(interaction, ctx)) {
+  if (name !== 'ping' && name !== 'help' && !permitted(interaction, ctx)) {
     await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
   }
@@ -1100,7 +1134,7 @@ async function runSelect(interaction) {
     })());
   }
   if (id === 'kits:give:pick') {
-    pendingGive.set(interaction.user.id, first);
+    rememberPendingGive(interaction.user.id, first);
     return await interaction.showModal(kitGiveModal());
   }
   log('unhandled select:', id);
@@ -1189,8 +1223,7 @@ async function runModal(interaction) {
     })());
   }
   if (id === 'modal:kitgive') {
-    const remembered = pendingGive.get(interaction.user.id) || '';
-    pendingGive.delete(interaction.user.id);
+    const remembered = takePendingGive(interaction.user.id);
     return await answerModal(interaction, (async function () {
       const payload = await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, user: fields.give_user || null });
       if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Sent') {
