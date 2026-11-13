@@ -818,7 +818,6 @@ async function authLogin(request, env) {
   authorize.searchParams.set("scope", "identify guilds guilds.members.read");
   authorize.searchParams.set("state", state);
   const headers = new Headers();
-  headers.append("set-cookie", cookieHeader("spinback_oauth_state", state, 600));
   headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));
   return redirect(authorize.toString(), headers);
 }
@@ -828,8 +827,6 @@ async function authCallback(request, env) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const expectedState = cookies(request).spinback_oauth_state;
-
   if (url.searchParams.get("error")) return html("<p>Discord refused the sign-in. <a href=\"/dashboard\">Try again</a>.</p>", 400);
   /* The signed nonce travels in Discord's redirect URL, so it can be verified even
      when the browser drops cross-site cookies. Never accept an unverified callback. */
