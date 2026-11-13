@@ -275,6 +275,11 @@ function finishKitGive(reservation, succeeded) {
   activeKitGives.delete(reservation.key);
   if (succeeded && Number(reservation.cooldownSeconds) > 0) {
     cooldowns.set(reservation.key, Date.now() + Number(reservation.cooldownSeconds) * 1000);
+    /* The map is memory-only by design, but still bounded against high-volume staff use. */
+    if (cooldowns.size > 5000) {
+      const oldest = [...cooldowns.entries()].sort((a, b) => Number(a[1]) - Number(b[1]));
+      oldest.slice(0, cooldowns.size - 5000).forEach(function (entry) { cooldowns.delete(entry[0]); });
+    }
   }
 }
 
@@ -316,7 +321,7 @@ function removeBind(emote) {
   const wanted = String(emote || '').toLowerCase();
   const before = settings.kits.binds.length;
   settings.kits.binds = settings.kits.binds.filter(function (b) { return b.emote.toLowerCase() !== wanted; });
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
   return before - settings.kits.binds.length;
 }
 
