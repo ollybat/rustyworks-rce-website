@@ -122,7 +122,7 @@ export async function run({ world, make, interact }) {
   it = await go(make.select(ADMIN, "role", "kits:role:wave", ["100000000000000303"]), "pick the bind role");
   /* saves go out one at a time, in order, so this one may still be behind the bind itself */
   let wave = null;
-  for (let i = 0; i < 40 && !(wave && wave.roleId); i++) {
+  for (let i = 0; i < 100 && !(wave && wave.roleId); i++) {
     w = await writes();
     wave = ((latest(w).kits || {}).binds || []).find((b) => b.emote === "wave");
     if (!(wave && wave.roleId)) await new Promise((r) => setTimeout(r, 150));

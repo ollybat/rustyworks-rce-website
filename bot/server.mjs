@@ -202,13 +202,28 @@ function panelButton(id, label, style) { return { type: 2, custom_id: id, label:
 let lastPersistAt = 0;
 /* Saves go out one at a time, in the order they were made, so a quick second change can never
    reach the website before the first and be overwritten by it. */
+/* While one save is on its way, later changes wait together: their sections are merged into
+   a single next save (sent with the values current at that moment), so a burst of clicks is
+   one request, not a backlog. */
 let persistQueue = Promise.resolve();
+let waitingSave = null;
 function persistSettings(sections) {
   writeSettingsFileSoon();
-  const run = function () { return persistSettingsNow(sections); };
-  const next = persistQueue.then(run, run);
-  persistQueue = next.then(function () {}, function () {});
-  return next;
+  const wanted = Array.isArray(sections) && sections.length ? sections : null;
+  if (waitingSave) {
+    if (!wanted) waitingSave.all = true;
+    else wanted.forEach(function (k) { waitingSave.sections.add(k); });
+    return waitingSave.promise;
+  }
+  const entry = { sections: new Set(wanted || []), all: !wanted, promise: null };
+  const run = function () {
+    if (waitingSave === entry) waitingSave = null;
+    return persistSettingsNow(entry.all ? null : Array.from(entry.sections));
+  };
+  entry.promise = persistQueue.then(run, run);
+  waitingSave = entry;
+  persistQueue = entry.promise.then(function () {}, function () {});
+  return entry.promise;
 }
 async function persistSettingsNow(sections) {
   const token = settingsToken();
