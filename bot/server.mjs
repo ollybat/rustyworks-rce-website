@@ -211,18 +211,48 @@ function setAuthSpawn(group, kit) {
   persistSettings(['kits']).catch(function () {});
 }
 
-function cooldownCount() { return cooldowns.size; }
+function pruneCooldowns() {
+  const now = Date.now();
+  cooldowns.forEach(function (expiresAt, key) {
+    if (!Number.isFinite(Number(expiresAt)) || Number(expiresAt) <= now) cooldowns.delete(key);
+  });
+}
+function cooldownCount() { pruneCooldowns(); return cooldowns.size; }
 
 function cooldownList() {
+  pruneCooldowns();
   const rows = [];
   cooldowns.forEach(function (value, key) {
-    const parts = String(key).split('::');
+    const parts = String(key).split('\u0000');
     const user = parts[0] || 'unknown';
-    const kit = parts[1] || 'unknown';
-    const left = Math.max(0, Math.round(((Number(value) || 0) - Date.now()) / 1000));
-    rows.push(user + ' -> ' + kit + (left ? ' (' + left + 's left)' : ''));
+    const kit = parts.slice(1).join('\u0000') || 'unknown';
+    const left = Math.max(0, Math.ceil((Number(value) - Date.now()) / 1000));
+    rows.push({ sort: Number(value), text: user + ' -> ' + kit + ' (' + left + 's left)' });
   });
-  return rows;
+  return rows.sort(function (a, b) { return a.sort - b.sort; }).map(function (row) { return row.text; });
+}
+
+function reserveKitGive(gamertag, kit, cooldownSeconds) {
+  pruneCooldowns();
+  const user = String(gamertag || '').trim().toLowerCase();
+  const item = String(kit || '').trim().toLowerCase();
+  const key = user + '\u0000' + item;
+  const seconds = Math.max(0, Math.min(86400, Math.floor(Number(cooldownSeconds) || 0)));
+  const expiresAt = Number(cooldowns.get(key) || 0);
+  if (expiresAt > Date.now()) {
+    return { ok: false, key: key, remainingSeconds: Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000)), inProgress: false };
+  }
+  if (activeKitGives.has(key)) return { ok: false, key: key, remainingSeconds: 1, inProgress: true };
+  activeKitGives.add(key);
+  return { ok: true, key: key, cooldownSeconds: seconds };
+}
+
+function finishKitGive(reservation, succeeded) {
+  if (!reservation || !reservation.key) return;
+  activeKitGives.delete(reservation.key);
+  if (succeeded && Number(reservation.cooldownSeconds) > 0) {
+    cooldowns.set(reservation.key, Date.now() + Number(reservation.cooldownSeconds) * 1000);
+  }
 }
 
 function clearCooldowns(scope, target) {
@@ -271,11 +301,13 @@ function removeBind(emote) {
 /* A link is a Discord account with the gamertag it belongs to. Everything player-facing
    hangs off it: kits by role, auth groups, the roster. Storage is honest about limits: an
    unconfirmed request is a request, not proof, and the panels say so. */
-function normaliseGamertag(value) { return String(value || '').trim().slice(0, 40); }
+function normaliseGamertag(value) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
 
 function findLinkByGamertag(gamertag) {
   const wanted = normaliseGamertag(gamertag).toLowerCase();
-  return settings.links.filter(function (l) { return l.gamertag.toLowerCase() === wanted; })[0] || null;
+  return settings.links.filter(function (l) { return String(l && l.gamertag || '').toLowerCase() === wanted; })[0] || null;
 }
 function findLinkByUser(userId) {
   return settings.links.filter(function (l) { return l.userId === String(userId); })[0] || null;
@@ -284,6 +316,7 @@ function addLink(userId, gamertag, by) {
   const tag = normaliseGamertag(gamertag);
   const id = String(userId || '').trim();
   if (!tag || !id) return { ok: false, reason: 'empty' };
+  if (!/^[0-9]{15,25}$/.test(id)) return { ok: false, reason: 'bad-user-id', detail: 'That Discord account id does not look valid.' };
   settings.links = settings.links.filter(function (l) {
     return l.gamertag.toLowerCase() !== tag.toLowerCase() && l.userId !== id;
   });
@@ -327,7 +360,9 @@ function moveLink(gamertag, newUserId, newGamertag) {
 }
 function requestLink(userId, gamertag) {
   const tag = normaliseGamertag(gamertag);
+  const id = String(userId || '').trim();
   if (!tag) return { ok: false, reason: 'empty' };
+  if (!/^[0-9]{15,25}$/.test(id)) return { ok: false, reason: 'bad-user-id', detail: 'Discord did not provide a valid account id.' };
   const taken = findLinkByGamertag(tag);
   if (taken) {
     const mine = taken.userId === String(userId);
@@ -335,8 +370,13 @@ function requestLink(userId, gamertag) {
       ? 'That gamertag is already linked to your account.'
       : 'That gamertag is already linked. If it is yours, ask staff to move it with /user transfer.' };
   }
-  settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
-  settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
+  const otherRequest = settings.pending.filter(function (p) {
+    return String(p.userId) !== id && String(p.gamertag || '').toLowerCase() === tag.toLowerCase();
+  })[0];
+  if (otherRequest) return { ok: false, reason: 'pending-taken', detail: 'That gamertag is already waiting for confirmation from another Discord account.' };
+  settings.pending = settings.pending.filter(function (p) { return String(p.userId) !== id; });
+  if (settings.pending.length >= 500) return { ok: false, reason: 'queue-full', detail: 'The waiting list is full. Ask staff to clear old requests before trying again.' };
+  settings.pending.push({ userId: id, gamertag: tag, at: new Date().toISOString() });
   persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag };
 }
@@ -421,6 +461,14 @@ function botCtx() {
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
     cooldownList: cooldownList,
+    reserveKitGive: reserveKitGive,
+    finishKitGive: finishKitGive,
+    setDelivery: function (delivery) {
+      settings.kits.listCommand = String(delivery.listCommand || '').replace(/[\r\n]+/g, ' ').slice(0, 120);
+      settings.kits.giveCommand = String(delivery.giveCommand || '').replace(/[\r\n]+/g, ' ').slice(0, 200);
+      settings.kits.giveCooldownSeconds = Math.max(0, Math.min(86400, Math.floor(Number(delivery.giveCooldownSeconds) || 0)));
+      return persistSettings(['kits']);
+    },
     rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
     rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
   };
