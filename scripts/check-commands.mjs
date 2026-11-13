@@ -77,6 +77,8 @@ for (const cmd of COMMANDS) {
 const limits = createChecker();
 function checkPayload(where, payload) {
   limits.checkPayload(where, payload);
+  /* and again the way it really leaves the bot: dressed with the brand, marks and icons */
+  if (payload && !payload.custom_id && !Array.isArray(payload)) limits.checkPayload(where + " (dressed)", mod.dress(payload, { siteUrl: "https://example.com" }));
 }
 function makeCtx(configured, big) {
   const many = (n, f) => Array.from({ length: n }, (_, i) => f(i));

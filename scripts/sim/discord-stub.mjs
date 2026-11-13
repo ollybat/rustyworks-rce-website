@@ -71,7 +71,7 @@ function makeGuild() {
 export class Client extends EventEmitter {
   constructor() {
     super();
-    this.user = { tag: "Spinback#0001", setPresence() {} };
+    this.user = { tag: "Spinback#0001", setPresence(p) { world.presence = p; } };
     this.ws = { ping: 42 };
     this.guild = makeGuild();
     this.guilds = { cache: new Collection([[this.guild.id, this.guild]]), fetch: async () => this.guild };

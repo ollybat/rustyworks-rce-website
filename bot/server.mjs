@@ -33,7 +33,7 @@ import {
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
   STAFF_SLOTS, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
-  deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit,
+  deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit, dress, BRAND,
 } from './commands.mjs';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
@@ -408,7 +408,7 @@ async function postLinkPanel(channelId) {
   try {
     const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
-    const message = await channel.send(linkPanelPayload());
+    const message = await channel.send(dress(linkPanelPayload(), { siteUrl: SITE_URL }));
     const previous = settings.linkPanel && settings.linkPanel.messageId ? settings.linkPanel : null;
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
     if (previous) previousPanels.set(String(settings.linkPanel.messageId), previous);
@@ -466,6 +466,7 @@ function botCtx(interaction) {
     serverChecks: function () { return serverChecks; },
     recordCheck: function (id, answer) {
       serverChecks[id] = { ok: !!(answer && answer.ok), ms: answer && answer.ms, reason: answer && !answer.ok ? (answer.reason || 'unknown') : null, at: new Date().toISOString() };
+      updatePresence();
     },
     linkPlayer: function (userId, gamertag) { return linkPlayer(userId, gamertag, actor); },
     moveLinkFull: function (gamertag, toUserId, toGamertag) { return moveLinkFull(gamertag, toUserId, toGamertag, actor); },
@@ -480,6 +481,7 @@ function botCtx(interaction) {
 /* The log channels picked in step 2 of /setup. Until now they were saved and never written
    to; these are the types the bot itself can write. A failed post never breaks a command. */
 const LOG_COLORS = { command: 0x5865f2, rcon: 0xff7200, linking: 0x3ba55d, emoteKits: 0xff7200, admin: 0xfaa81a, errors: 0xdc4c4c };
+const LOG_NAMES = { command: 'Command log', rcon: 'RCON log', linking: 'Linking log', emoteKits: 'Emote kits log', admin: 'Admin log', errors: 'Error log' };
 function who(actor) { return actor && actor.id ? '<@' + actor.id + '>' : 'the bot'; }
 async function postLog(type, title, description, fields) {
   const channelId = (settings.logChannels || {})[type];
@@ -492,7 +494,9 @@ async function postLog(type, title, description, fields) {
       title: String(title || 'Log').slice(0, 256),
       description: String(description || '').slice(0, 3900),
       timestamp: new Date().toISOString(),
+      footer: { text: (LOG_NAMES[type] || 'Log') + ' | ' + BRAND },
     };
+    if (/^https:\/\//.test(SITE_URL)) embedOut.footer.icon_url = SITE_URL.replace(/\/+$/, '') + '/media/icon-192.png';
     if (fields && fields.length) {
       embedOut.fields = fields.slice(0, 10).map(function (f) {
         return { name: String(f.name || '-').slice(0, 256), value: String(f.value || '-').slice(0, 1024), inline: !!f.inline };
@@ -567,10 +571,11 @@ function diagnostics() {
 
 /* A direct message to a player about their own link request. Many people keep DMs from
    server members closed, so a refusal is expected and only reported back to staff. */
-async function tellPlayer(userId, text) {
+async function tellPlayer(userId, text, good) {
   try {
     const user = await client.users.fetch(String(userId));
-    await user.send({ content: String(text).slice(0, 1900), allowedMentions: { parse: [] } });
+    await user.send(dress({ embeds: [panelEmbed(good ? 0x3ba55d : 0xdc4c4c, good ? 'You are linked' : 'Link request not approved', String(text).slice(0, 1900))],
+      allowedMentions: { parse: [] } }, { siteUrl: SITE_URL }));
     return true;
   } catch (error) {
     return false;
@@ -683,7 +688,7 @@ async function respond(interaction, work, kind) {
   } finally {
     clearTimeout(timer);
   }
-  const body = Object.assign({}, payload || { content: 'Done.' });
+  const body = dress(Object.assign({}, payload || { content: 'Done.' }), { siteUrl: SITE_URL });
   try {
     if (deferring) {
       await deferring;
@@ -980,7 +985,7 @@ async function runSelect(interaction) {
         settings.pending = settings.pending.filter(function (p) { return p.userId !== first; });
         persistSettings(['pending']).catch(function () {});
         logLater('linking', 'Link request rejected', '<@' + request.userId + '> asked for `' + request.gamertag + '`; rejected by ' + who(ctx.actor) + '.');
-        const toldNo = await tellPlayer(request.userId, 'Your request to link the gamertag ' + request.gamertag + ' in ' + guildName() + ' was not approved. If that was a mistake, ask the staff there, or send a new request from the link panel.');
+        const toldNo = await tellPlayer(request.userId, 'Your request to link the gamertag ' + request.gamertag + ' in ' + guildName() + ' was not approved. If that was a mistake, ask the staff there, or send a new request from the link panel.', false);
         return pendingPanel(ctx, panelEmbed(0xfaa81a, 'Request rejected', '<@' + request.userId + '> is not linked to ' + request.gamertag + '.' +
           (toldNo ? ' They were told by direct message.' : ' Their direct messages are closed, so they were not told.')));
       }
@@ -989,7 +994,7 @@ async function runSelect(interaction) {
         return pendingPanel(ctx, panelEmbed(0xdc4c4c, 'That gamertag is taken', request.gamertag + ' is already linked to <@' + taken.userId + '>. Reject this request, or move the link with Transfer.'));
       }
       const done = await linkPlayer(request.userId, request.gamertag, ctx.actor);
-      const toldYes = done.ok ? await tellPlayer(done.userId, 'Your gamertag ' + done.gamertag + ' is now linked to your Discord account in ' + guildName() + '.') : false;
+      const toldYes = done.ok ? await tellPlayer(done.userId, 'Your gamertag ' + done.gamertag + ' is now linked to your Discord account in ' + guildName() + '.', true) : false;
       return pendingPanel(ctx, panelEmbed(0x3ba55d, 'Approved', '<@' + done.userId + '> is now linked to ' + done.gamertag + '.' + (done.roleNote || '') +
         (toldYes ? ' They were told by direct message.' : ' Their direct messages are closed, so they were not told.')));
     })());
@@ -1136,13 +1141,32 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
+/* The bot's status line in the member list: what it is looking after, refreshed every few
+   minutes, so a glance at the sidebar says whether it is healthy. Custom status (type 4). */
+function presenceText() {
+  const servers = (settings.servers || []).length;
+  const links = (settings.links || []).length;
+  const down = (settings.servers || []).some(function (s) { return serverChecks[s.id] && !serverChecks[s.id].ok; });
+  if (!servers) return 'Not set up yet - run /setup';
+  return (down ? '\ud83d\udfe1 ' : '\ud83d\udfe2 ') + servers + (servers === 1 ? ' server' : ' servers') + ' | ' + links + ' linked | /help';
+}
+function updatePresence() {
+  try {
+    if (!client.user) return;
+    client.user.setPresence({ status: 'online', activities: [{ name: 'Custom Status', state: presenceText().slice(0, 128), type: 4 }] });
+  } catch (error) {
+    log('presence failed:', String((error && error.message) || error));
+  }
+}
+
 client.once(Events.ClientReady, async (c) => {
   state.gateway = 'online';
   state.tag = c.user.tag;
   state.guilds = c.guilds.cache.size;
   log('logged in as ' + c.user.tag + ' — in ' + c.guilds.cache.size + ' guild(s)');
   try {
-    c.user.setPresence({ status: 'online', activities: [{ name: '/help — Spinback RCE', type: 0 }] });
+    updatePresence();
+    setInterval(updatePresence, 5 * 60 * 1000).unref();
     if (!GUILD_ID) {
       log('WARNING: DISCORD_GUILD_ID is not set, so no command was registered');
       return;
@@ -1154,6 +1178,7 @@ client.once(Events.ClientReady, async (c) => {
       return;
     }
     await loadSettings();
+    updatePresence();
     /* Changes made on the website's Settings page reach the bot within two minutes, without a
        restart. A re-read is skipped right after this bot saved something, so an answer that is
        still on its way to the website is never read back over. */

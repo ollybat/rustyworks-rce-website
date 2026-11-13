@@ -78,6 +78,12 @@ from an install code, live permission checks in `/setup status`, direct messages
 when a link request is approved or rejected (including closed DMs), roster search across pages,
 and replacing an old link panel. No Discord, token or `npm install` needed.
 
+Every reply leaves the bot through `dress()` in `bot/commands.mjs`: the Spinback name and mark
+on top, a status marker on the title (done, warning, error), a timestamp each viewer sees in
+their own time, and an icon on each button. Log posts name their log type in the footer, DMs to
+players are embeds, and the bot's status line shows how many servers and linked players it
+looks after. `check-commands.mjs` checks every reply both plain and dressed.
+
 ## Stylesheet map
 
 `public/style.css` is the whole site's stylesheet, in this order:
