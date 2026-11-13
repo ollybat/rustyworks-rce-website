@@ -31,7 +31,7 @@ export const COMMANDS = [
       { type: 1, name: "edit", description: "Change a saved server IP, RCON port or password" },
       { type: 1, name: "refresh", description: "Force a fresh RCON connection and report what the server says" },
     ] },
-  { name: "kits", description: "Emote kits: binds, cooldowns, giving and installing", dm_permission: false,
+  { name: "kits", description: "Rust kit settings, manual giveaways and kit-code previews", dm_permission: false,
     options: [
       { type: 1, name: "grab", description: "Read the real kit names from the Rust server" },
       { type: 1, name: "config", description: "Emote kit wizard: binds, cooldowns, roles, lock kits, emote guide" },
@@ -48,16 +48,16 @@ export const COMMANDS = [
               { name: "All linked users", value: "all-users" }, { name: "All kits", value: "all-kits" }] },
           { type: 3, name: "target", description: "Gamertag or kit name, when the scope needs one" },
         ] },
-      { type: 1, name: "auth-spawn", description: "Give a kit to an Auth Group on every respawn",
+      { type: 1, name: "auth-spawn", description: "Save an Auth Group respawn-kit preference (game hook required)",
         options: [
           { type: 3, name: "group", description: "Auth group (leave blank to open the panel)",
             choices: AUTH_GROUPS.map(function (g) { return { name: g, value: g }; }) },
           { type: 3, name: "kit", description: "Kit to hand out (blank stops giving one)" },
         ] },
-      { type: 1, name: "cooldowns", description: "See the kit cooldown records the bot is holding" },
-      { type: 1, name: "build", description: "Kit Studio: build a kit on the website or work from an install code" },
-      { type: 1, name: "add", description: "Install a kit from a Base64 kit install code",
-        options: [{ type: 3, name: "code", description: "The Base64 install code (blank opens the panel)" }] },
+      { type: 1, name: "cooldowns", description: "See active manual kit-give cooldowns" },
+      { type: 1, name: "build", description: "Open Kit Studio to build a Rust Console kit" },
+      { type: 1, name: "add", description: "Preview a kit code and recognise kit names",
+        options: [{ type: 3, name: "code", description: "Base64 code to preview (blank opens the panel)" }] },
     ] },
   { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
     options: [
@@ -343,7 +343,7 @@ export function helpDetail(name) {
     setup: embed(0xfaa81a, "Help: /setup",
       "Your server, wired up in three steps. The Rust connection is tested before anything is saved, so a wrong port or password never lands in your settings."),
     kits: embed(0xff7200, "Help: /kits",
-      "Emote kits end to end: the real kit names from your server, binds with cooldowns and roles, giving kits out, clearing cooldowns, respawn kits per auth group, and installing kits built in Kit Studio."),
+      "Configure bind and Auth Group preferences, read real kit names from your server, and manually give kits to linked players over RCON. Automatic emote and respawn actions require a Rust game-event/plugin connector; the bot does not receive those events yet."),
     server: embed(0x3ba55d, "Help: /server",
       "Four read-only questions put to your Rust server over RCON: info, players, time and status, plus a fresh-connection check. The bot only ever asks the commands on its allowed list, so nothing here can change your game - and whatever the server answers is shown as it arrived."),
     user: embed(0x2ecc71, "Help: /user",
@@ -367,16 +367,16 @@ export function helpDetail(name) {
     kits: [
       field("Subcommands", [
         "**grab** - read the real kit names from your Rust server",
-        "**config** - binds, cooldowns, roles, lock kits, emote guide",
-        "**give** - hand a kit to a gamertag or a linked Discord user",
-        "**refresh** - clear cooldowns for one user, one kit, everyone or every kit",
-        "**cooldowns** - see the cooldown records the bot is holding",
-        "**auth-spawn** - give a group a kit on every respawn",
-        "**build** - Kit Studio on the website, or work from an install code",
-        "**add** - install a kit from a Base64 install code",
+        "**config** - saved bind preferences, manual delivery and the pause switch",
+        "**give** - manually give a kit to a gamertag or a linked Discord user over RCON",
+        "**refresh** - clear manual giveaway cooldowns",
+        "**cooldowns** - active manual giveaway timers (they reset when the bot restarts)",
+        "**auth-spawn** - save a respawn-kit preference; a game-event connector is required to run it",
+        "**build** - open Kit Studio on the website",
+        "**add** - preview a Base64 code and recognise kit names; it does not install the code",
       ].join("\n"), false),
       field("Permissions", "Administrator or Manage Server.", false),
-      field("Needs first", "Your kit plugin own command names, and a give template using {player} and {kit}. The bot will not guess either.", false),
+      field("Needs first", "Your kit plugin's list command and a give template using {player} and {kit}. The manual pause switch blocks giveaways. Automatic emote/respawn actions need a Rust game-event connector.", false),
     ],
     server: [
       field("Subcommands", [
@@ -668,16 +668,16 @@ export function kitsPanel(ctx) {
   var binds = ctx.kits().binds || [];
   var auth = ctx.kits().authSpawn || {};
   var built = embed(0xff7200, "Emote Kits",
-    "A bind ties an emote to up to three kits, with a cooldown and an optional role. Cooldown bookkeeping is the bot own; emote names are your server own wording.");
+    "Save emote-bind and Auth Group preferences, read kit names, and give kits manually. Important: automatic emote binds and respawn kits need a Rust game-event/plugin connector, which is not connected yet.");
   built.fields = [
     field("Binds", binds.length ? binds.map(function (b) {
       return code(b.emote) + " -> " + (b.kits || []).join(", ") + (b.cooldown ? " (" + b.cooldown + "s)" : "") + (b.roleId ? " <@&" + b.roleId + ">" : "");
     }).join("\n").slice(0, 1000) : "none yet", false),
-    field("Lock kits", ctx.kits().locked ? "locked" : "unlocked", true),
-    field("Auth groups with a kit", String(Object.keys(auth).length), true),
-    field("Cooldowns on record", String(ctx.cooldownCount()), true),
+    field("Manual kit delivery", ctx.kits().locked ? "paused by staff" : "available", true),
+    field("Auth Group preferences", String(Object.keys(auth).length) + " saved (game hook required)", true),
+    field("Active manual giveaway cooldowns", String(ctx.cooldownCount()), true),
   ];
-  built.footer = { text: "Emote and kit names come from your own server" };
+  built.footer = { text: "Manual giveaways use RCON; automated in-game events need a Rust plugin feed" };
   return { embeds: [built], components: [
     row([button("kits:add", "Add a bind", 1), button("kits:edit", "Edit a bind", 2), button("kits:remove", "Remove a bind", 2)]),
     row([button("kits:lock", ctx.kits().locked ? "Unlock kits" : "Lock kits", 2), button("kits:guide", "Emote guide", 2), button("kits:refresh", "Cooldowns", 2)]),
@@ -711,12 +711,12 @@ export function bindRoleMenu(emote) {
 export function emoteGuide(ctx) {
   var binds = ctx.kits().binds || [];
   var auth = ctx.kits().authSpawn || {};
-  return { embeds: [embed(0xff7200, "Emote guide",
-    "This is what you have configured here. Nothing is filled in for you, because emote names are your server own.\n\n" +
+  return { embeds: [embed(0xfaa81a, "Emote guide - saved preferences",
+    "These are saved preferences only. Automatic emote binds and Auth Group respawn kits do not run until a Rust plugin or game-event connector is connected. Emote names are your server's own wording.\n\n" +
     (binds.length ? binds.map(function (b) {
       return "- " + code(b.emote) + " -> " + (b.kits || []).join(", ") + (b.cooldown ? " | " + b.cooldown + "s cooldown" : "") + (b.roleId ? " | <@&" + b.roleId + "> only" : "");
     }).join("\n") : "No binds yet. Use Add a bind.") +
-    "\n\nAuth groups on respawn: " + (Object.keys(auth).length ? Object.keys(auth).map(function (g) { return g + " -> " + auth[g]; }).join(", ") : "none set"))],
+    "\n\nAuth Group preferences (not active without a game hook): " + (Object.keys(auth).length ? Object.keys(auth).map(function (g) { return g + " -> " + auth[g]; }).join(", ") : "none set"))],
     components: [row([button("kits:config", "Back to the panel", 2)])], flags: EPH };
 }
 export function grabKits(ctx) {
@@ -738,19 +738,23 @@ export async function grabKitsRun(ctx) {
 }
 export function kitStudioPanel(ctx) {
   return { embeds: [embed(0x5865f2, "Kit Studio",
-    "Build a kit slot by slot on the website, then bring it back here as an install code. The site and this bot share the same 299-item catalogue, so a kit made there is the same kit here.")],
-    components: [row([link("Open Kit Studio", ctx.siteUrl + "/dashboard/kitbuilder.html"), button("kits:add", "Install a code", 1)])], flags: EPH };
+    "Build a kit slot by slot on the website, then bring its code here to preview the decoded kit names. This bot does not execute the code or install items on your Rust server.")],
+    components: [row([link("Open Kit Studio", ctx.siteUrl + "/dashboard/kitbuilder.html"), button("kits:add", "Preview a code", 1)])], flags: EPH };
 }
 export function installKit(ctx, rawCode) {
   var raw = String(rawCode || "").trim();
-  if (!raw) return { embeds: [embed(0xdc4c4c, "No code given", "Paste the Base64 install code from Kit Studio.")], flags: EPH };
+  if (!raw) return { embeds: [embed(0xdc4c4c, "No code given", "Paste the Base64 kit code from Kit Studio.")], flags: EPH };
+  if (raw.length > 16000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(raw) || raw.length % 4 === 1) {
+    return { embeds: [embed(0xdc4c4c, "That code is not valid", "Paste a Base64 text code no longer than 16,000 characters. Nothing was stored.")], flags: EPH };
+  }
   var text = null;
   try { text = Buffer.from(raw, "base64").toString("utf8"); } catch (error) { text = null; }
-  var ok = !!text && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
-  if (!ok) return { embeds: [embed(0xdc4c4c, "That does not decode", "The value is not valid Base64, or it does not decode to readable text. Nothing was stored.")], flags: EPH };
+  var ok = !!text && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text)
+    && Buffer.from(text, "utf8").toString("base64").replace(/=+$/, "") === raw.replace(/=+$/, "");
+  if (!ok) return { embeds: [embed(0xdc4c4c, "That code does not decode", "The value must be valid Base64 that decodes to readable text. Nothing was stored.")], flags: EPH };
   var count = ctx.installKit(raw, text);
-  var built = embed(0x3ba55d, "Install code accepted",
-    "Stored exactly as given, keyed by a hash of the code so two different codes cannot overwrite each other. Sending it to your server needs your own install command, set in the kit settings.");
+  var built = embed(0xfaa81a, "Code preview saved - not installed",
+    "The bot saved a hash and short preview of this code so it can recognise the kit names later. It does not execute the commands or install items on your Rust server; a game-side installer is not connected.");
   built.fields = [
     field("Decoded length", text.length + " characters", true),
     field("Codes stored", String(count), true),
@@ -760,8 +764,10 @@ export function installKit(ctx, rawCode) {
 }
 export function authSpawnNote(ctx, group, kit) {
   ctx.setAuthSpawn(group, kit);
-  return { embeds: [embed(kit ? 0x3ba55d : 0xfaa81a, kit ? "Respawn kit set" : "Respawn kit cleared",
-    kit ? "**" + group + "** will be given " + code(kit) + " on respawn." : "**" + group + "** no longer receives a kit on respawn.")], flags: EPH };
+  return { embeds: [embed(0xfaa81a, kit ? "Respawn preference saved - not active" : "Respawn preference cleared",
+    kit
+      ? "**" + group + "** is configured for " + code(kit) + ", but automatic respawn delivery needs a Rust game-event/plugin connector, which is not connected yet."
+      : "**" + group + "** no longer has a saved respawn-kit preference.")], flags: EPH };
 }
 export function refreshCooldowns(ctx, scope, target) {
   var cleared = ctx.clearCooldowns(scope, target);
@@ -770,18 +776,49 @@ export function refreshCooldowns(ctx, scope, target) {
 }
 export async function giveKit(ctx, opts) {
   var command = String(ctx.kits().giveCommand || "").trim();
-  var target = opts.gamertag || opts.user || "";
-  if (!command) {
-    return { embeds: [embed(0xfaa81a, "Delivery needs one more setting",
-      "To hand a kit over in game the bot must send your server own give command over RCON, and it will not guess what that is called.\n\nSet a template in the kit settings using {player} and {kit}, and this command runs exactly that.")], flags: EPH };
+  if (ctx.kits().locked) {
+    return { embeds: [embed(0xfaa81a, "Kit delivery is paused",
+      "A staff member paused manual kit delivery. Open **/kits config** and resume it before sending another kit.")],
+      components: [row([button("kits:config", "Open kit settings", 1)])], flags: EPH };
   }
-  if (!target) return { embeds: [embed(0xdc4c4c, "Who should get it?", "Name a gamertag, or a Discord user whose gamertag is linked.")], flags: EPH };
+  var kit = String(opts.kit || "").replace(/[\r\n]+/g, " ").trim().slice(0, 60);
+  if (!kit) return { embeds: [embed(0xdc4c4c, "Which kit?", "Enter the exact kit name you want to give.")], flags: EPH };
+  var userId = opts.user && typeof opts.user === "object" ? String(opts.user.id || "") : String(opts.user || "");
+  var linked = userId ? (ctx.links() || []).find(function (link) { return String(link.userId) === userId; }) : null;
+  if (userId && !linked) {
+    return { embeds: [embed(0xfaa81a, "That Discord account is not linked",
+      "Link the Discord account to its Rust gamertag first, or enter the gamertag directly. The bot will not send a Discord id to the Rust server.")],
+      components: [row([button("user:config", "Open player links", 1)])], flags: EPH };
+  }
+  var target = String(opts.gamertag || (linked && linked.gamertag) || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40);
+  if (!target) return { embeds: [embed(0xdc4c4c, "Who should get it?", "Name a gamertag, or choose a Discord account that already has a confirmed link.")], flags: EPH };
   var server = ctx.servers()[0];
   if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
-  var final = command.split("{player}").join(target).split("{kit}").join(opts.kit);
-  var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: final });
+  if (!command || command.indexOf("{player}") < 0 || command.indexOf("{kit}") < 0) {
+    return { embeds: [embed(0xfaa81a, "Delivery needs one more setting",
+      "Configure a Rust plugin give template containing both {player} and {kit}. The bot will not invent the plugin's command syntax.")], flags: EPH };
+  }
+  var final = command.split("{player}").join(target).split("{kit}").join(kit);
+  var cooldownSeconds = Number(ctx.kits().giveCooldownSeconds == null ? 30 : ctx.kits().giveCooldownSeconds);
+  var reservation = ctx.reserveKitGive
+    ? ctx.reserveKitGive(target, kit, cooldownSeconds)
+    : { ok: true, key: null, cooldownSeconds: 0 };
+  if (!reservation.ok) {
+    return { embeds: [embed(0xfaa81a, reservation.inProgress ? "That giveaway is already running" : "Giveaway cooldown",
+      reservation.inProgress
+        ? "A giveaway for " + code(target) + " and " + code(kit) + " is already in progress. Wait for its result."
+        : "Wait **" + reservation.remainingSeconds + " seconds** before giving " + code(kit) + " to " + code(target) + " again.")], flags: EPH };
+  }
+  var answer = null;
+  try {
+    answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: final });
+  } finally {
+    if (ctx.finishKitGive) ctx.finishKitGive(reservation, !!(answer && answer.ok));
+  }
   var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c, answer && answer.ok ? "Sent" : "The server refused it",
-    "Command: " + code(final) + "\n" + (answer && answer.answer ? "It said: " + answer.answer.slice(0, 400) : String((answer && answer.detail) || "no answer")));
+    "Player: " + code(target) + "\nKit: " + code(kit) + "\nCommand: " + code(final) + "\n" +
+    (answer && answer.answer ? "It said: " + answer.answer.slice(0, 400) : String((answer && answer.detail) || "no answer")) +
+    (answer && answer.ok && cooldownSeconds > 0 ? "\n\nA " + cooldownSeconds + "s manual giveaway cooldown is now active for this player + kit." : ""));
   return { embeds: [built], flags: EPH };
 }
 export function permissionNote(ctx) {
