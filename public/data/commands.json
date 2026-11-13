@@ -227,9 +227,9 @@
         },
         {
           "name": "add",
-          "summary": "Store a Kit Studio code and learn the kit names inside it, so the give form can show them. Nothing is installed on your Rust server.",
+          "summary": "Preview a Kit Studio code and learn recognised kit names. The bot retains only a hash, decoded length and up to 400 characters of preview text; the original Base64 code is not saved. Nothing is installed on your Rust server.",
           "notes": [
-            "It checks the value really is Base64 that decodes to readable text, stores it exactly as given, and never guesses what is inside."
+            "The preview is private metadata, not a copy of the complete code. The bot never executes the pasted text or sends it over RCON."
           ],
           "options": []
         }
