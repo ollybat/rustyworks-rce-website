@@ -315,7 +315,7 @@ async function saveServer(s) {
 }
 
 function installKitCode(raw, text) {
-  const key = createHash('sha1').update(String(raw)).digest('hex').slice(0, 16);
+  const key = createHash('sha256').update(String(raw)).digest('hex').slice(0, 32);
   settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
   const keys = Object.keys(settings.installs);
   if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
