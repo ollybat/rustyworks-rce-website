@@ -1165,6 +1165,10 @@ let secretsCache = { at: 0, value: null };
 const EXCHANGE_CACHE = { at: 0, value: null };
 
 async function botExchangeReady(env) {
+  /* The bot's OAuth exchange endpoint is an internal service route. A configured
+     client secret alone is not enough: the Worker must also have the shared token. */
+  const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+  if (!settingsToken) return false;
   const now = Date.now();
   if (EXCHANGE_CACHE.value !== null && now - EXCHANGE_CACHE.at < 60000) return EXCHANGE_CACHE.value;
   const base = botApiBase(env);
@@ -1188,13 +1192,14 @@ async function botExchangeReady(env) {
 
 async function botExchange(env, code, redirectUri) {
   const base = botApiBase(env);
-  if (!base) return { error: "bot_not_configured" };
+  const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+  if (!base || !settingsToken) return { error: "bot_not_configured" };
   try {
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
     const response = await fetch(base + "/api/oauth/exchange", {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json", "x-settings-token": settingsToken },
       body: JSON.stringify({ code: code, redirectUri: redirectUri }),
       signal: controller.signal,
     });
