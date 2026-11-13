@@ -166,12 +166,20 @@ async function apiChecks() {
   out.push(["public /api/status shows no internals", pub.online !== undefined && secret.every((k) => !(k in pub))]);
   const full = await (await request("/api/status", { headers: { "x-settings-token": TOKEN } })).json().catch(() => ({}));
   out.push(["the website (with the token) still gets full diagnostics", "tokenShape" in full && "guildInfo" in full]);
-  for (const [path, method] of [["/api/guilds", "GET"], ["/api/guild", "GET"], ["/api/rcon/test", "POST"], ["/api/reconnect", "POST"]]) {
+  for (const [path, method] of [["/api/guilds", "GET"], ["/api/guild", "GET"], ["/api/rcon/test", "POST"], ["/api/reconnect", "POST"], ["/api/oauth/exchange", "POST"]]) {
     const r = await request(path, Object.assign({ method }, method === "POST" ? { body: "{}", headers: { "content-type": "application/json" } } : {}));
     out.push([path + " refuses a request without the token", r.status === 403]);
   }
   const wrongToken = await request("/api/guilds", { headers: { "x-settings-token": TOKEN + "x" } });
   out.push(["a wrong token is refused too", wrongToken.status === 403]);
+  const wrongOAuthToken = await request("/api/oauth/exchange", {
+    method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN + "x" }, body: "{}",
+  });
+  out.push(["OAuth code exchange refuses a wrong shared token", wrongOAuthToken.status === 403]);
+  const rightOAuthToken = await request("/api/oauth/exchange", {
+    method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN }, body: "{}",
+  });
+  out.push(["OAuth code exchange accepts only the authenticated internal caller", rightOAuthToken.status !== 403]);
   const guilds = await request("/api/guilds", { headers: { "x-settings-token": TOKEN } });
   out.push(["the right token reads guild metadata", guilds.status === 200]);
   const getReconnect = await request("/api/reconnect", { headers: { "x-settings-token": TOKEN } });
@@ -182,6 +190,12 @@ async function apiChecks() {
   const docRcon = await (await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
     body: JSON.stringify({ host: "192.0.2.10", port: 28016, password: "x" }) })).json().catch(() => ({}));
   out.push(["RCON to a documentation range is refused", docRcon.reason === "refused-host"]);
+  const oversizedRcon = await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify({ command: "x".repeat(5000) }) });
+  out.push(["oversized RCON requests receive HTTP 413", oversizedRcon.status === 413]);
+  const oversizedOAuth = await request("/api/oauth/exchange", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: "x".repeat(17000) });
+  out.push(["oversized OAuth requests receive HTTP 413", oversizedOAuth.status === 413]);
   return out;
 }
 
