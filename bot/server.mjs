@@ -390,7 +390,8 @@ function hasAdminBypass(interaction) {
 }
 function isStaff(interaction) {
   if (hasAdminBypass(interaction)) return true;
-  const ids = ROLE_SLOTS.map(function (s) { return (settings.staffRoles || {})[s[0]]; }).filter(Boolean);
+  const ids = ROLE_SLOTS.filter(function (slot) { return slot[0] !== 'linked'; })
+    .map(function (slot) { return (settings.staffRoles || {})[slot[0]]; }).filter(Boolean);
   if (!ids.length) return false;
   const held = memberRoleIds(interaction.member);
   return ids.some(function (id) { return held.indexOf(String(id)) > -1; });
@@ -402,14 +403,98 @@ function permitted(interaction, ctx) {
   return state.rolesSaved ? isStaff(interaction) : hasAdminBypass(interaction);
 }
 
+async function writeRconAudit(actorId, options, result) {
+  const channelId = String((settings.logChannels || {}).rcon || '');
+  if (!channelId) return;
+  const command = String(options && options.command || 'serverinfo').replace(/[\r\n]+/g, ' ').slice(0, 120);
+  const destination = String(options && options.host || 'unknown') + ':' + String(Number(options && options.port) || 0);
+  const ok = !!(result && result.ok);
+  const embed = panelEmbed(ok ? 0x3ba55d : 0xdc4c4c, ok ? 'RCON command completed' : 'RCON command failed',
+    'Requested by: ' + (actorId ? '<@' + actorId + '>' : 'unknown') +
+    '\nDestination: ' + destination + '\nCommand: ' + command +
+    '\nResult: ' + (ok ? 'success' : String((result && result.reason) || 'no answer')) +
+    (Number.isFinite(Number(result && result.ms)) ? '\nTime: ' + Math.round(Number(result.ms)) + ' ms' : ''));
+  embed.footer = { text: 'RCON log' };
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel && typeof channel.send === 'function') await channel.send(decorateDiscordPayload({ embeds: [embed] }));
+  } catch (error) { log('RCON audit log could not be posted:', String((error && error.message) || error).slice(0, 160)); }
+}
+
+async function writeCommandAudit(actorId, name) {
+  const channelId = String((settings.logChannels || {}).command || '');
+  if (!channelId) return;
+  const embed = panelEmbed(0x5865f2, 'Command used', String(name || 'unknown') + '\nRequested by: ' + (actorId ? '<@' + actorId + '>' : 'unknown'));
+  embed.footer = { text: 'Command log' };
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel && typeof channel.send === 'function') await channel.send(decorateDiscordPayload({ embeds: [embed] }));
+  } catch (error) { log('command log could not be posted:', String((error && error.message) || error).slice(0, 160)); }
+}
+
+async function setLinkedRole(userId, action) {
+  const roleId = String((settings.staffRoles || {}).linked || '');
+  if (!roleId) return { ok: false, skipped: true, detail: 'No Linked role is configured.' };
+  try {
+    const guild = client.guilds.cache.get(GUILD_ID) || await client.guilds.fetch(GUILD_ID);
+    const member = await guild.members.fetch(String(userId));
+    if (action === 'remove') await member.roles.remove(roleId);
+    else await member.roles.add(roleId);
+    return { ok: true };
+  } catch (error) {
+    const detail = String((error && error.message) || error).slice(0, 160);
+    log('linked role ' + action + ' failed:', detail);
+    return { ok: false, detail: detail };
+  }
+}
+
+async function sendLinkNotice(userId, gamertag, action) {
+  try {
+    const user = await client.users.fetch(String(userId));
+    const linked = action === 'linked';
+    const embed = panelEmbed(linked ? 0x3ba55d : 0xfaa81a,
+      linked ? 'You are linked' : 'Your link was moved',
+      linked
+        ? 'Your Discord account is now linked to the Rust Console gamertag ' + gamertag + '.'
+        : 'Your Rust Console gamertag is now linked to this Discord account: ' + gamertag + '.');
+    await user.send(decorateDiscordPayload({ embeds: [embed] }));
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, detail: String((error && error.message) || error).slice(0, 160) };
+  }
+}
+
+async function writeLinkAudit(action, actorId, userId, gamertag) {
+  const channelId = String((settings.logChannels || {}).linking || '');
+  if (!channelId) return;
+  const embed = panelEmbed(0x3ba55d, 'Player link updated',
+    action + '\nPlayer: ' + String(gamertag || 'unknown').slice(0, 60) +
+    '\nDiscord: <@' + String(userId || '') + '>' +
+    '\nRequested by: ' + (actorId ? '<@' + actorId + '>' : 'unknown'));
+  embed.footer = { text: 'Linking log' };
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel && typeof channel.send === 'function') await channel.send(decorateDiscordPayload({ embeds: [embed] }));
+  } catch (error) { log('linking log could not be posted:', String((error && error.message) || error).slice(0, 160)); }
+}
+
 async function postLinkPanel(channelId) {
   try {
     const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
-    const message = await channel.send(linkPanelPayload());
+    const previous = settings.linkPanel;
+    const message = await channel.send(decorateDiscordPayload(linkPanelPayload()));
+    let replaced = false;
+    if (previous && previous.messageId) {
+      try {
+        const oldChannel = await client.channels.fetch(String(previous.channelId));
+        const oldMessage = oldChannel && oldChannel.messages ? await oldChannel.messages.fetch(String(previous.messageId)) : null;
+        if (oldMessage && typeof oldMessage.delete === 'function') { await oldMessage.delete(); replaced = true; }
+      } catch (error) { log('older link panel could not be removed:', String((error && error.message) || error).slice(0, 160)); }
+    }
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
-    const wrote = await persistSettings();
-    return { ok: true, saved: wrote.ok, detail: wrote.detail || '' };
+    const wrote = await persistSettings(['linkPanel']);
+    return { ok: true, saved: wrote.ok, replaced: replaced, detail: wrote.detail || '' };
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
   }
@@ -520,6 +605,19 @@ async function createLogChannels(keys) {
 
 
 
+const SIMULATION_MODE = process.env.SPINBACK_TEST_MODE === '1' && !!process.env.SIM_SCENARIO;
+function simulatedRconResult(options) {
+  const command = String(options && options.command || 'serverinfo').replace(/[\r\n]+/g, ' ').trim();
+  const lower = command.toLowerCase();
+  if (lower === 'serverinfo') return { ok: true, authenticated: true, command, answer: 'hostname: Spinback Simulation\nplayers: 3\nmaxplayers: 100', ms: 25 };
+  if (lower === 'kit list') return { ok: true, authenticated: true, command, answer: 'STARTER\nPVP', ms: 25 };
+  if (lower.startsWith('kit givetoplayer ')) return { ok: false, authenticated: true, command, reason: 'simulated-refusal', detail: 'The simulator intentionally refuses delivery so retry behavior can be checked.', ms: 25 };
+  if (lower === 'playerlist') return { ok: true, authenticated: true, command, answer: 'PlayerOne (76561198000000001)\nPlayerTwo (76561198000000002)', ms: 25 };
+  if (lower === 'gettime') return { ok: true, authenticated: true, command, answer: '12:00', ms: 25 };
+  if (lower === 'status') return { ok: true, authenticated: true, command, answer: 'hostname: Spinback Simulation\nplayers: 3', ms: 25 };
+  return { ok: true, authenticated: true, command, answer: 'Simulation response', ms: 25 };
+}
+
 function botCtx() {
   return {
     siteUrl: SITE_URL,
@@ -530,6 +628,46 @@ function botCtx() {
     uptime: function () { return (Date.now() - state.since) / 1000; },
     commandCount: function () { return state.commandNames ? state.commandNames.length : 0; },
     storeTokenSet: function () { return !!settingsToken(); },
+    lastServerCheck: function () { return lastServerCheck; },
+    diagnostics: function () {
+      const guild = client.guilds.cache.get(GUILD_ID);
+      const problems = [];
+      if (!guild) return { problems: ['The configured Discord server is not available to the bot.'] };
+      Object.keys(settings.staffRoles || {}).forEach(function (key) {
+        const id = settings.staffRoles[key];
+        if (id && !(guild.roles && guild.roles.cache && guild.roles.cache.has(String(id)))) problems.push('Staff role ' + key + ' no longer exists (' + id + ').');
+      });
+      Object.keys(settings.logChannels || {}).forEach(function (key) {
+        const id = settings.logChannels[key];
+        if (!id) return;
+        const channel = guild.channels && guild.channels.cache && guild.channels.cache.get(String(id));
+        if (!channel) { problems.push('Log channel ' + key + ' no longer exists (' + id + ').'); return; }
+        try {
+          const allowed = channel.permissionsFor(client.user);
+          if (!allowed || !allowed.has('SendMessages')) problems.push('The bot cannot send messages to log channel ' + key + ' (' + id + ').');
+        } catch (error) { problems.push('Permissions for log channel ' + key + ' could not be checked (' + id + ').'); }
+      });
+      return { problems: problems };
+    },
+    setKnownKits: function (names) {
+      if (Array.isArray(names) && names.length) {
+        settings.kits.known = names.slice(0, 100);
+        persistSettings(['kits']).catch(function () {});
+      }
+    },
+    reserveKitGive: function (player, kit, seconds) {
+      const key = String(player).trim().toLowerCase() + '::' + String(kit).trim().toLowerCase();
+      const until = Number(cooldowns.get(key) || 0);
+      if (until > Date.now()) return { ok: false, key: key, remainingSeconds: Math.ceil((until - Date.now()) / 1000), inProgress: false };
+      if (activeKitGives.has(key)) return { ok: false, key: key, remainingSeconds: 1, inProgress: true };
+      activeKitGives.add(key);
+      return { ok: true, key: key, cooldownSeconds: Math.max(0, Math.min(86400, Number(seconds) || 0)) };
+    },
+    finishKitGive: function (reservation, succeeded) {
+      if (!reservation || !reservation.key) return;
+      activeKitGives.delete(reservation.key);
+      if (succeeded && reservation.cooldownSeconds > 0) cooldowns.set(reservation.key, Date.now() + reservation.cooldownSeconds * 1000);
+    },
     servers: function () { return settings.servers; },
     kits: function () { return settings.kits; },
     links: function () { return settings.links; },
@@ -545,8 +683,19 @@ function botCtx() {
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
     cooldownList: cooldownList,
-    rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
-    rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
+    rconTest: async function (o) {
+      const result = SIMULATION_MODE ? simulatedRconResult(o) : await rconRun(Object.assign({}, o, { allowAny: false }));
+      if (String(o && o.command || '').trim().toLowerCase() === 'serverinfo') {
+        lastServerCheck = { host: String(o.host || ''), port: Number(o.port) || 0, ok: !!result.ok, reason: result.reason || null, ms: Number(result.ms) || null, at: new Date().toISOString() };
+      }
+      await writeRconAudit(this.actorId, o, result);
+      return result;
+    },
+    rconRun: async function (o) {
+      const result = SIMULATION_MODE ? simulatedRconResult(o) : await rconRun(Object.assign({}, o, { allowAny: true }));
+      await writeRconAudit(this.actorId, o, result);
+      return result;
+    },
   };
 }
 
@@ -564,14 +713,43 @@ function mayConfigure(interaction) {
   } catch (error) { return false; }
 }
 
-async function answerModal(interaction, payload) {
+function decorateDiscordPayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
   const body = Object.assign({}, payload);
+  if (Array.isArray(payload.embeds)) {
+    body.embeds = payload.embeds.map(function (source) {
+      const item = Object.assign({}, source || {});
+      item.author = item.author || { name: 'Spinback RCE' };
+      item.timestamp = item.timestamp || new Date().toISOString();
+      const footer = String((item.footer && item.footer.text) || '').trim();
+      item.footer = Object.assign({}, item.footer || {}, { text: footer ? footer + ' • Spinback RCE' : 'Spinback RCE' });
+      return item;
+    });
+  }
+  if (Array.isArray(payload.components)) {
+    const icons = [
+      [/^(setup:)/, '⚙️'], [/^(kits:)/, '🎁'], [/^(user:)/, '👥'],
+      [/^(link:)/, '🔗'], [/^(help:)/, '📘'], [/^(server:)/, '🖥️'], [/^(ping:)/, '🔄'],
+    ];
+    body.components = payload.components.map(function (row) {
+      return Object.assign({}, row, { components: (row.components || []).map(function (item) {
+        if (!item || item.type !== 2 || item.emoji) return item;
+        const match = icons.filter(function (entry) { return entry[0].test(String(item.custom_id || '')); })[0];
+        return match ? Object.assign({}, item, { emoji: { name: match[1] } }) : item;
+      }) });
+    });
+  }
+  return body;
+}
+
+async function answerModal(interaction, payload) {
+  const body = decorateDiscordPayload(payload);
   if (body.flags === undefined) body.flags = 64;
   try { await interaction.reply(body); } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
 }
 
 async function answerPanel(interaction, payload) {
-  const body = Object.assign({}, payload);
+  const body = decorateDiscordPayload(payload);
   delete body.flags;
   if (body.components === undefined) body.components = [];
   try { await interaction.update(body); } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
@@ -592,11 +770,17 @@ async function routeInteraction(interaction) {
     if (interaction.isStringSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isChannelSelectMenu === 'function' && interaction.isChannelSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isRoleSelectMenu === 'function' && interaction.isRoleSelectMenu()) return await runSelect(interaction);
+    if (typeof interaction.isUserSelectMenu === 'function' && interaction.isUserSelectMenu()) return await runSelect(interaction);
     return;
   } catch (error) {
     const message = String((error && error.message) || error);
-    log('interaction failed:', message);
-    try { await interaction.reply({ content: 'That failed: ' + message.slice(0, 300), flags: 64 }); } catch (e) { /* already answered */ }
+    const reference = createHash('sha256').update(Date.now() + ':' + Math.random() + ':' + message).digest('hex').slice(0, 8);
+    log('interaction failed [' + reference + ']:', message);
+    const payload = { content: 'That failed. Please try again. Reference: ' + reference, flags: 64 };
+    try {
+      if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
+      else await interaction.reply(payload);
+    } catch (e) { /* already answered or expired */ }
   }
 }
 
@@ -658,9 +842,15 @@ async function runButton(interaction) {
         components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
   if (id === 'link:unlink:go') {
+    const previous = findLinkByUser(interaction.user.id);
     const gone = removeLink(interaction.user.id);
+    await persistQueue;
+    if (gone && previous) {
+      await setLinkedRole(previous.userId, 'remove');
+      await writeLinkAudit('Unlinked by member', interaction.user.id, previous.userId, previous.gamertag);
+    }
     return await answerModal(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Unlinked' : 'Nothing to unlink',
-      gone ? 'Your link is removed. Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
+      gone ? 'Your link is removed and the Linked role was removed where configured. Press Link account whenever you want it back.' : 'No link was on record for your account.')],
       components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
@@ -673,9 +863,15 @@ async function runButton(interaction) {
   if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
   if (id.indexOf('user:unlink:go:') === 0) {
     const tag = id.slice('user:unlink:go:'.length);
+    const previous = findLinkByGamertag(tag);
     const gone = removeLink(tag);
+    await persistQueue;
+    if (gone && previous) {
+      await setLinkedRole(previous.userId, 'remove');
+      await writeLinkAudit('Unlinked by staff', interaction.user.id, previous.userId, previous.gamertag);
+    }
     return await answerPanel(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Link removed' : 'Nothing removed',
-      gone ? 'The link for ' + tag + ' is gone.' : 'No link for ' + tag + ' was found.')],
+      gone ? 'The link for ' + tag + ' is gone. The Linked role was removed where configured.' : 'No link for ' + tag + ' was found.')],
       components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
   }
   if (id === 'kits:give') return await interaction.showModal(kitGiveModal());
@@ -758,19 +954,32 @@ async function runButton(interaction) {
       });
       const done = addLink(userId, request.gamertag, interaction.user.id);
       dropPending(userId);
-      const wrote = await persistSettings();
+      const wrote = await persistSettings(['links', 'pending']);
+      const roleResult = await setLinkedRole(userId, 'add');
+      const dmResult = await sendLinkNotice(userId, done.gamertag, 'linked');
+      await writeLinkAudit('Approved link request', interaction.user.id, userId, done.gamertag);
       return await answerPanel(interaction, {
         embeds: [panelEmbed(0x3ba55d, 'Link approved', '<@' + userId + '> is now linked to ' + done.gamertag + ', and the waiting request was cleared. The record shows that you confirmed it.'
-          + (wrote.ok ? '' : ' The website refused the save, so this is in memory only: ' + String(wrote.detail || '').slice(0, 140)))],
+          + (roleResult.ok ? ' The Linked role was given.' : '')
+          + (dmResult.ok ? ' A direct message was sent.' : ' The player could not be sent a direct message.')
+          + (wrote.ok ? '' : ' The website refused the save: ' + String(wrote.detail || '').slice(0, 140)))],
         components: [panelRow([panelButton('user:pending', 'Back to requests', 2), panelButton('user:config', 'Back to links', 2)])],
       });
     }
     const removed = dropPending(userId);
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['pending']);
+    let dmStatus = '';
+    if (removed) {
+      try {
+        const user = await client.users.fetch(String(userId));
+        await user.send(decorateDiscordPayload({ embeds: [panelEmbed(0xfaa81a, 'Link request declined', 'Your request to link ' + String(request.gamertag || 'your gamertag') + ' was not approved. Contact a server administrator if you think this is a mistake.')] }));
+        dmStatus = ' A direct message was sent.';
+      } catch (error) { dmStatus = ' The player could not be sent a direct message.'; }
+      await writeLinkAudit('Rejected link request', interaction.user.id, userId, request.gamertag);
+    }
     return await answerPanel(interaction, {
       embeds: [panelEmbed(removed ? 0x3ba55d : 0xfaa81a, removed ? 'Request rejected' : 'Nothing to reject',
-        removed ? 'The request from <@' + userId + '> was cleared and no link was written.'
-          : 'That request is no longer on record.'
+        (removed ? 'The request from <@' + userId + '> was cleared and no link was written.' : 'That request is no longer on record.') + dmStatus
         + (wrote.ok ? '' : ' The website refused the save: ' + String(wrote.detail || '').slice(0, 140)))],
       components: [panelRow([panelButton('user:pending', 'Back to requests', 2)])],
     });
@@ -935,18 +1144,31 @@ async function runModal(interaction) {
         components: [panelRow([panelButton('user:transfer', 'Transfer it instead', 1), panelButton('user:config', 'Cancel', 2)])] });
     }
     const done = addLink(userId, gamertag, interaction.user.id);
-    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Linked', '<@' + userId + '> is now linked to ' + done.gamertag + '.')],
+    await persistQueue;
+    const roleResult = await setLinkedRole(userId, 'add');
+    const dmResult = await sendLinkNotice(userId, done.gamertag, 'linked');
+    await writeLinkAudit('Force linked', interaction.user.id, userId, done.gamertag);
+    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Linked', '<@' + userId + '> is now linked to ' + done.gamertag + '.'
+      + (roleResult.ok ? ' The Linked role was given.' : '')
+      + (dmResult.ok ? ' A direct message was sent.' : ' The player could not be sent a direct message.'))],
       components: [panelRow([panelButton('user:config', 'Back to links', 2), panelButton('user:panel', 'Post the link panel', 1)])] });
   }
   if (id.indexOf('modal:transfer:') === 0) {
     const gamertag = id.slice('modal:transfer:'.length);
+    const previous = findLinkByGamertag(gamertag);
     const moved = moveLink(gamertag, fields.move_user, fields.move_gamertag);
-    return await answerModal(interaction, moved.ok
-      ? { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
-          + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.')],
-        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
-      : { embeds: [panelEmbed(0xdc4c4c, 'Not moved', String(moved.detail || '').slice(0, 400))],
-        components: [panelRow([panelButton('user:transfer', 'Try again', 1), panelButton('user:config', 'Cancel', 2)])] });
+    if (!moved.ok) return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'Not moved', String(moved.detail || '').slice(0, 400))],
+      components: [panelRow([panelButton('user:transfer', 'Try again', 1), panelButton('user:config', 'Cancel', 2)])] });
+    await persistQueue;
+    if (previous) await setLinkedRole(previous.userId, 'remove');
+    const roleResult = await setLinkedRole(moved.userId, 'add');
+    const dmResult = await sendLinkNotice(moved.userId, moved.gamertag, 'moved');
+    await writeLinkAudit('Transferred link', interaction.user.id, moved.userId, moved.gamertag);
+    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
+      + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.'
+      + (roleResult.ok ? ' The Linked role was moved.' : '')
+      + (dmResult.ok ? ' A direct message was sent.' : ' The new owner could not be sent a direct message.'))],
+      components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
   }
   if (id === 'modal:kitgive') {
     const remembered = pendingGive.get(interaction.user.id) || '';
@@ -1000,7 +1222,7 @@ client.once(Events.ClientReady, async (c) => {
   state.guilds = c.guilds.cache.size;
   log('logged in as ' + c.user.tag + ' — in ' + c.guilds.cache.size + ' guild(s)');
   try {
-    c.user.setPresence({ status: 'online', activities: [{ name: '/dashboard — Spinback RCE', type: 0 }] });
+    c.user.setPresence({ status: 'online', activities: [{ name: 'Rust servers linked: ' + settings.servers.length + ' • /help', type: 0 }] });
     if (!GUILD_ID) {
       log('WARNING: DISCORD_GUILD_ID is not set, so no command was registered');
       return;
