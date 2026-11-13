@@ -143,7 +143,7 @@ async function persistSettingsNow(sections) {
   if (!token) return { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set on this service, so the website cannot be written to' };
   const all = {
     staffRoles: settings.staffRoles, logChannels: settings.logChannels, servers: settings.servers,
-    kits: settings.kits, links: settings.links, pending: settings.pending, linkPanel: settings.linkPanel,
+    kits: settings.kits, installs: settings.installs, links: settings.links, pending: settings.pending, linkPanel: settings.linkPanel,
   };
   const outgoing = {};
   (Array.isArray(sections) && sections.length ? sections : Object.keys(all)).forEach(function (key) {
@@ -187,6 +187,7 @@ async function loadSettings() {
     if (body && body.logChannels) settings.logChannels = body.logChannels;
     if (body && Array.isArray(body.servers)) settings.servers = body.servers;
     if (body && body.kits && typeof body.kits === 'object') settings.kits = Object.assign(settings.kits, body.kits);
+    if (body && body.installs && typeof body.installs === 'object') settings.installs = body.installs;
     if (body && Array.isArray(body.links)) settings.links = body.links;
     if (body && Array.isArray(body.pending)) settings.pending = body.pending;
     if (body && body.linkPanel && typeof body.linkPanel === 'object') settings.linkPanel = body.linkPanel;
@@ -214,7 +215,7 @@ async function saveServer(s) {
   };
   const at = settings.servers.findIndex(function (x) { return x.id === entry.id; });
   if (at > -1) settings.servers[at] = entry; else settings.servers.push(entry);
-  return persistSettings();
+  return persistSettings(['servers']);
 }
 
 function installKitCode(raw, text) {
@@ -222,7 +223,7 @@ function installKitCode(raw, text) {
   settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
   const keys = Object.keys(settings.installs);
   if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
-  persistSettings().catch(function () { /* reported the next time settings are saved */ });
+  persistSettings(['installs']).catch(function () { /* reported the next time settings are saved */ });
   return Object.keys(settings.installs).length;
 }
 
@@ -231,7 +232,7 @@ function setAuthSpawn(group, kit) {
   if (!name) return;
   if (kit && String(kit).trim()) settings.kits.authSpawn[name] = String(kit).trim().slice(0, 60);
   else delete settings.kits.authSpawn[name];
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
 }
 
 function cooldownCount() { return cooldowns.size; }
@@ -278,7 +279,7 @@ function saveBind(data, keepRole, preserve) {
   if (!roleId && preserve && previous) roleId = previous.roleId || null;
   const entry = { emote: emote, kits: kits, cooldown: cooldown, roleId: roleId };
   if (at > -1) settings.kits.binds[at] = entry; else settings.kits.binds.push(entry);
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
   return entry;
 }
 
@@ -286,7 +287,7 @@ function removeBind(emote) {
   const wanted = String(emote || '').toLowerCase();
   const before = settings.kits.binds.length;
   settings.kits.binds = settings.kits.binds.filter(function (b) { return b.emote.toLowerCase() !== wanted; });
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
   return before - settings.kits.binds.length;
 }
 
