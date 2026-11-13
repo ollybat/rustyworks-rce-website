@@ -922,6 +922,12 @@ export async function giveKit(ctx, opts) {
   }
   var target = String(opts.gamertag || (linked && linked.gamertag) || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40);
   if (!target) return { embeds: [embed(0xdc4c4c, "Who should get it?", "Name a gamertag, or choose a Discord account that already has a confirmed link.")], flags: EPH };
+  /* These values become part of a console command. Reject separators, control
+     characters and quote escapes rather than allowing a name to alter the template. */
+  if (/[\u0000-\u001f;'"\\\\]/.test(target) || /[\u0000-\u001f;'"\\\\]/.test(kit)) {
+    return { embeds: [embed(0xdc4c4c, "That name cannot be sent safely",
+      "The gamertag or kit name contains a command separator, quote, backslash or control character. Remove those characters and try again.")], flags: EPH };
+  }
   var availableServers = ctx.servers() || [];
   var serverName = String(opts.server || "").trim();
   var server = serverName
