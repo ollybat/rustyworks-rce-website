@@ -20,6 +20,15 @@ import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TOKEN = "sim-settings-token";
+
+/* Give the bot HTTP API a known free port for security/health-route tests. */
+const portProbe = createServer();
+await new Promise((resolve, reject) => {
+  portProbe.once("error", reject);
+  portProbe.listen(0, "127.0.0.1", resolve);
+});
+const botPort = portProbe.address().port;
+await new Promise((resolve, reject) => portProbe.close((error) => error ? reject(error) : resolve()));
 const SLOW_SAVE_MS = 1800;
 const SLOW_CHECK_MS = 2000;
 
@@ -32,7 +41,8 @@ const initial = {
   logChannels: {},
   servers: [{ id: "srv1", name: "Main", host: "203.0.113.10", port: 28016, hasPassword: true, password: "secret" }],
   kits: { binds: [{ emote: "salute", kits: ["STARTER"], cooldown: 60, roleId: null }], locked: false, authSpawn: {},
-    giveCommand: 'kit givetoplayer {kit} "{player}"', listCommand: "kit list", known: [] },
+    giveCommand: 'kit givetoplayer {kit} "{player}"', listCommand: "kit list", installCommand: "", giveCooldownSeconds: 30, known: [] },
+  installs: {},
   links,
   pending: [],
   linkPanel: null,
@@ -44,6 +54,7 @@ const store = JSON.parse(JSON.stringify(initial));
 function merge(into, body) {
   for (const key of ["staffRoles", "logChannels", "kits"]) if (body[key] && typeof body[key] === "object") into[key] = Object.assign({}, into[key], body[key]);
   for (const key of ["servers", "links", "pending"]) if (Array.isArray(body[key])) into[key] = body[key];
+  if (body.installs && typeof body.installs === "object") into.installs = Object.assign({}, into.installs || {}, body.installs);
   if ("linkPanel" in body) into.linkPanel = body.linkPanel;
 }
 const writes = [];
@@ -80,7 +91,7 @@ const siteUrl = "http://127.0.0.1:" + site.address().port;
 const child = spawn(process.execPath, ["--import", join(repo, "scripts", "sim", "register.mjs"), join(repo, "bot", "server.mjs")], {
   cwd: repo,
   env: Object.assign({}, process.env, {
-    PORT: "0",
+    PORT: String(botPort),
     HOST: "127.0.0.1",
     DISCORD_BOT_TOKEN: "simsimsimsimsimsimsimsim.simsim.simsimsimsimsimsimsimsimsim",
     DISCORD_GUILD_ID: "1",
@@ -89,6 +100,7 @@ const child = spawn(process.execPath, ["--import", join(repo, "scripts", "sim", 
     SITE_ORIGIN: siteUrl,
     SETTINGS_RELOAD_MS: "2500",
     SIM_OWNER_ID: "100000000000000999",
+    SPINBACK_TEST_MODE: "1",
     SIM_SCENARIO: join(repo, "scripts", "sim", "scenario.mjs"),
   }),
   stdio: ["ignore", "pipe", "pipe"],
@@ -96,6 +108,83 @@ const child = spawn(process.execPath, ["--import", join(repo, "scripts", "sim", 
 
 let result = null;
 let output = "";
+
+const apiChecksPromise = (async function () {
+  const base = "http://127.0.0.1:" + botPort;
+  const failures = [];
+  let passed = 0;
+  function check(name, ok, detail) {
+    if (ok) passed += 1;
+    else failures.push({ name: "HTTP API: " + name, detail: detail || "" });
+  }
+  async function request(path, options) {
+    return fetch(base + path, Object.assign({ signal: AbortSignal.timeout(3000) }, options || {}));
+  }
+
+  let health = null;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try {
+      const response = await request("/healthz");
+      if (response.ok) { health = response; break; }
+    } catch {}
+    await delay(100);
+  }
+  if (!health) {
+    check("Railway /healthz starts", false, "GET /healthz did not answer");
+    return { passed, failures };
+  }
+
+  const healthData = await health.json().catch(() => ({}));
+  check("Railway /healthz exposes only minimal liveness data",
+    healthData.ok === true
+      && healthData.service === "spinback-rce-bot"
+      && Object.keys(healthData).sort().join(",") === "ok,service",
+    JSON.stringify(healthData));
+
+  const statusResponse = await request("/api/status");
+  const statusData = await statusResponse.json().catch(() => ({}));
+  const privateFields = [
+    "host", "port", "tokenPresent", "tokenSource", "tokenShape", "tokenLength",
+    "lookedFor", "loginAttempts", "siteUrl", "ownerKnown", "ownerSource",
+    "forcedLogins", "gatewayDownSeconds", "error", "guildInfo",
+  ];
+  check("public /api/status omits internal diagnostics",
+    statusResponse.ok && privateFields.every((key) => !(key in statusData)),
+    JSON.stringify(statusData));
+
+  for (const [path, method, body] of [
+    ["/api/guilds", "GET", null],
+    ["/api/guild", "GET", null],
+    ["/api/rcon/test", "POST", "{}"],
+    ["/api/reconnect", "POST", "{}"],
+    ["/api/oauth/exchange", "POST", JSON.stringify({ code: "unused", redirectUri: "https://example.invalid/callback" })],
+  ]) {
+    const response = await request(path, {
+      method,
+      headers: { "content-type": "application/json" },
+      ...(body ? { body } : {}),
+    });
+    check(path + " rejects anonymous requests", response.status === 403, "got " + response.status);
+  }
+
+  const wrongMethod = await request("/api/reconnect", { method: "GET", headers: { "x-settings-token": TOKEN } });
+  check("reconnect requires POST", wrongMethod.status === 405, "got " + wrongMethod.status);
+
+  const trustedGuilds = await request("/api/guilds", { headers: { "x-settings-token": TOKEN } });
+  check("the trusted Worker secret can read guild metadata",
+    trustedGuilds.status === 200, "got " + trustedGuilds.status);
+
+  const refusedRcon = await request("/api/rcon/test", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify({ host: "203.0.113.10", port: 28016, password: "not-used", command: "serverinfo" }),
+  });
+  const refusedData = await refusedRcon.json().catch(() => ({}));
+  check("authenticated RCON tests still reject documentation IP ranges",
+    refusedRcon.ok && refusedData.reason === "refused-host", JSON.stringify(refusedData));
+
+  return { passed, failures };
+})();
 child.stdout.on("data", (chunk) => {
   output += chunk;
   for (const line of String(chunk).split("\n")) if (line.startsWith("SIM_RESULT ")) result = JSON.parse(line.slice(11));
@@ -111,7 +200,10 @@ if (!result) {
   console.log("The bot did not finish the simulation (exit code " + code + ").");
   process.exit(1);
 }
+const apiResults = await apiChecksPromise;
 console.log("Bot registered: /" + result.commands.join(", /"));
-console.log(result.interactions + " interactions, " + result.total + " checks, " + result.failed + " failed.");
+console.log(result.interactions + " interactions, " + result.total + " interaction checks, " + result.failed + " failed.");
 for (const f of result.failures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
-process.exit(result.failed ? 1 : 0);
+console.log("HTTP API: " + apiResults.passed + " checks passed, " + apiResults.failures.length + " failed.");
+for (const f of apiResults.failures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
+process.exit(result.failed || apiResults.failures.length ? 1 : 0);
