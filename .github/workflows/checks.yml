@@ -42,3 +42,6 @@ jobs:
 
       - name: RCON protocol self-test
         run: python3 scripts/rcon-selftest.py
+
+      - name: RCON destination guard self-test
+        run: node scripts/check-network-guard.mjs
