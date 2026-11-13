@@ -82,13 +82,15 @@ function checkPayload(where, payload) {
 }
 function makeCtx(configured, big) {
   const many = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+  const fakeCooldowns = new Map();
+  const activeGives = new Set();
   const settings = {
     staffRoles: configured ? { owner: "111111111111111111", admin: "222222222222222222" } : {},
     logChannels: configured ? { server: "333333333333333333", killfeed: "333333333333333334" } : {},
     servers: configured ? many(big ? 3 : 1, (i) => ({ id: "srv" + i, name: "Server " + i, host: "203.0.113." + (5 + i), port: 28016, password: "x" })) : [],
     kits: {
       binds: configured ? many(big ? 30 : 2, (i) => ({ emote: "emote_" + i, kits: ["KIT_" + i, "STARTER"], cooldown: 300, roleId: i % 2 ? "222222222222222222" : null })) : [],
-      locked: false, authSpawn: configured ? { VIP: "VIP_KIT" } : {}, giveCommand: "", listCommand: "",
+      locked: false, authSpawn: configured ? { VIP: "VIP_KIT" } : {}, giveCommand: "", listCommand: "", giveCooldownSeconds: 30, installCodes: {},
     },
     installs: {},
     links: configured ? many(big ? 40 : 2, (i) => ({ userId: "4000000000000000" + String(i).padStart(2, "0"), gamertag: "Player" + i, by: "111111111111111111", at: Date.now() })) : [],
@@ -107,6 +109,20 @@ function makeCtx(configured, big) {
     moveLink: () => ({ ok: true, userId: "400000000000000001", gamertag: "Player0" }), requestLink: () => ({ ok: true }),
     setAuthSpawn: () => {}, clearCooldowns: () => 2, cooldownCount: () => (big ? 50 : 1),
     cooldownList: () => many(big ? 50 : 1, (i) => "Player" + i + " -> KIT_" + i + " (120s left)"),
+    reserveKitGive: (player, kit, seconds) => {
+      const key = String(player).toLowerCase() + "\u0000" + String(kit).toLowerCase();
+      const now = Date.now();
+      const expiresAt = Number(fakeCooldowns.get(key) || 0);
+      if (expiresAt > now) return { ok: false, key, remainingSeconds: Math.ceil((expiresAt - now) / 1000), inProgress: false };
+      if (activeGives.has(key)) return { ok: false, key, remainingSeconds: 1, inProgress: true };
+      activeGives.add(key);
+      return { ok: true, key, cooldownSeconds: Number(seconds) || 0 };
+    },
+    finishKitGive: (reservation, succeeded) => {
+      if (!reservation || !reservation.key) return;
+      activeGives.delete(reservation.key);
+      if (succeeded && reservation.cooldownSeconds > 0) fakeCooldowns.set(reservation.key, Date.now() + reservation.cooldownSeconds * 1000);
+    },
     rconTest: async () => ({ ok: true, authenticated: true, command: "serverinfo", answer: "hostname: Test\nplayers: 3", ms: 40 }),
     rconRun: async () => ({ ok: true, authenticated: true, command: "kit list", answer: big ? many(80, (i) => "KIT_" + i).join("\n") : "STARTER\nPVP", ms: 40 }),
     actor: { id: "111111111111111111", tag: "staff#0001" },
@@ -154,6 +170,24 @@ for (const [name, fn] of Object.entries(mod)) {
       problems.push(name + "() [" + label + "]: threw " + String((error && error.message) || error));
     }
   }
+}
+
+/* Manual kit giveaways use a per-player + per-kit cooldown, only after a successful RCON result. */
+{
+  const ctx = makeCtx(true, false);
+  ctx.settings.kits.giveCommand = 'kit givetoplayer {kit} "{player}"';
+  ctx.settings.kits.giveCooldownSeconds = 30;
+  const options = { kit: "STARTER", gamertag: "Player0", server: "Server 0" };
+  const first = await mod.giveKit(ctx, options);
+  checkPayload("giveKit(success, cooldown)", first);
+  if (!first || !first.embeds || first.embeds[0].title !== "Sent") problems.push("giveKit did not return a successful test send");
+  const second = await mod.giveKit(ctx, options);
+  checkPayload("giveKit(cooldown)", second);
+  if (!second || !second.embeds || second.embeds[0].title !== "Giveaway cooldown") problems.push("a second give inside the cooldown was not blocked");
+  ctx.settings.kits.locked = true;
+  const paused = await mod.giveKit(ctx, { kit: "OTHER", gamertag: "Player0", server: "Server 0" });
+  checkPayload("giveKit(paused)", paused);
+  if (!paused || !paused.embeds || paused.embeds[0].title !== "Kit delivery is paused") problems.push("the manual kit delivery lock was not enforced");
 }
 
 /* builders that take more than the bot context */
