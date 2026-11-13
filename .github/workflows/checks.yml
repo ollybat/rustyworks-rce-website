@@ -1,0 +1,44 @@
+# Runs on every push to main and every pull request. Nothing here needs secrets, npm
+# packages or the network: it checks the code parses, builds the site, and smoke-tests
+# the built worker the way a visitor's browser would use it.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Every script parses
+        run: |
+          for f in $(git ls-files '*.js' '*.mjs'); do
+            node --check "$f" || exit 1
+          done
+
+      - name: Brand check
+        run: node scripts/check-brand.mjs
+
+      - name: Build and smoke-test the site
+        run: node scripts/smoke-test.mjs
+
+      - name: Slash commands fit Discord's rules
+        run: node scripts/check-commands.mjs
+
+      - name: Simulate the bot end to end
+        run: node scripts/simulate-bot.mjs
+
+      - name: RCON protocol self-test
+        run: python3 scripts/rcon-selftest.py

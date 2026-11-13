@@ -56,6 +56,25 @@ worker under plain Node on http://localhost:8787, with an in-memory stand-in for
 `STATUS_LOG` bucket. Upstream calls that cannot be reached fail the same way they would
 in production, so the fallbacks get exercised too.
 
+`node scripts/smoke-test.mjs` builds the site and checks it without a browser or network:
+every page, every file a page or the service worker refers to, the redirects, the 404 page,
+the retired endpoints and the status history. It exits non-zero on the first problem, and
+GitHub runs it with the other checks on every push and pull request
+(`.github/workflows/checks.yml`).
+
+`node scripts/check-commands.mjs` does the same for the bot's slash commands: it checks every
+definition in `bot/commands.mjs` against Discord's rules (one bad definition makes Discord
+refuse the whole list), then runs every command and subcommand against a pretend bot, before
+and after setup and with lots of saved data, and checks each reply, panel and form against
+Discord's size limits.
+
+`node scripts/simulate-bot.mjs` runs the real `bot/server.mjs` against a stand-in for
+discord.js (`scripts/sim/`) and a pretend website, and drives every command, button, menu,
+form and suggestion through it: typed form values must reach the bot, every interaction must
+be answered inside Discord's three seconds even when a save or an RCON check is slow, no
+handler may reply twice, settings must really be saved, and the linked role and the log
+channels must really be used. No Discord, token or `npm install` needed.
+
 ## Stylesheet map
 
 `public/style.css` is the whole site's stylesheet, in this order:
@@ -237,24 +256,26 @@ not from the visitor's browser, which is measured separately by the visit strip.
 
 ## Kit Studio
 
-`public/dashboard/kitbuilder.html` is a real tool rather than a placeholder. It builds the
-console commands a Rust Console Edition server wants, using the syntax from the official
-community-server documentation (feature guide: Kit Management):
+`public/dashboard/kitbuilder.html` builds the console commands a Rust Console Edition server
+wants for a kit, slot by slot (7 wear, 24 main, 6 belt):
 
-    kit add "Kit name" "item" amount condition Container
+    kit remove "KIT_NAME"
+    kit add "KIT_NAME"
+    kit add "KIT_NAME" <shortname> <amount> 1 <wear|main|belt>
 
-Everything runs in the browser. The picker reads `public/data/items.json`, which holds the
-catalogue: `src: "db"` entries were read from a public RUST item database - the reference
-the RCE server docs point at for item names - and carry a documented stack size, while
-`src: "core"` entries were added by us from widely known item names and carry none. The page
-says which is which next to the kit, so nobody mistakes one for the other. RCE runs an older
-build than the PC game and we could only read part of that database, so the picker also
-accepts any item name typed by hand.
+Kit names are upper-cased, spaces become underscores, and quotes or backslashes are dropped,
+because the name sits inside double quotes in every line. Kits are saved in the browser
+(`localStorage`, key `spinback-kits-v1`, handled by `public/kit-saves.js`), and the counters at
+the top of the page are this browser's own. Import takes either the Base64 install code or
+pasted `kit add` lines, keeps the kit's name, and leaves the current kit alone if nothing in
+the paste can be read. The site search opens an item straight in the studio
+(`/dashboard/kitbuilder.html#item=<shortname>`). The page itself is described further down,
+under "Kit Studio page".
 
-The tool warns when an amount exceeds the documented stack size, when more than six items go
-on the belt (a hotbar holds six), and when a kit line uses one of our own names. Kits are
-kept in `localStorage` under `rw-kitstudio-v1`, export and import as JSON, and download as a
-text file of ready-to-paste commands. Nothing is sent anywhere.
+`public/data/items.json` is the site's own catalogue: `src: "db"` entries were read from a
+public RUST item database and carry a documented stack size, `src: "core"` entries were added
+from widely known item names. The site search uses it, and the Kit Studio falls back to it
+when its upstream item list cannot be reached.
 
 ## Offline, and installable
 

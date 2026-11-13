@@ -5,4 +5,5 @@
   <url><loc>https://spinback-j7ao5f.camelai.app/dashboard/kitbuilder.html</loc><priority>0.8</priority></url>
   <url><loc>https://spinback-j7ao5f.camelai.app/commands.html</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://spinback-j7ao5f.camelai.app/settings.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://spinback-j7ao5f.camelai.app/dashboard/colortext.html</loc><priority>0.7</priority></url>
 </urlset>

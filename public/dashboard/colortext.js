@@ -9,7 +9,10 @@
     ["Night", ["#5500FF", "#8A00FF", "#C800CC"]], ["Rust", ["#CE422B", "#8A2B1C", "#FF7200"]],
     ["Mint", ["#00D26A", "#6CC24A", "#B6F09C"]], ["Sunset", ["#FFB347", "#FF6F61", "#9B1B54"]]
   ];
-  var ANSI = [["30", "#4f545c"], ["31", "#dc4c4c"], ["32", "#3ba55d"], ["33", "#faa81a"], ["34", "#3b88c3"], ["35", "#c14fd6"], ["36", "#2ec4b6"], ["37", "#dcddde"], ["90", "#72767d"], ["91", "#ff7a7a"], ["92", "#57f287"], ["93", "#fee75c"], ["94", "#5dadec"], ["95", "#eb459e"], ["96", "#5ff0e6"], ["97", "#ffffff"]];
+  /* Discord's ansi code blocks understand eight text colours, 30 to 37, drawn from this
+     palette. The bright 90-97 codes are not supported there and show as plain text, so they
+     are not offered. */
+  var ANSI = [["30", "#4f545c"], ["31", "#dc322f"], ["32", "#859900"], ["33", "#b58900"], ["34", "#268bd2"], ["35", "#d33682"], ["36", "#2aa198"], ["37", "#ffffff"]];
   function el(id) { return document.getElementById(id); }
   function rgb(hex) {
     var h = String(hex || "").replace("#", "");
@@ -17,14 +20,42 @@
     var n = parseInt(h, 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
-  function nearestAnsi(hex) {
-    var want = rgb(hex), best = ANSI[7], bestD = Infinity;
+  function nearestAnsi(want) {
+    var best = ANSI[7], bestD = Infinity;
     ANSI.forEach(function (pair) {
       var c = rgb(pair[1]);
       var d = Math.pow(c[0] - want[0], 2) + Math.pow(c[1] - want[1], 2) + Math.pow(c[2] - want[2], 2);
       if (d < bestD) { bestD = d; best = pair; }
     });
-    return best[0];
+    return best;
+  }
+  /* The gradient's colour at t (0 to 1), straight-line between neighbouring stops. */
+  function colourAt(t) {
+    if (stops.length < 2) return rgb(stops[0]);
+    var scaled = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+    var i = Math.min(stops.length - 2, Math.floor(scaled));
+    var a = rgb(stops[i]), b = rgb(stops[i + 1]), f = scaled - i;
+    return [0, 1, 2].map(function (k) { return Math.round(a[k] + (b[k] - a[k]) * f); });
+  }
+  /* Every letter gets the Discord colour closest to its place on the gradient. A new escape
+     code is written only when the colour changes, which keeps the block short. Returns the
+     block's text and the runs, so the preview shows exactly what Discord will. */
+  function ansiRuns(text) {
+    var chars = Array.from(text);
+    var visible = chars.filter(function (c) { return c.trim(); }).length;
+    var runs = [], seen = 0;
+    chars.forEach(function (ch) {
+      var pair = null;
+      if (ch.trim()) {
+        pair = nearestAnsi(colourAt(visible > 1 ? seen / (visible - 1) : 0));
+        seen += 1;
+      }
+      var last = runs[runs.length - 1];
+      /* Spaces join the run they sit in, so they never cost an extra code. */
+      if (last && (!pair || (last.pair && last.pair[0] === pair[0]))) { last.text += ch; return; }
+      runs.push({ pair: pair, text: ch });
+    });
+    return runs;
   }
   var stops = ["#FF9A00", "#FF4900", "#F21F6B"];
 
@@ -71,11 +102,25 @@
     preview.style.webkitBackgroundClip = "text";
     preview.style.backgroundClip = "text";
     preview.style.color = "transparent";
-    el("ctAnsi").value = FENCE + "ansi" + String.fromCharCode(10) + text + String.fromCharCode(10) + stops.map(function (c) {
-      return String.fromCharCode(27) + "[0;" + nearestAnsi(c) + "m" + c + String.fromCharCode(27) + "[0m";
-    }).join(" ") + String.fromCharCode(10) + FENCE;
-    var mid = stops[Math.floor(stops.length / 2)];
-    el("ctEmbed").value = "color: 0x" + mid.replace("#", "").toUpperCase();
+    var ESC = String.fromCharCode(27), runs = ansiRuns(text), body = "", current = null;
+    var shown = el("ctAnsiPreview");
+    if (shown) shown.textContent = "";
+    runs.forEach(function (run) {
+      if (run.pair && run.pair[0] !== current) { body += ESC + "[0;" + run.pair[0] + "m"; current = run.pair[0]; }
+      body += run.text;
+      if (shown) {
+        var span = document.createElement("span");
+        span.textContent = run.text;
+        if (run.pair) span.style.color = run.pair[1];
+        shown.appendChild(span);
+      }
+    });
+    if (current) body += ESC + "[0m";
+    el("ctAnsi").value = FENCE + "ansi" + String.fromCharCode(10) + body + String.fromCharCode(10) + FENCE;
+    /* The middle stop as the accent, in both shapes people paste it in: a hex literal for
+       discord.js and the plain decimal integer the Discord API and webhooks take. */
+    var mid = stops[Math.floor(stops.length / 2)].replace("#", "").toUpperCase();
+    el("ctEmbed").value = "discord.js: .setColor(0x" + mid + ")" + String.fromCharCode(10) + "API / webhook JSON: \"color\": " + parseInt(mid, 16);
     el("ctCss").value = "background-image: " + grad + ";" + String.fromCharCode(10) + "-webkit-background-clip: text;" + String.fromCharCode(10) + "background-clip: text;" + String.fromCharCode(10) + "color: transparent;";
   }
 

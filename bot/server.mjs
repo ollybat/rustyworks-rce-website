@@ -19,7 +19,8 @@ import { createServer } from 'node:http';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from 'discord.js';
 import handler from './interactions-worker.js';
 import net from 'node:net';
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
@@ -31,6 +32,7 @@ import {
   kitGivePanel, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
+  STAFF_SLOTS, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
 } from './commands.mjs';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
@@ -82,8 +84,18 @@ const PORT = Number(process.env.PORT || 8080);
    server on 127.0.0.1 would answer nothing and the public domain would 502. */
 const HOST = process.env.HOST || '0.0.0.0';
 
-const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null };
+const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null, lastHeartbeat: null, latencyMs: null };
 const log = (...a) => console.log('[spinback]', ...a);
+
+/* What the status page prints as the version. Railway sets RAILWAY_GIT_COMMIT_SHA on every
+   deploy from GitHub, so the page can show which commit is live and notice a new deploy. */
+const VERSION = 'Spinback RCE bot' + (process.env.RAILWAY_GIT_COMMIT_SHA ? ' ' + String(process.env.RAILWAY_GIT_COMMIT_SHA).slice(0, 7) : '');
+
+/* A stray rejected promise (a reply to an interaction that expired, a REST call that timed
+   out) would otherwise end the process, and Railway stops restarting after ten failures. */
+process.on('unhandledRejection', (reason) => {
+  log('unhandled rejection:', String((reason && reason.stack) || reason).slice(0, 500));
+});
 
 /* -------------------------------------------------------------- settings ---- */
 /* Roles, logging channels, servers and kit settings are kept here and mirrored to the
@@ -100,6 +112,10 @@ const settings = {
   linkPanel: null,
 };
 const cooldowns = new Map();
+let settingsTimer = null;
+/* How often settings edited on the website are read back (SETTINGS_RELOAD_MS, default two
+   minutes; the simulator shortens it). */
+const RELOAD_MS = Math.max(1000, Number(process.env.SETTINGS_RELOAD_MS) || 120000);
 
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
 
@@ -107,22 +123,32 @@ function panelEmbed(color, title, description) { return { color: color, title: t
 function panelRow(components) { return { type: 1, components: components }; }
 function panelButton(id, label, style) { return { type: 2, custom_id: id, label: label, style: style || 2 }; }
 
-async function persistSettings() {
+/* Only the sections a change touched are sent. The website merges each save into what it
+   holds, and its Settings page edits the same sections, so sending everything would put this
+   bot's older copy of a section back over a newer edit made on the website. */
+let lastPersistAt = 0;
+async function persistSettings(sections) {
   const token = settingsToken();
   if (!token) return { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set on this service, so the website cannot be written to' };
+  const everything = {
+    staffRoles: settings.staffRoles,
+    logChannels: settings.logChannels,
+    servers: settings.servers,
+    kits: settings.kits,
+    links: settings.links,
+    pending: settings.pending,
+    linkPanel: settings.linkPanel,
+  };
+  const outgoing = {};
+  (Array.isArray(sections) && sections.length ? sections : Object.keys(everything)).forEach(function (key) {
+    if (key in everything) outgoing[key] = everything[key];
+  });
+  lastPersistAt = Date.now();
   try {
     const res = await fetch(SITE_URL + '/api/bot/settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-settings-token': token },
-      body: JSON.stringify({
-        staffRoles: settings.staffRoles,
-        logChannels: settings.logChannels,
-        servers: settings.servers,
-        kits: settings.kits,
-        links: settings.links,
-        pending: settings.pending,
-        linkPanel: settings.linkPanel,
-      }),
+      body: JSON.stringify(outgoing),
       signal: AbortSignal.timeout(8000),
     });
     const body = await res.json().catch(function () { return {}; });
@@ -134,9 +160,9 @@ async function persistSettings() {
 }
 
 
-async function loadSettings() {
+async function loadSettings(quiet) {
   const token = settingsToken();
-  if (!token) { log('BOT_SETTINGS_TOKEN is not set, so saved settings cannot be read from the website'); return; }
+  if (!token) { if (!quiet) log('BOT_SETTINGS_TOKEN is not set, so saved settings cannot be read from the website'); return; }
   try {
     /* full=1 asks for the RCON passwords: only this service talks to RCON, and the website
        hides them from anything running in a browser. */
@@ -153,8 +179,11 @@ async function loadSettings() {
     if (body && Array.isArray(body.links)) settings.links = body.links;
     if (body && Array.isArray(body.pending)) settings.pending = body.pending;
     if (body && body.linkPanel && typeof body.linkPanel === 'object') settings.linkPanel = body.linkPanel;
-    log('loaded ' + Object.keys(settings.staffRoles).length + ' role slot(s), ' + Object.keys(settings.logChannels).length
-      + ' log channel(s), ' + settings.servers.length + ' server(s), ' + settings.kits.binds.length + ' bind(s)');
+    if (!quiet) {
+      log('loaded ' + Object.keys(settings.staffRoles).filter(function (k) { return settings.staffRoles[k]; }).length + ' role slot(s), '
+        + Object.keys(settings.logChannels).filter(function (k) { return settings.logChannels[k]; }).length
+        + ' log channel(s), ' + settings.servers.length + ' server(s), ' + settings.kits.binds.length + ' bind(s)');
+    }
   } catch (error) {
     log('settings read failed:', String((error && error.message) || error));
   }
@@ -170,7 +199,7 @@ async function saveServer(s) {
   };
   const at = settings.servers.findIndex(function (x) { return x.id === entry.id; });
   if (at > -1) settings.servers[at] = entry; else settings.servers.push(entry);
-  return persistSettings();
+  return persistSettings(['servers']);
 }
 
 function installKitCode(raw, text) {
@@ -178,7 +207,7 @@ function installKitCode(raw, text) {
   settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
   const keys = Object.keys(settings.installs);
   if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
-  persistSettings().catch(function () { /* reported the next time settings are saved */ });
+  persistSettings(['kits']).catch(function () { /* reported the next time settings are saved */ });
   return Object.keys(settings.installs).length;
 }
 
@@ -187,7 +216,7 @@ function setAuthSpawn(group, kit) {
   if (!name) return;
   if (kit && String(kit).trim()) settings.kits.authSpawn[name] = String(kit).trim().slice(0, 60);
   else delete settings.kits.authSpawn[name];
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
 }
 
 function cooldownCount() { return cooldowns.size; }
@@ -234,7 +263,7 @@ function saveBind(data, keepRole, preserve) {
   if (!roleId && preserve && previous) roleId = previous.roleId || null;
   const entry = { emote: emote, kits: kits, cooldown: cooldown, roleId: roleId };
   if (at > -1) settings.kits.binds[at] = entry; else settings.kits.binds.push(entry);
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
   return entry;
 }
 
@@ -242,7 +271,7 @@ function removeBind(emote) {
   const wanted = String(emote || '').toLowerCase();
   const before = settings.kits.binds.length;
   settings.kits.binds = settings.kits.binds.filter(function (b) { return b.emote.toLowerCase() !== wanted; });
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
   return before - settings.kits.binds.length;
 }
 
@@ -270,7 +299,7 @@ function addLink(userId, gamertag, by) {
   settings.pending = settings.pending.filter(function (p) {
     return p.userId !== id && p.gamertag.toLowerCase() !== tag.toLowerCase();
   });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag, userId: id };
 }
 function removeLink(which) {
@@ -280,7 +309,7 @@ function removeLink(which) {
     return l.gamertag.toLowerCase() !== wanted.toLowerCase() && l.userId !== wanted;
   });
   settings.pending = settings.pending.filter(function (p) { return p.userId !== wanted; });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return before - settings.links.length;
 }
 function moveLink(gamertag, newUserId, newGamertag) {
@@ -301,7 +330,7 @@ function moveLink(gamertag, newUserId, newGamertag) {
   }
   settings.links = settings.links.filter(function (l) { return l !== current; });
   settings.links.push({ userId: id, gamertag: tag, at: current.at, by: current.by || id, movedAt: new Date().toISOString() });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag, userId: id };
 }
 function requestLink(userId, gamertag) {
@@ -316,7 +345,7 @@ function requestLink(userId, gamertag) {
   }
   settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
   settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag };
 }
 
@@ -346,7 +375,8 @@ function hasAdminBypass(interaction) {
 }
 function isStaff(interaction) {
   if (hasAdminBypass(interaction)) return true;
-  const ids = ROLE_SLOTS.map(function (s) { return (settings.staffRoles || {})[s[0]]; }).filter(Boolean);
+  /* STAFF_SLOTS leaves out "linked": that role marks confirmed players, not staff. */
+  const ids = STAFF_SLOTS.map(function (s) { return (settings.staffRoles || {})[s[0]]; }).filter(Boolean);
   if (!ids.length) return false;
   const held = memberRoleIds(interaction.member);
   return ids.some(function (id) { return held.indexOf(String(id)) > -1; });
@@ -364,7 +394,7 @@ async function postLinkPanel(channelId) {
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
     const message = await channel.send(linkPanelPayload());
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['linkPanel']);
     return { ok: true, saved: wrote.ok, detail: wrote.detail || '' };
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
@@ -375,12 +405,14 @@ async function postLinkPanel(channelId) {
    the next screen. Held in memory only: a restart just means picking again. */
 const pendingGive = new Map();
 
-function botCtx() {
+function botCtx(interaction) {
+  const actor = interaction && interaction.user ? { id: interaction.user.id, tag: interaction.user.tag || interaction.user.username || interaction.user.id } : null;
   return {
     siteUrl: SITE_URL,
     settings: settings,
     guildInfo: state.guildInfo || null,
     gateway: state.gateway,
+    actor: actor,
     ping: function () { return client.ws.ping; },
     uptime: function () { return (Date.now() - state.since) / 1000; },
     commandCount: function () { return state.commandNames ? state.commandNames.length : 0; },
@@ -400,16 +432,135 @@ function botCtx() {
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
     cooldownList: cooldownList,
-    rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
-    rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
+    setKnownKits: function (names) {
+      settings.kits.known = names.slice(0, 100);
+      persistSettings(['kits']).catch(function () {});
+    },
+    linkPlayer: function (userId, gamertag) { return linkPlayer(userId, gamertag, actor); },
+    moveLinkFull: function (gamertag, toUserId, toGamertag) { return moveLinkFull(gamertag, toUserId, toGamertag, actor); },
+    /* Every RCON command a person causes is written to the RCON log: what was sent, where,
+       by whom and what came back. Never the password. */
+    rconTest: function (o) { return rconLogged(Object.assign({}, o, { allowAny: false }), actor); },
+    rconRun: function (o) { return rconLogged(Object.assign({}, o, { allowAny: true }), actor); },
   };
 }
 
+/* ---------------------------------------------------------------- logging ---- */
+/* The log channels picked in step 2 of /setup. Until now they were saved and never written
+   to; these are the types the bot itself can write. A failed post never breaks a command. */
+const LOG_COLORS = { command: 0x5865f2, rcon: 0xff7200, linking: 0x3ba55d, emoteKits: 0xff7200, admin: 0xfaa81a, errors: 0xdc4c4c };
+function who(actor) { return actor && actor.id ? '<@' + actor.id + '>' : 'the bot'; }
+async function postLog(type, title, description, fields) {
+  const channelId = (settings.logChannels || {})[type];
+  if (!channelId) return { ok: false, reason: 'off', detail: 'No channel is set for this log type.' };
+  try {
+    const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
+    if (!channel || typeof channel.send !== 'function') return { ok: false, reason: 'unreachable', detail: 'The bot cannot see that channel. Check it still exists and the bot can view it.' };
+    const embedOut = {
+      color: LOG_COLORS[type] || 0x5865f2,
+      title: String(title || 'Log').slice(0, 256),
+      description: String(description || '').slice(0, 3900),
+      timestamp: new Date().toISOString(),
+    };
+    if (fields && fields.length) {
+      embedOut.fields = fields.slice(0, 10).map(function (f) {
+        return { name: String(f.name || '-').slice(0, 256), value: String(f.value || '-').slice(0, 1024), inline: !!f.inline };
+      });
+    }
+    /* Logs name people with mentions for clarity, but never ping them. */
+    await channel.send({ embeds: [embedOut], allowedMentions: { parse: [] } });
+    return { ok: true };
+  } catch (error) {
+    const detail = String((error && error.message) || error).slice(0, 200);
+    log('log post failed (' + type + '):', detail);
+    return { ok: false, reason: 'send-failed', detail: detail };
+  }
+}
+function logLater(type, title, description, fields) { postLog(type, title, description, fields).catch(function () {}); }
+
+async function rconLogged(options, actor) {
+  const started = Date.now();
+  const answer = await rconRun(options);
+  const server = settings.servers.filter(function (s) { return s.host === options.host && Number(s.port) === Number(options.port); })[0];
+  logLater('rcon', answer && answer.ok ? 'RCON command answered' : 'RCON command failed',
+    who(actor) + ' sent `' + String(answer && answer.command ? answer.command : options.command || 'serverinfo').slice(0, 300) + '` to **' +
+      (server ? server.name : options.host + ':' + options.port) + '**.',
+    [
+      { name: 'Result', value: answer && answer.ok ? 'answered in ' + (answer.ms || Date.now() - started) + ' ms' : String((answer && (answer.reason + ': ' + (answer.detail || ''))) || 'no answer').slice(0, 300), inline: true },
+      { name: 'Answer', value: answer && answer.answer ? '```\n' + String(answer.answer).slice(0, 900) + '\n```' : '-', inline: false },
+    ]);
+  return answer;
+}
+
+/* --------------------------------------------------------- the linked role ---- */
+/* The role saved as "Linked" in setup is given when a link is confirmed and taken away when it
+   is removed or moved off an account. It needs Manage Roles, with the bot's own role above it;
+   when Discord refuses, the reply says exactly why instead of pretending. */
+async function syncLinkedRole(userId, give) {
+  const roleId = (settings.staffRoles || {}).linked;
+  if (!roleId || !userId) return { ok: true, skipped: true };
+  try {
+    const guild = client.guilds.cache.get(GUILD_ID) || await client.guilds.fetch(GUILD_ID);
+    const member = await guild.members.fetch(String(userId)).catch(function () { return null; });
+    if (!member) return { ok: false, detail: 'that account is not in this server' };
+    if (give) await member.roles.add(String(roleId), 'Spinback RCE: gamertag linked');
+    else await member.roles.remove(String(roleId), 'Spinback RCE: gamertag unlinked');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, detail: String((error && error.message) || error).slice(0, 160) };
+  }
+}
+function roleNote(result, give) {
+  if (!result || result.skipped) return '';
+  return result.ok
+    ? (give ? ' The linked role was given.' : ' The linked role was removed.')
+    : ' The linked role could not be ' + (give ? 'given' : 'removed') + ': ' + result.detail + '. The bot needs Manage Roles, with its own role above the linked role.';
+}
+async function linkPlayer(userId, gamertag, actor) {
+  const done = addLink(userId, gamertag, actor ? actor.id : userId);
+  const role = done.ok ? await syncLinkedRole(done.userId, true) : null;
+  if (done.ok) {
+    logLater('linking', 'Player linked', '<@' + done.userId + '> is linked to `' + done.gamertag + '` by ' + who(actor) + '.',
+      role && !role.skipped ? [{ name: 'Linked role', value: role.ok ? 'given' : 'not given: ' + role.detail }] : null);
+  }
+  return Object.assign({}, done, { roleNote: roleNote(role, true) });
+}
+async function unlinkPlayer(which, actor, reason) {
+  const before = findLinkByGamertag(which) || findLinkByUser(which);
+  const gone = removeLink(which);
+  let role = null;
+  if (gone && before) {
+    role = await syncLinkedRole(before.userId, false);
+    logLater('linking', 'Player unlinked', '`' + before.gamertag + '` (<@' + before.userId + '>) was unlinked by ' + who(actor) + (reason ? ' - ' + reason : '') + '.',
+      role && !role.skipped ? [{ name: 'Linked role', value: role.ok ? 'removed' : 'not removed: ' + role.detail }] : null);
+  }
+  return { gone: gone, before: before, roleNote: roleNote(role, false) };
+}
+async function moveLinkFull(gamertag, toUserId, toGamertag, actor) {
+  const before = findLinkByGamertag(gamertag);
+  const moved = moveLink(gamertag, toUserId || (before && before.userId), toGamertag);
+  if (!moved.ok || !before) return moved;
+  let notes = '';
+  if (before.userId !== moved.userId) {
+    notes += roleNote(await syncLinkedRole(before.userId, false), false);
+    notes += roleNote(await syncLinkedRole(moved.userId, true), true);
+  }
+  logLater('linking', 'Link moved', '`' + before.gamertag + '` (<@' + before.userId + '>) is now `' + moved.gamertag + '` (<@' + moved.userId + '>), moved by ' + who(actor) + '.');
+  return Object.assign({}, moved, { roleNote: notes });
+}
+function setBindRole(emote, roleId) {
+  const bind = settings.kits.binds.filter(function (b) { return b.emote.toLowerCase() === String(emote || '').toLowerCase(); })[0];
+  if (!bind) return null;
+  bind.roleId = roleId || null;
+  persistSettings(['kits']).catch(function () {});
+  return bind;
+}
+
 /* ----------------------------------------------------------- interactions ---- */
-/* /ping, /setup and /kits, and their buttons, menus and modals. Everything answers only
-   inside the one guild this bot is configured for, and the configuration commands need
-   Administrator or Manage Server. Their panels are ephemeral, so a role list or a channel
-   choice is never posted into the channel. */
+/* /ping, /help, /setup, /kits and /user, and their buttons, menus, forms and suggestions.
+   Everything answers only inside the one guild this bot is configured for. Staff actions need
+   a saved staff role, Administrator, Manage Server or the server owner. Panels are ephemeral,
+   so a role list or a channel choice is never posted into the channel. */
 
 function mayConfigure(interaction) {
   const perms = interaction.memberPermissions;
@@ -419,82 +570,136 @@ function mayConfigure(interaction) {
   } catch (error) { return false; }
 }
 
-async function answerModal(interaction, payload) {
-  const body = Object.assign({}, payload);
-  if (body.flags === undefined) body.flags = 64;
-  try { await interaction.reply(body); } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
+/* Discord drops any interaction that is not acknowledged within three seconds. Every answer
+   goes through here: if it is not ready after 1.5 s (an RCON check, a save to the website, a
+   Discord REST call), the interaction is deferred first and the answer edited in when it
+   arrives. Fast answers still go out directly, without a "thinking..." flash.
+   kind: "reply" - a new message only the user sees; "public" - a new message everyone sees;
+   "update" - replace the panel the button or menu was on. */
+const ACK_AFTER_MS = 1500;
+async function respond(interaction, work, kind) {
+  let deferring = null;
+  const timer = setTimeout(function () {
+    deferring = (kind === 'update' ? interaction.deferUpdate() : interaction.deferReply(kind === 'public' ? {} : { flags: 64 }))
+      .catch(function (error) { log('defer failed:', String((error && error.message) || error)); });
+  }, ACK_AFTER_MS);
+  let payload;
+  try {
+    payload = await Promise.resolve(typeof work === 'function' ? work() : work);
+  } catch (error) {
+    const message = String((error && error.message) || error);
+    log('handler failed:', message);
+    logLater('errors', 'A command failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error.', [{ name: 'Error', value: message.slice(0, 900) }]);
+    payload = { embeds: [panelEmbed(0xdc4c4c, 'That did not work', message.slice(0, 400))] };
+  } finally {
+    clearTimeout(timer);
+  }
+  const body = Object.assign({}, payload || { content: 'Done.' });
+  try {
+    if (deferring) {
+      await deferring;
+      delete body.flags;
+      if (kind === 'update' && body.components === undefined) body.components = [];
+      await interaction.editReply(body);
+    } else if (kind === 'update') {
+      delete body.flags;
+      if (body.components === undefined) body.components = [];
+      await interaction.update(body);
+    } else {
+      if (kind === 'public') delete body.flags;
+      else if (body.flags === undefined) body.flags = 64;
+      await interaction.reply(body);
+    }
+  } catch (error) {
+    log('answer failed:', String((error && error.message) || error));
+  }
 }
-
-async function answerPanel(interaction, payload) {
-  const body = Object.assign({}, payload);
-  delete body.flags;
-  if (body.components === undefined) body.components = [];
-  try { await interaction.update(body); } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
-}
+function answerModal(interaction, payload) { return respond(interaction, payload, 'reply'); }
+function answerPanel(interaction, payload) { return respond(interaction, payload, 'update'); }
 
 async function routeInteraction(interaction) {
   try {
     const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
     if (!rightGuild) {
+      if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) return await interaction.respond([]).catch(function () {});
       if (typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
         await interaction.reply({ embeds: [wrongGuildNote()], flags: 64 }).catch(function () {});
       }
       return;
     }
+    if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) return await runAutocomplete(interaction);
     if (interaction.isChatInputCommand()) return await runCommand(interaction);
     if (interaction.isModalSubmit()) return await runModal(interaction);
     if (interaction.isButton()) return await runButton(interaction);
     if (interaction.isStringSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isChannelSelectMenu === 'function' && interaction.isChannelSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isRoleSelectMenu === 'function' && interaction.isRoleSelectMenu()) return await runSelect(interaction);
+    if (typeof interaction.isUserSelectMenu === 'function' && interaction.isUserSelectMenu()) return await runSelect(interaction);
     return;
   } catch (error) {
     const message = String((error && error.message) || error);
     log('interaction failed:', message);
-    try { await interaction.reply({ content: 'That failed: ' + message.slice(0, 300), flags: 64 }); } catch (e) { /* already answered */ }
+    logLater('errors', 'An interaction failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error.', [{ name: 'Error', value: message.slice(0, 900) }]);
+    /* After a deferral a second reply is refused, so the error is edited in instead of lost. */
+    const body = { embeds: [panelEmbed(0xdc4c4c, 'That failed', message.slice(0, 300))] };
+    try {
+      if (interaction.deferred || interaction.replied) await interaction.editReply(body);
+      else await interaction.reply(Object.assign({ flags: 64 }, body));
+    } catch (e) { /* the interaction expired */ }
   }
+}
+
+/* Suggestions while someone types: kit names, linked gamertags, saved servers. Staff only,
+   because they come from the server's saved settings. */
+async function runAutocomplete(interaction) {
+  const ctx = botCtx(interaction);
+  if (!permitted(interaction, ctx)) return await interaction.respond([]).catch(function () {});
+  const opts = optionMap(interaction);
+  const focused = interaction.options && typeof interaction.options.getFocused === 'function' ? interaction.options.getFocused(true) : null;
+  const choices = autocompleteChoices(ctx, interaction.commandName, opts.__sub, focused, opts);
+  await interaction.respond(choices).catch(function (error) { log('autocomplete failed:', String((error && error.message) || error)); });
+}
+
+function describeOptions(opts) {
+  return Object.keys(opts).filter(function (k) { return k !== '__sub'; }).map(function (k) {
+    const v = k === 'code' ? '(install code, ' + String(opts[k]).length + ' characters)' : String(opts[k]);
+    return k + ': ' + v.slice(0, 80);
+  }).join(', ');
 }
 
 async function runCommand(interaction) {
   const name = interaction.commandName;
-  if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user') return;
-  const ctx = botCtx();
+  if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user') {
+    return await interaction.reply({ content: 'That command is no longer used here.', flags: 64 }).catch(function () {});
+  }
+  const ctx = botCtx(interaction);
   if (name !== 'ping' && !permitted(interaction, ctx)) {
     await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
   }
   const opts = optionMap(interaction);
-  /* Everything that changes something carries a panel, so the first reply is deferred while
-     a panel is assembled or a server is asked a question. */
-  const slow = name !== 'ping' && name !== 'help';
-  if (slow) await interaction.deferReply({ flags: 64 }).catch(function () {});
-  const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
-    return { embeds: [panelEmbed(0xdc4c4c, 'That did not work', String((error && error.message) || error).slice(0, 400))] };
-  });
-  if (payload && payload.postPanelTo) {
-    const posted = await postLinkPanel(payload.postPanelTo);
-    const body = posted.ok
-      ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; staff can always confirm one by hand with /user forcelink.'
-        + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
-      : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
-    if (slow) { await interaction.editReply(body).catch(function () {}); return; }
-    await interaction.reply(body).catch(function () {});
-    return;
+  if (name !== 'ping' && name !== 'help') {
+    const shown = describeOptions(opts);
+    logLater('command', 'Command used', who(ctx.actor) + ' ran `/' + name + (opts.__sub ? ' ' + opts.__sub : '') + '`' + (shown ? ' with ' + shown : '') + '.');
   }
-  if (slow) {
-    const body = Object.assign({}, payload);
-    /* flags belong on the first reply only; the deferral already made it ephemeral. */
-    delete body.flags;
-    await interaction.editReply(body).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
-    return;
-  }
-  await interaction.reply(payload).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
+  return await respond(interaction, async function () {
+    const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts));
+    if (payload && payload.postPanelTo) {
+      const posted = await postLinkPanel(payload.postPanelTo);
+      if (posted.ok) logLater('linking', 'Link panel posted', 'Posted in <#' + payload.postPanelTo + '> by ' + who(ctx.actor) + '.');
+      return posted.ok
+        ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; their requests wait on the **Waiting list** in /user for one-click approval.'
+          + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
+        : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
+    }
+    return payload;
+  }, name === 'ping' ? 'public' : 'reply');
 }
 
 async function runButton(interaction) {
   const id = customId(interaction);
-  const ctx = botCtx();
-  if (id === 'ping:again') return await answerPanel(interaction, await pingReply(ctx));
+  const ctx = botCtx(interaction);
+  if (id === 'ping:again') return await answerPanel(interaction, pingReply(ctx));
   /* The link panel is a member action, so its buttons work for everyone in the server and
      are handled before the staff check. */
   if (id === 'link:start') return await interaction.showModal(linkModal());
@@ -508,42 +713,61 @@ async function runButton(interaction) {
         components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
   if (id === 'link:unlink:go') {
-    const gone = removeLink(interaction.user.id);
-    return await answerModal(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Unlinked' : 'Nothing to unlink',
-      gone ? 'Your link is removed. Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
-      components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
+    return await answerModal(interaction, (async function () {
+      const done = await unlinkPlayer(interaction.user.id, ctx.actor, 'by the player');
+      return { embeds: [panelEmbed(done.gone ? 0x3ba55d : 0xfaa81a, done.gone ? 'Unlinked' : 'Nothing to unlink',
+        done.gone ? 'Your link is removed.' + done.roleNote + ' Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
+        components: [panelRow([panelButton('link:start', 'Link account', 1)])] };
+    })());
   }
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'user:config') return await answerPanel(interaction, userPanel(ctx));
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
   if (id === 'user:transfer') return await answerPanel(interaction, transferPicker(ctx));
-  if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx));
+  if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx, 1));
+  if (id.indexOf('user:roster:') === 0) return await answerPanel(interaction, rosterPanel(ctx, Number(id.slice('user:roster:'.length))));
   if (id === 'user:pending') return await answerPanel(interaction, pendingPanel(ctx));
   if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
   if (id.indexOf('user:unlink:go:') === 0) {
     const tag = id.slice('user:unlink:go:'.length);
-    const gone = removeLink(tag);
-    return await answerPanel(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Link removed' : 'Nothing removed',
-      gone ? 'The link for ' + tag + ' is gone.' : 'No link for ' + tag + ' was found.')],
-      components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
+    return await answerPanel(interaction, (async function () {
+      const done = await unlinkPlayer(tag, ctx.actor, '');
+      return { embeds: [panelEmbed(done.gone ? 0x3ba55d : 0xfaa81a, done.gone ? 'Link removed' : 'Nothing removed',
+        done.gone ? 'The link for ' + tag + ' is gone.' + done.roleNote : 'No link for ' + tag + ' was found.')],
+        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] };
+    })());
   }
   if (id === 'kits:give') return await interaction.showModal(kitGiveModal());
   if (id === 'kits:add:code') return await interaction.showModal(kitAddModal());
   if (id.indexOf('kits:refresh:') === 0) {
     const scope = id.slice('kits:refresh:'.length);
-    if (scope === 'all-users' || scope === 'all-kits') return await answerPanel(interaction, refreshCooldowns(ctx, scope, ''));
+    if (scope === 'all-users' || scope === 'all-kits') {
+      logLater('emoteKits', 'Cooldowns cleared', who(ctx.actor) + ' cleared cooldowns for ' + (scope === 'all-users' ? 'every linked user' : 'every kit') + '.');
+      return await answerPanel(interaction, refreshCooldowns(ctx, scope, ''));
+    }
     return await interaction.showModal(kitRefreshModal(scope));
   }
   if (id.indexOf('kits:spawn:') === 0) {
     const group = id.slice('kits:spawn:'.length);
     return await interaction.showModal(kitSpawnModal(group, (settings.kits.authSpawn || {})[group] || ''));
   }
-  if (id === 'setup:roles') return await interaction.showModal(rolesModal());
-  if (id === 'setup:linked') return await interaction.showModal(linkedRoleModal());
-  if (id === 'setup:channels') return await answerPanel(interaction, logTypeMenu());
+  if (id === 'setup:home') return await answerPanel(interaction, setupPanel(ctx));
+  if (id === 'setup:roles') return await answerPanel(interaction, rolesPanel(ctx, 1));
+  if (id === 'setup:roles:2' || id === 'setup:linked') return await answerPanel(interaction, rolesPanel(ctx, 2));
+  if (id === 'setup:channels') return await answerPanel(interaction, logTypeMenu(ctx));
+  if (id.indexOf('setup:logtest:') === 0) {
+    const typeKey = id.slice('setup:logtest:'.length);
+    return await answerModal(interaction, (async function () {
+      const sent = await postLog(typeKey, 'Test message', 'Sent from /setup by ' + who(ctx.actor) + '. If you can read this, this log type is working.');
+      return { embeds: [panelEmbed(sent.ok ? 0x3ba55d : 0xdc4c4c, sent.ok ? 'Test message sent' : 'The test message did not arrive',
+        sent.ok ? 'Check <#' + settings.logChannels[typeKey] + '>.' : String(sent.detail || sent.reason || 'unknown').slice(0, 300) + ' The bot needs View Channel, Send Messages and Embed Links there.')] };
+    })());
+  }
   if (id === 'setup:server') return await interaction.showModal(serverModal(null));
-  if (id === 'setup:test') return await answerPanel(interaction, serverPicker(ctx));
+  if (id === 'setup:edit') return await answerPanel(interaction, serverPicker(ctx, 'edit'));
+  if (id === 'setup:test') return await answerPanel(interaction, serverPicker(ctx, 'test'));
+  if (id === 'setup:testall') return await answerPanel(interaction, testServers(ctx, ''));
   if (id === 'kits:add') return await interaction.showModal(bindModal(null));
   if (id === 'kits:edit') return await answerPanel(interaction, bindList(ctx, 'edit'));
   if (id === 'kits:remove') return await answerPanel(interaction, bindList(ctx, 'remove'));
@@ -551,43 +775,71 @@ async function runButton(interaction) {
   if (id === 'kits:guide') return await answerPanel(interaction, emoteGuide(ctx));
   /* The Cooldowns button shows the records; clearing is its own button inside. */
   if (id === 'kits:refresh') return await answerPanel(interaction, cooldownsPanel(ctx, cooldownList()));
-  if (id === 'kits:clear') return await answerPanel(interaction, refreshCooldowns(ctx, 'all-kits', ''));
-  if (id.indexOf('help:cmd:') === 0) return await answerPanel(interaction, helpDetail(id.slice('help:cmd:'.length)));
-  if (id === 'help:home') return await answerPanel(interaction, helpHome());
+  if (id === 'kits:clear') {
+    logLater('emoteKits', 'Cooldowns cleared', who(ctx.actor) + ' cleared every kit cooldown.');
+    return await answerPanel(interaction, refreshCooldowns(ctx, 'all-kits', ''));
+  }
+  if (id.indexOf('help:cmd:') === 0) return await answerPanel(interaction, helpDetail(id.slice('help:cmd:'.length), ctx));
+  if (id === 'help:home') return await answerPanel(interaction, helpHome(ctx));
   if (id === 'kits:lock') {
     settings.kits.locked = !settings.kits.locked;
-    persistSettings().catch(function () {});
+    persistSettings(['kits']).catch(function () {});
+    logLater('emoteKits', settings.kits.locked ? 'Kits locked' : 'Kits unlocked', who(ctx.actor) + (settings.kits.locked ? ' locked' : ' unlocked') + ' emote kits.');
     return await answerPanel(interaction, kitsPanel(ctx));
   }
+  /* "Skip" leaves the bind open to everyone; it was saved when the form was sent. */
   if (id.indexOf('kits:role:skip:') === 0) {
-    saveBind({ emote: id.slice('kits:role:skip:'.length) }, null, false);
+    setBindRole(id.slice('kits:role:skip:'.length), null);
     return await answerPanel(interaction, kitsPanel(ctx));
   }
   log('unhandled button:', id);
+  return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'That button is from an older panel', 'Run the command again to get a fresh one.')] });
 }
 
 async function runSelect(interaction) {
   const id = customId(interaction);
-  const ctx = botCtx();
+  const ctx = botCtx(interaction);
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
-  const first = String((interaction.values || [])[0] || '');
-  if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first));
+  const values = (interaction.values || []).map(String);
+  const first = values[0] || '';
+  if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first, ctx));
   if (id.indexOf('setup:channel:') === 0) {
     const typeKey = id.slice('setup:channel:'.length);
     const found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
-    settings.logChannels[typeKey] = first;
-    const wrote = await persistSettings();
-    return await answerPanel(interaction, {
-      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Log channel set',
-        (found ? found[1] : typeKey) + ' goes to <#' + first + '>.' + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
-      components: [panelRow([panelButton('setup:channels', 'Back to log types', 2), panelButton('setup:test', 'Test a connection', 2)])],
-    });
+    const label = found ? found[1] : typeKey;
+    return await answerPanel(interaction, (async function () {
+      /* An empty pick clears the channel, which switches that log off. It is saved as null,
+         not deleted: the website merges saves into what it holds, so a deleted key would
+         quietly come back after a restart. */
+      settings.logChannels[typeKey] = first || null;
+      const wrote = await persistSettings(['logChannels']);
+      logLater('admin', 'Log channel ' + (first ? 'set' : 'cleared'), label + (first ? ' now goes to <#' + first + '>' : ' is switched off') + ', changed by ' + who(ctx.actor) + '.');
+      const panel = channelMenu(typeKey, ctx);
+      panel.embeds.unshift(panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, first ? 'Log channel set' : 'Log switched off',
+        label + (first ? ' goes to <#' + first + '>.' : ' is off.') + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail)));
+      return panel;
+    })());
+  }
+  if (id.indexOf('setup:role:') === 0) {
+    const slot = id.slice('setup:role:'.length);
+    const known = ROLE_SLOTS.filter(function (s) { return s[0] === slot; })[0];
+    if (!known) return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'Unknown role slot', 'Open /setup run again.')] });
+    return await answerPanel(interaction, (async function () {
+      /* null, not delete, so the website's merge really clears it (see the log channels). */
+      settings.staffRoles[slot] = first || null;
+      const wrote = await persistSettings(['staffRoles']);
+      logLater('admin', 'Role ' + (first ? 'set' : 'cleared'), known[1] + (first ? ' is now <@&' + first + '>' : ' has no role now') + ', changed by ' + who(ctx.actor) + '.');
+      const panel = rolesPanel(ctx, ROLE_SLOTS.indexOf(known) >= 4 ? 2 : 1);
+      if (!wrote.ok) panel.embeds.unshift(panelEmbed(0xfaa81a, 'Saved in this bot only', 'The website did not take the change: ' + wrote.detail));
+      return panel;
+    })());
   }
   if (id === 'setup:pick') {
     const server = settings.servers.filter(function (s) { return s.id === first; })[0];
     if (!server) return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That server is gone', 'Save it again from the setup panel.')] });
     return await interaction.showModal(serverModal(server));
   }
+  if (id === 'setup:pick:test') return await answerPanel(interaction, testServers(ctx, first));
   if (id === 'kits:pickbind:edit') {
     const bind = settings.kits.binds.filter(function (b) { return b.emote === first; })[0];
     if (!bind) return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That bind is gone', 'Open the panel again.')] });
@@ -595,13 +847,18 @@ async function runSelect(interaction) {
   }
   if (id === 'kits:pickbind:remove') {
     const gone = removeBind(first);
+    if (gone) logLater('emoteKits', 'Bind removed', 'The `' + first + '` bind was removed by ' + who(ctx.actor) + '.');
     return await answerPanel(interaction, {
       embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Bind removed' : 'Nothing removed', gone ? 'The ' + first + ' bind is gone.' : 'No bind named ' + first + ' was found.')],
       components: [panelRow([panelButton('kits:config', 'Back to the panel', 2)])],
     });
   }
+  /* The role picked for a bind used to go through saveBind, which needs the kit names and
+     so threw the role away. It now updates the bind itself. */
   if (id.indexOf('kits:role:') === 0) {
-    saveBind({ emote: id.slice('kits:role:'.length) }, first, true);
+    const emote = id.slice('kits:role:'.length);
+    const bind = setBindRole(emote, first || null);
+    if (bind) logLater('emoteKits', 'Bind role set', 'The `' + bind.emote + '` bind is ' + (first ? 'for <@&' + first + '> only' : 'open to everyone') + ', set by ' + who(ctx.actor) + '.');
     return await answerPanel(interaction, kitsPanel(ctx));
   }
   if (id === 'user:forcelink:user') return await interaction.showModal(forcelinkModal(first));
@@ -611,58 +868,89 @@ async function runSelect(interaction) {
     return await answerPanel(interaction, unlinkConfirm(found.gamertag, found.userId));
   }
   if (id === 'user:transfer:pick') return await interaction.showModal(transferModal(first));
+  if (id === 'user:pending:approve' || id === 'user:pending:reject') {
+    const request = settings.pending.filter(function (p) { return p.userId === first; })[0];
+    return await answerPanel(interaction, (async function () {
+      if (!request) return pendingPanel(ctx, panelEmbed(0xfaa81a, 'Already handled', 'That request is no longer waiting.'));
+      if (id === 'user:pending:reject') {
+        settings.pending = settings.pending.filter(function (p) { return p.userId !== first; });
+        persistSettings(['pending']).catch(function () {});
+        logLater('linking', 'Link request rejected', '<@' + request.userId + '> asked for `' + request.gamertag + '`; rejected by ' + who(ctx.actor) + '.');
+        return pendingPanel(ctx, panelEmbed(0xfaa81a, 'Request rejected', '<@' + request.userId + '> is not linked to ' + request.gamertag + '.'));
+      }
+      const taken = findLinkByGamertag(request.gamertag);
+      if (taken && taken.userId !== request.userId) {
+        return pendingPanel(ctx, panelEmbed(0xdc4c4c, 'That gamertag is taken', request.gamertag + ' is already linked to <@' + taken.userId + '>. Reject this request, or move the link with Transfer.'));
+      }
+      const done = await linkPlayer(request.userId, request.gamertag, ctx.actor);
+      return pendingPanel(ctx, panelEmbed(0x3ba55d, 'Approved', '<@' + done.userId + '> is now linked to ' + done.gamertag + '.' + (done.roleNote || '')));
+    })());
+  }
   if (id === 'user:panel:channel') {
-    const posted = await postLinkPanel(first);
-    return await answerPanel(interaction, posted.ok
-      ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + first + '> now. Members press **Link account** there.'
-        + (posted.saved ? '' : ' The website could not be told, so the panel id is in this bot memory only.'))],
-        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
-      : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] });
+    return await answerPanel(interaction, (async function () {
+      const posted = await postLinkPanel(first);
+      if (posted.ok) logLater('linking', 'Link panel posted', 'Posted in <#' + first + '> by ' + who(ctx.actor) + '.');
+      return posted.ok
+        ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + first + '> now. Members press **Link account** there.'
+          + (posted.saved ? '' : ' The website could not be told, so the panel id is in this bot memory only.'))],
+          components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
+        : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
+    })());
   }
   if (id === 'kits:give:pick') {
     pendingGive.set(interaction.user.id, first);
     return await interaction.showModal(kitGiveModal());
   }
   log('unhandled select:', id);
+  return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'That menu is from an older panel', 'Run the command again to get a fresh one.')] });
 }
 
 async function runModal(interaction) {
   const id = customId(interaction);
   const fields = modalFields(interaction);
-  const ctx = botCtx();
+  const ctx = botCtx(interaction);
   /* A member linking themselves is not a staff action. */
   if (id === 'modal:link:self') {
     const answer = requestLink(interaction.user.id, fields.link_gamertag);
+    if (answer.ok) logLater('linking', 'Link requested', '<@' + interaction.user.id + '> asked to be linked to `' + answer.gamertag + '`. It waits on the Waiting list in /user.');
     return await answerModal(interaction, answer.ok
-      ? { embeds: [panelEmbed(0x3ba55d, 'Request recorded', 'You asked to link ' + answer.gamertag + '. It is waiting for confirmation:\n\n'
-          + '- staff confirm it with /user forcelink, or\n- your server own in-game verification command does it automatically.\n\nThe bot will not treat an unconfirmed request as proof, so nothing player-facing uses it yet.')],
+      ? { embeds: [panelEmbed(0x3ba55d, 'Request recorded', 'You asked to link ' + answer.gamertag + '. It is waiting for staff to confirm it - they see it on the Waiting list in /user.\n\n'
+          + 'The bot will not treat an unconfirmed request as proof, so nothing player-facing uses it yet.')],
         components: [panelRow([panelButton('link:unlink', 'Unlink instead', 2)])] }
-      : { embeds: [panelEmbed(0xfaa81a, 'Not linked', String(answer.detail || '').slice(0, 400))],
+      : { embeds: [panelEmbed(0xfaa81a, 'Not linked', String(answer.detail || (answer.reason === 'empty' ? 'Type your gamertag exactly as it appears in game.' : '')).slice(0, 400))],
         components: [panelRow([panelButton('link:start', 'Try another gamertag', 1)])] });
   }
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'modal:roles' || id === 'modal:linked') {
-    let saved = 0;
-    let skipped = 0;
-    ROLE_SLOTS.forEach(function (slot) {
-      const key = 'role_' + slot[0];
-      if (!(key in fields)) return;
-      const value = String(fields[key] || '').trim();
-      if (!value) { delete settings.staffRoles[slot[0]]; return; }
-      if (/^[0-9]{5,25}$/.test(value)) { settings.staffRoles[slot[0]] = value; saved += 1; }
-      else skipped += 1;
-    });
-    const wrote = await persistSettings();
-    return await answerModal(interaction, {
-      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Roles saved',
-        saved + ' role id(s) stored' + (skipped ? ', ' + skipped + ' value(s) skipped because they were not role ids' : '') + '.' +
-        (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
-      components: [panelRow([panelButton('setup:roles', 'Change them again', 2), panelButton('setup:channels', 'Next: logging channels', 1)])],
-    });
+    return await answerModal(interaction, (async function () {
+      let saved = 0;
+      let skipped = 0;
+      ROLE_SLOTS.forEach(function (slot) {
+        const key = 'role_' + slot[0];
+        if (!(key in fields)) return;
+        const value = String(fields[key] || '').replace(/[<@&>]/g, '').trim();
+        if (!value) { settings.staffRoles[slot[0]] = null; return; }
+        if (/^[0-9]{5,25}$/.test(value)) { settings.staffRoles[slot[0]] = value; saved += 1; }
+        else skipped += 1;
+      });
+      const wrote = await persistSettings(['staffRoles']);
+      logLater('admin', 'Roles saved', saved + ' role id(s) saved by ' + who(ctx.actor) + '.');
+      return {
+        embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Roles saved',
+          saved + ' role id(s) stored' + (skipped ? ', ' + skipped + ' value(s) skipped because they were not role ids' : '') + '.' +
+          (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
+        components: [panelRow([panelButton('setup:roles', 'Pick roles from a menu', 2), panelButton('setup:channels', 'Next: logging channels', 1)])],
+      };
+    })());
   }
   if (id === 'modal:server' || id.indexOf('modal:server:') === 0) {
     const existingId = id.indexOf('modal:server:') === 0 ? id.slice('modal:server:'.length) : null;
-    return await answerModal(interaction, await testAndSaveServer(ctx, fields, existingId));
+    return await answerModal(interaction, (async function () {
+      const payload = await testAndSaveServer(ctx, fields, existingId);
+      const ok = payload && payload.embeds && payload.embeds[0] && payload.embeds[0].color === 0x3ba55d;
+      if (ok) logLater('admin', existingId ? 'Rust server updated' : 'Rust server linked', who(ctx.actor) + ' ' + (existingId ? 'updated' : 'linked') + ' **' + String(fields.srv_name || fields.srv_host || 'a server').slice(0, 60) + '** (tested before saving).');
+      return payload;
+    })());
   }
   if (id === 'modal:bind' || id.indexOf('modal:bind:') === 0) {
     const entry = saveBind({
@@ -675,47 +963,59 @@ async function runModal(interaction) {
     if (!entry) {
       return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'Nothing saved', 'A bind needs an emote name and at least one kit.')] });
     }
+    logLater('emoteKits', 'Bind saved', 'The `' + entry.emote + '` bind gives ' + entry.kits.map(function (k) { return '`' + k + '`'; }).join(', ') +
+      (entry.cooldown ? ' every ' + entry.cooldown + ' s' : '') + ', saved by ' + who(ctx.actor) + '.');
     return await answerModal(interaction, bindRoleMenu(entry.emote));
   }
   if (id.indexOf('modal:forcelink:') === 0) {
     const userId = id.slice('modal:forcelink:'.length);
-    const gamertag = normaliseGamertag(fields.link_gamertag);
-    const advice = adviceOnGamertag(ctx, gamertag, userId);
-    if (!advice.free && advice.reason === 'already-this-user') {
-      return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'Already linked', 'That gamertag is already linked to that same Discord account. Nothing changed.')],
-        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
-    }
-    if (!advice.free) {
-      return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That gamertag is taken', String(advice.detail || '').slice(0, 400))],
-        components: [panelRow([panelButton('user:transfer', 'Transfer it instead', 1), panelButton('user:config', 'Cancel', 2)])] });
-    }
-    const done = addLink(userId, gamertag, interaction.user.id);
-    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Linked', '<@' + userId + '> is now linked to ' + done.gamertag + '.')],
-      components: [panelRow([panelButton('user:config', 'Back to links', 2), panelButton('user:panel', 'Post the link panel', 1)])] });
+    return await answerModal(interaction, forceLinkNow(ctx, userId, normaliseGamertag(fields.link_gamertag)));
   }
   if (id.indexOf('modal:transfer:') === 0) {
     const gamertag = id.slice('modal:transfer:'.length);
-    const moved = moveLink(gamertag, fields.move_user, fields.move_gamertag);
-    return await answerModal(interaction, moved.ok
-      ? { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
-          + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.')],
-        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
-      : { embeds: [panelEmbed(0xdc4c4c, 'Not moved', String(moved.detail || '').slice(0, 400))],
-        components: [panelRow([panelButton('user:transfer', 'Try again', 1), panelButton('user:config', 'Cancel', 2)])] });
+    const current = findLinkByGamertag(gamertag);
+    /* Both boxes may be left blank on purpose ("keep it"), so the current account fills in. */
+    const toUser = String(fields.move_user || '').replace(/[^0-9]/g, '') || (current ? current.userId : '');
+    return await answerModal(interaction, (async function () {
+      const moved = await moveLinkFull(gamertag, toUser, fields.move_gamertag, ctx.actor);
+      return moved.ok
+        ? { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
+            + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.' + (moved.roleNote || ''))],
+          components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
+        : { embeds: [panelEmbed(0xdc4c4c, 'Not moved', String(moved.detail || '').slice(0, 400))],
+          components: [panelRow([panelButton('user:transfer', 'Try again', 1), panelButton('user:config', 'Cancel', 2)])] };
+    })());
   }
   if (id === 'modal:kitgive') {
     const remembered = pendingGive.get(interaction.user.id) || '';
     pendingGive.delete(interaction.user.id);
-    return await answerModal(interaction, await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, user: fields.give_user || null }));
+    return await answerModal(interaction, (async function () {
+      const payload = await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, user: fields.give_user || null });
+      if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Sent') {
+        logLater('emoteKits', 'Kit given', payload.embeds[0].description.split('\n')[0] + ' Given by ' + who(ctx.actor) + '.');
+      }
+      return payload;
+    })());
   }
   if (id.indexOf('modal:refresh:') === 0) {
-    return await answerModal(interaction, refreshCooldowns(ctx, id.slice('modal:refresh:'.length), fields.refresh_target));
+    const scope = id.slice('modal:refresh:'.length);
+    logLater('emoteKits', 'Cooldowns cleared', who(ctx.actor) + ' cleared cooldowns for ' + scope + ' ' + String(fields.refresh_target || '').slice(0, 60) + '.');
+    return await answerModal(interaction, refreshCooldowns(ctx, scope, fields.refresh_target));
   }
   if (id.indexOf('modal:spawn:') === 0) {
-    return await answerModal(interaction, authSpawnNote(ctx, id.slice('modal:spawn:'.length), fields.spawn_kit));
+    const group = id.slice('modal:spawn:'.length);
+    logLater('emoteKits', 'Respawn kit ' + (fields.spawn_kit ? 'set' : 'cleared'), group + (fields.spawn_kit ? ' gets `' + String(fields.spawn_kit).slice(0, 60) + '`' : ' gets no kit') + ' on respawn, set by ' + who(ctx.actor) + '.');
+    return await answerModal(interaction, authSpawnNote(ctx, group, fields.spawn_kit));
   }
-  if (id === 'modal:kitcode') return await answerModal(interaction, installKit(ctx, fields.install_code));
+  if (id === 'modal:kitcode') {
+    const payload = installKit(ctx, fields.install_code);
+    if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Install code accepted') {
+      logLater('emoteKits', 'Install code stored', who(ctx.actor) + ' stored a kit install code (' + String(fields.install_code || '').length + ' characters).');
+    }
+    return await answerModal(interaction, payload);
+  }
   log('unhandled modal:', id);
+  return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'That form is from an older panel', 'Run the command again to get a fresh one.')] });
 }
 
 /* ---------------------------------------------------------------- gateway -- */
@@ -731,7 +1031,7 @@ client.once(Events.ClientReady, async (c) => {
   state.guilds = c.guilds.cache.size;
   log('logged in as ' + c.user.tag + ' — in ' + c.guilds.cache.size + ' guild(s)');
   try {
-    c.user.setPresence({ status: 'online', activities: [{ name: '/dashboard — Spinback RCE', type: 0 }] });
+    c.user.setPresence({ status: 'online', activities: [{ name: '/help — Spinback RCE', type: 0 }] });
     if (!GUILD_ID) {
       log('WARNING: DISCORD_GUILD_ID is not set, so no command was registered');
       return;
@@ -743,6 +1043,15 @@ client.once(Events.ClientReady, async (c) => {
       return;
     }
     await loadSettings();
+    /* Changes made on the website's Settings page reach the bot within two minutes, without a
+       restart. A re-read is skipped right after this bot saved something, so an answer that is
+       still on its way to the website is never read back over. */
+    if (!settingsTimer) {
+      settingsTimer = setInterval(function () {
+        if (Date.now() - lastPersistAt > Math.min(15000, RELOAD_MS / 2)) loadSettings(true).catch(function () {});
+      }, RELOAD_MS);
+      if (settingsTimer.unref) settingsTimer.unref();
+    }
     /* set() replaces the whole list, so a command removed from the module really does
        disappear from the picker instead of lingering forever. */
     /* Deliberately no default_member_permissions here. The roles saved in step 1 are the
@@ -752,7 +1061,8 @@ client.once(Events.ClientReady, async (c) => {
        in Discord's own Integrations screen, which does not change what the bot enforces. */
     const applied = await guild.commands.set(COMMANDS.map((cmd) => Object.assign({}, cmd, { dm_permission: false })));
     state.commandNames = applied.map((cmd) => cmd.name);
-    const setupCmd = applied.get('setup');
+    /* The collection discord.js returns is keyed by command id, not by name. */
+    const setupCmd = applied.find((cmd) => cmd.name === 'setup');
     state.command = (setupCmd && setupCmd.id) || (applied.first() && applied.first().id) || null;
     log(applied.size + ' command(s) registered in ' + guild.name + ': ' + state.commandNames.join(', '));
     /* The website reads this to turn the role ids Discord gives it into names, so it can
@@ -799,6 +1109,17 @@ client.once(Events.ClientReady, async (c) => {
 client.on(Events.InteractionCreate, (interaction) => routeInteraction(interaction));
 
 client.on(Events.Error, (e) => log('gateway error:', String((e && e.message) || e)));
+/* The gateway heartbeat is the best proof the connection is really alive: the API can answer
+   while the gateway is wedged. discord.js reports each acknowledged heartbeat on its debug
+   channel. The status page only shows a heartbeat once one has really been seen, so if this
+   wording ever changes the page says "not reported" instead of raising a false alarm. */
+client.on(Events.Debug, (message) => {
+  const text = String(message || '');
+  if (!/heartbeat acknowledged/i.test(text)) return;
+  state.lastHeartbeat = Date.now();
+  const latency = /latency of (\d+)\s*ms/i.exec(text);
+  if (latency) state.latencyMs = Number(latency[1]);
+});
 client.on(Events.ShardDisconnect, (code) => { state.gateway = 'disconnected'; log('gateway disconnected, code', code); });
 client.on(Events.ShardReconnecting, () => { state.gateway = 'reconnecting'; log('gateway reconnecting'); });
 
@@ -946,6 +1267,46 @@ function rconParse(buffer) {
   return { packets: packets, rest: rest };
 }
 
+/* Is this literal address somewhere public? Covers the private, loopback, link-local,
+   carrier-grade NAT and multicast ranges for IPv4, and the IPv6 equivalents. */
+function publicAddress(ip) {
+  const a = String(ip || '').toLowerCase();
+  if (net.isIPv4(a)) {
+    const p = a.split('.').map(Number);
+    if (p[0] === 0 || p[0] === 10 || p[0] === 127 || p[0] >= 224) return false;
+    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return false;
+    if (p[0] === 169 && p[1] === 254) return false;
+    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return false;
+    if (p[0] === 192 && p[1] === 168) return false;
+    if (p[0] === 192 && p[1] === 0 && p[2] === 0) return false;
+    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return false;
+    return true;
+  }
+  if (net.isIPv6(a)) {
+    if (a === '::' || a === '::1') return false;
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+    if (mapped) return publicAddress(mapped[1]);
+    if (/^(fc|fd|fe8|fe9|fea|feb|ff)/.test(a)) return false;
+    return true;
+  }
+  return false;
+}
+
+/* A name is resolved here and the connection goes to the address checked, so a public
+   looking name that points at a private address (or changes between check and connect)
+   cannot reach anything internal. */
+async function rconResolve(host) {
+  const h = String(host || '').trim().toLowerCase();
+  if (net.isIP(h)) return publicAddress(h) ? h : null;
+  try {
+    const all = await lookup(h, { all: true });
+    if (!all.length || all.some((r) => !publicAddress(r.address))) return null;
+    return all[0].address;
+  } catch (error) {
+    return null;
+  }
+}
+
 /* Nothing on the private internet: that keeps this from being pointed at a local service. */
 function rconHostAllowed(host) {
   const h = String(host || '').trim().toLowerCase();
@@ -977,7 +1338,15 @@ function channelKind(channel) {
   return 'other';
 }
 
-function rconRun(options) {
+async function rconRun(options) {
+  const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
+  if (!target) {
+    return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or does not resolve), so the bot will not connect to it.' };
+  }
+  return rconConnect(Object.assign({}, options, { address: target }));
+}
+
+function rconConnect(options) {
   return new Promise(function (resolve) {
     const started = Date.now();
     const host = String(options.host || '').trim();
@@ -987,7 +1356,9 @@ function rconRun(options) {
     /* The fixed list is what the automatic health check may ask for. When an administrator
        asks for a command they configured themselves - a kit plugin command, for instance -
        it is passed through as a single line with a hard length cap. */
-    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300).toLowerCase();
+    /* Kept exactly as typed: kit names and gamertags can be case-sensitive on the server.
+       Only the fixed health-check list is compared in lower case. */
+    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
     const command = options.allowAny && requested ? requested : (RCON_ALLOWED.indexOf(asked) > -1 ? asked : 'serverinfo');
 
     if (!rconHostAllowed(host)) {
@@ -1017,7 +1388,7 @@ function rconRun(options) {
     }, RCON_TIMEOUT_MS);
 
     try {
-      socket = net.connect({ host: host, port: port });
+      socket = net.connect({ host: options.address || host, port: port });
     } catch (error) {
       return finish({ ok: false, reason: 'connect-failed', detail: String(error.message || error) });
     }
@@ -1159,7 +1530,8 @@ createServer(async (req, res) => {
       return;
     }
     const given = String(req.headers['x-settings-token'] || '');
-    if (given !== expected) {
+    const a = Buffer.from(given), b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       res.writeHead(403, cors);
       res.end(JSON.stringify({ ok: false, reason: 'bad-token' }));
       return;
@@ -1189,8 +1561,13 @@ createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
     let body = '';
-    req.on('data', (chunk) => { body += chunk; });
+    let tooBig = false;
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 16384 && !tooBig) { tooBig = true; req.destroy(); }
+    });
     req.on('end', async () => {
+      if (tooBig) return;
       const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
       if (!CLIENT_SECRET) {
         res.writeHead(503, cors);
@@ -1238,6 +1615,10 @@ createServer(async (req, res) => {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
+      version: VERSION,
+      /* Left out until a heartbeat has actually been acknowledged (see the Debug listener). */
+      lastHeartbeat: state.lastHeartbeat || undefined,
+      latencyMs: state.latencyMs === null ? undefined : state.latencyMs,
       /* online is the field the status page reads. Without it the page assumed the bot
          was up whenever it got an answer at all, which is how a tokenless process could
          be announced as online. */
@@ -1272,9 +1653,22 @@ createServer(async (req, res) => {
     }));
     return;
   }
+  /* Discord's interaction payloads are a few kilobytes; anything near a megabyte is not
+     Discord, and buffering it without a limit would let anyone fill this process's memory. */
   let raw = '';
-  req.on('data', (c) => { raw += c; });
+  let refused = false;
+  req.on('data', (c) => {
+    if (refused) return;
+    raw += c;
+    if (raw.length > 1048576) {
+      refused = true;
+      res.writeHead(413, { 'content-type': 'application/json' });
+      res.end('{"error":"payload too large"}');
+      req.destroy();
+    }
+  });
   req.on('end', async () => {
+    if (refused) return;
     try {
       const response = await handler.fetch(toRequest(req, raw), env);
       const text = await response.text();

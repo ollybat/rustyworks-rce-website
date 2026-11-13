@@ -317,6 +317,13 @@ function closeModal(id){document.getElementById(id).style.display='none'}
 function safeB64Enc(s){try{return btoa(unescape(encodeURIComponent(s)))}catch{return btoa(s)}}
 function safeB64Dec(s){try{return decodeURIComponent(escape(atob(s)))}catch{return atob(s)}}
 function fmtNum(n){return Number(n||0).toLocaleString()}
+/* Kit names go inside double quotes in every command, so a quote or backslash in the name
+   would break all of them. typing=true keeps a trailing underscore while someone types. */
+function cleanKitName(raw, typing=false){
+  let v = String(raw ?? '');
+  if (!typing) v = v.trim();
+  return v.replace(/\s+/g,'_').replace(/["\\]/g,'').toUpperCase().slice(0,64);
+}
 function kitHasItems(){return [...KIT.wear,...KIT.main,...KIT.belt].some(Boolean)}
 	
 // ── Custom Confirm Logic ──
@@ -359,6 +366,25 @@ async function init() {
   document.addEventListener('click', (e) => {
     if (!document.getElementById('qtyPop').contains(e.target)) closeQP();
   });
+  openItemFromHash();
+  window.addEventListener('hashchange', openItemFromHash);
+}
+
+/* The site search links items here as #item=<shortname>: find it, show it and select it, so
+   the next click on a slot places it. */
+function openItemFromHash() {
+  const m = /[#&]item=([^&]+)/.exec(window.location.hash);
+  if (!m) return;
+  let short = '';
+  try { short = decodeURIComponent(m[1]); } catch { return; }
+  let found = null;
+  for (const items of Object.values(CATS)) { found = items.find(i => i.v === short); if (found) break; }
+  document.getElementById('itemSearch').value = found ? found.l : short;
+  filterItems();
+  if (!found) { toast('That item is not in the studio\'s list - showing the closest matches.', true); return; }
+  if (SEL?.v !== found.v) selectItem(found.v, found.l);
+  const tile = [...document.querySelectorAll('.bi')].find(el => el.dataset.v === found.v);
+  if (tile) tile.scrollIntoView({ block: 'nearest' });
 }
 	
 // ── Resizable panel divider ──────────────────────────────────────────────────
@@ -751,7 +777,7 @@ function buildCommands(name) {
 }
 
 function updateOutput() {
-  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
+  KIT.name = cleanKitName(document.getElementById('kitName').value) || 'MY_KIT';
   if (!kitHasItems()) { document.getElementById('cmdOutput').value = ''; return; }
   document.getElementById('cmdOutput').value = buildCommands(KIT.name).join('\n');
 }
@@ -765,7 +791,7 @@ async function incrementGenerated() {
 }
 
 async function doAction(type) {
-  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
+  KIT.name = cleanKitName(document.getElementById('kitName').value) || 'MY_KIT';
   if (!kitHasItems()) { toast('Add some items to the kit first.', true); return; }
   const cmds = buildCommands(KIT.name);
   if (type === 'commands') {
@@ -811,30 +837,36 @@ function doImport() {
     const dec = safeB64Dec(raw);
     if (dec.toLowerCase().includes('kit ')) text = dec;
   } catch {}
-  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
-  // Clear current
-  KIT.wear.fill(null); KIT.main.fill(null); KIT.belt.fill(null);
-  // Parse kit name
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  /* Read everything into a fresh kit first: the current kit is only replaced once at least
+     one line has been understood, so pasting the wrong thing never wipes your work. */
+  const next = { wear: Array(7).fill(null), main: Array(24).fill(null), belt: Array(6).fill(null) };
+  let name = '', added = 0, skipped = 0;
   for (const line of lines) {
-    const m = line.match(/^kit\s+add\s+"?([^"\s]+)"?\s+"?([^"\s]+)"?\s+(\d+)(?:\s+\d+)?\s+(wear|main|belt)/i);
+    const m = line.match(/^kit\s+add\s+"?([^"\s]+)"?\s+"?([^"\s]+)"?\s+(\d+)(?:\s+\d+)?\s+(wear|main|belt)\b/i);
     if (!m) continue;
-    const [,,shortname,qtyStr,posRaw] = m;
+    const [,kitName,shortname,qtyStr,posRaw] = m;
+    if (!name) name = kitName;
     const qty = Math.max(1, parseInt(qtyStr)||1);
     const pos = posRaw.toLowerCase();
-    if (!['wear','main','belt'].includes(pos)) continue;
-    // Find first empty slot
-    const arr = KIT[pos];
+    // Find first empty slot; a full container or a non-wearable in Wear is skipped and counted
+    const arr = next[pos];
     const emptyIdx = arr.findIndex(s=>!s);
-    if (emptyIdx === -1) continue;
-    // Check wear constraint
-    if (pos === 'wear' && !WEARABLE.has(shortname)) continue;
+    if (emptyIdx === -1 || (pos === 'wear' && !WEARABLE.has(shortname))) { skipped++; continue; }
     // Find label
     let label = shortname;
     for (const [,items] of Object.entries(CATS)) { const it = items.find(i=>i.v===shortname); if(it){label=it.l;break;} }
     arr[emptyIdx] = {v:shortname,l:label,qty};
+    added++;
   }
+  if (!added) {
+    toast(skipped ? 'None of those items fit: the slots were full or the items cannot be worn.' : 'Nothing to import: paste an install code or lines that start with kit add.', true);
+    return;
+  }
+  KIT.wear = next.wear; KIT.main = next.main; KIT.belt = next.belt;
+  if (name) document.getElementById('kitName').value = cleanKitName(name);
   renderAllSlots(); updateOutput(); closeModal('importModal');
-  toast('✅ Kit imported!');
+  toast(skipped ? `✅ Imported ${added} item${added===1?'':'s'} (${skipped} skipped)` : `✅ Imported ${added} item${added===1?'':'s'}`);
 }
 
 
@@ -844,7 +876,7 @@ function doImport() {
 async function saveKit() {
   if (!USER) { toast('Login to save kits.', true); window.location.href='../login.html'; return; }
   if (!kitHasItems()) { toast('Add items before saving.', true); return; }
-  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
+  KIT.name = cleanKitName(document.getElementById('kitName').value) || 'MY_KIT';
   try {
     const data = {wear:KIT.wear,main:KIT.main,belt:KIT.belt};
     const d = await fetch(`${API()}/api/kitbuilder/kits`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({kit_name:KIT.name,kit_data:data})}).then(r=>r.json());
