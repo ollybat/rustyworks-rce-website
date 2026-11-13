@@ -697,6 +697,7 @@ function redirect(location, headers = {}) {
 const DEFAULT_STAFF_NAMES = ["astronomator"];
 const PERM_ADMINISTRATOR = 0x8n;
 const PERM_MANAGE_GUILD = 0x20n;
+
 function csv(value) {
   return String(value || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 }
