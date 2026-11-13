@@ -838,8 +838,12 @@ export function grabKits(ctx) {
 export async function grabKitsRun(ctx, serverName) {
   var listCommand = String(ctx.kits().listCommand || "").trim();
   if (!listCommand) return grabKits(ctx);
-  var server = ctx.servers().filter(function (entry) { return !serverName || entry.name === serverName; })[0] || ctx.servers()[0];
-  if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
+  var servers = ctx.servers() || [];
+  var server = serverName
+    ? servers.find(function (entry) { return entry.name === serverName || entry.id === serverName; })
+    : servers[0];
+  if (!server) return { embeds: [embed(0xdc4c4c, serverName ? "Saved server not found" : "No server linked",
+    serverName ? "That saved server is no longer available. Choose one from autocomplete and try again." : "Link one first with /setup run.")], flags: EPH };
   var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: listCommand });
   var lines = String((answer && answer.answer) || "").split("\n").map(function (line) { return line.trim(); }).filter(Boolean);
   var known = lines.filter(function (line) { return line.length <= 60 && /^[\p{L}\p{N}_ .-]+$/u.test(line); }).slice(0, 100);
