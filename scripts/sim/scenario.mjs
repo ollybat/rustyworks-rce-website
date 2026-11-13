@@ -120,6 +120,10 @@ export async function run({ world, make, interact }) {
   it = await go(make.command(ADMIN, "kits", "give", { gamertag: "PlayerOne" }), "/kits give with no kit");
   expect("a give with no kit asks for one (it used to send 'undefined')", text(last(it)).includes("Which kit?"), text(last(it)));
 
+  /* Read the actual plugin kit list once so autocomplete uses names the server returned. */
+  it = await go(make.command(ADMIN, "kits", "grab"), "read kit names before autocomplete");
+  expect("/kits grab reads the saved plugin list", text(last(it)).includes("Kits the server reported"), text(last(it)));
+
   /* 10. suggestions as you type, and none for people who are not staff */
   it = await go(make.command(ADMIN, "kits", "give", { kit: "st" }, "kit"), "autocomplete kit");
   expect("kit names are suggested", [].concat(last(it) || []).some((c) => c.value === "STARTER"), text(last(it)));
