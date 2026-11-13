@@ -1078,8 +1078,28 @@ client.once(Events.ClientReady, async (c) => {
         .filter((r) => r.name !== '@everyone')
         .sort((a, b) => b.position - a.position)
         .map((r) => ({ id: r.id, name: r.name, position: r.position })),
+      /* Channels as well as roles, so the website can offer a list to click instead of a
+         box demanding an id. canSend is the bot's own permission in that channel: a log
+         target it cannot post in is worse than no log target, and the page says so. */
+      channels: guild.channels.cache
+        .sort((a, b) => (a.rawPosition || 0) - (b.rawPosition || 0))
+        .map((c) => {
+          let canSend = null;
+          try {
+            const allowed = c.permissionsFor(client.user);
+            canSend = allowed ? Boolean(allowed.has('SendMessages')) : null;
+          } catch (error) { canSend = null; }
+          return {
+            id: c.id,
+            name: c.name,
+            kind: channelKind(c),
+            category: (c.parent && c.parent.name) || null,
+            position: c.rawPosition || 0,
+            canSend: canSend,
+          };
+        }),
     };
-    log('exposed ' + state.guildInfo.roles.length + ' role(s) for the website');
+    log('exposed ' + state.guildInfo.roles.length + ' role(s) and ' + state.guildInfo.channels.length + ' channel(s) for the website');
   } catch (e) {
     state.error = String((e && e.message) || e);
     log('command registration failed:', state.error);
@@ -1305,6 +1325,19 @@ function rconHostAllowed(host) {
   return /^[a-z0-9][a-z0-9.-]*$/.test(h);
 }
 
+/* Discord has moved channel types from numbers to strings over the years and this bot
+   refuses to guess from a name, so both spellings are read and anything else is 'other'. */
+function channelKind(channel) {
+  const t = channel && channel.type;
+  if (t === 0 || t === 'GuildText' || t === 'GUILD_TEXT') return 'text';
+  if (t === 5 || t === 'GuildAnnouncement' || t === 'GUILD_ANNOUNCEMENT') return 'announcement';
+  if (t === 15 || t === 'GuildForum' || t === 'GUILD_FORUM') return 'forum';
+  if (t === 2 || t === 'GuildVoice' || t === 'GUILD_VOICE') return 'voice';
+  if (t === 13 || t === 'GuildStageVoice' || t === 'GUILD_STAGE_VOICE') return 'voice';
+  if (t === 4 || t === 'GuildCategory' || t === 'GUILD_CATEGORY') return 'category';
+  return 'other';
+}
+
 async function rconRun(options) {
   const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
   if (!target) {
@@ -1456,8 +1489,26 @@ createServer(async (req, res) => {
       let body = {};
       try { body = JSON.parse(raw || '{}'); } catch (error) { body = {}; }
       let answer;
+      /* A saved server is tested by its id, so its password never has to leave this service
+         and never reaches a browser. A brand new server can still be tried with the password
+         typed on the page: it is used for this one check and stored nowhere. */
+      let target = { host: body.host, port: body.port, password: body.password, command: body.command };
+      if (!String(body.password || '') && body.id) {
+        const saved = (settings.servers || []).find(function (s) { return String(s.id) === String(body.id); });
+        if (!saved) {
+          answer = {
+            ok: false,
+            reason: 'unknown-server',
+            detail: (settings.servers || []).length
+              ? 'No saved server has that id. Save it first, then test it.'
+              : 'This service has not read the saved settings yet, so it cannot look a stored server up. Set BOT_SETTINGS_TOKEN here and on the website.',
+          };
+        } else {
+          target = { host: saved.host, port: saved.port, password: saved.password, command: body.command };
+        }
+      }
       try {
-        answer = await rconRun({ host: body.host, port: body.port, password: body.password, command: body.command });
+        if (!answer) answer = await rconRun(target);
       } catch (error) {
         answer = { ok: false, reason: 'unexpected', detail: String(error && error.message ? error.message : error) };
       }

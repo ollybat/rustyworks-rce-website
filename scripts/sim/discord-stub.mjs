@@ -37,6 +37,13 @@ function makeGuild() {
   return {
     id: world.guildId, name: "Sim Guild", ownerId: process.env.SIM_OWNER_ID || "100000000000000999", memberCount: 42, icon: null,
     roles: { cache: new Collection(roles) },
+    channels: {
+      cache: new Collection(["401", "402", "403", "404", "405", "406"].map((n, i) => {
+        const id = "1000000000000" + n.padStart(5, "0");
+        return [id, { id, name: "log-" + n, type: 0, rawPosition: i, parent: { name: "Logs" },
+          permissionsFor: () => ({ has: (perm) => perm === "SendMessages" }) }];
+      })),
+    },
     commands: {
       async set(list) {
         world.registered = list;
