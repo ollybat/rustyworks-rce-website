@@ -236,11 +236,9 @@ export async function run({ world, make, interact }) {
   it = await go(make.command(ADMIN, "user", "roster", { search: "pl" }, "search"), "autocomplete roster search");
   expect("roster search suggests gamertags", Array.isArray(last(it)) && last(it).length > 0, text(last(it)));
   it = await go(make.command(ADMIN, "user", "roster", { search: "player" }), "/user roster broad search");
-  const nextId = (text(last(it)).match(/user:roster:2:[^"\\]*/) || [])[0];
-  if (nextId) {
-    it = await go(make.button(ADMIN, nextId), "roster search page 2");
-    expect("page 2 of a search keeps the search", text(last(it)).includes("matching"), text(last(it)).slice(0, 300));
-  } else expect("a broad search has a next page button", false, text(last(it)).slice(0, 300));
+  expect("broad roster searches return only matching links", text(last(it)).includes("matching") && text(last(it)).includes("Player1"), text(last(it)).slice(0, 400));
+  it = await go(make.command(ADMIN, "user", "roster", { search: "zzzz" }), "/user roster search with no matches");
+  expect("an empty roster search is explained", text(last(it)).includes("No linked players matched"), text(last(it)).slice(0, 400));
 
   /* 25. posting a new link panel offers to remove the old one */
   it = await go(make.command(ADMIN, "user", "linkpanel", { channel: { type: 7, value: "100000000000000402" } }), "post a link panel");
