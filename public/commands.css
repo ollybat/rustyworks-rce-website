@@ -1,0 +1,55 @@
+/* Commands reference. Loaded after every other stylesheet, so nothing here can change an existing page. */
+
+.cmd-hero { padding: 34px 0 6px; }
+.cmd-quick { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.cmd-quick span { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); font-size: 13px; letter-spacing: .02em; }
+.cmd-quick b { color: var(--sp-accent, #ff7200); }
+
+.cmd-bar { position: sticky; top: 68px; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 26px 0 18px; padding: 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.12); background: rgba(12,8,5,.86); backdrop-filter: blur(10px); }
+.cmd-bar input[type="search"] { flex: 1 1 240px; min-width: 200px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.16); background: rgba(0,0,0,.35); color: inherit; font: inherit; }
+.cmd-bar input[type="search"]:focus-visible { outline: 2px solid var(--sp-accent, #ff7200); outline-offset: 2px; }
+.cmd-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cmd-chip { padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.cmd-chip[aria-pressed="true"] { border-color: var(--sp-accent, #ff7200); background: rgba(255,114,0,.16); }
+.cmd-count { font-size: 13px; opacity: .7; margin-left: auto; }
+
+.cmd-card { border: 1px solid rgba(255,255,255,.12); border-radius: 18px; background: rgba(255,255,255,.03); padding: 22px; margin: 0 0 18px; }
+.cmd-card[hidden] { display: none; }
+.cmd-card header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; }
+.cmd-card h3 { margin: 0; font-size: 22px; letter-spacing: .01em; }
+.cmd-card h3 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; color: var(--sp-accent, #ff7200); }
+.cmd-card p.cmd-lede { margin: 10px 0 0; opacity: .86; max-width: 70ch; }
+.cmd-card details { margin-top: 14px; }
+.cmd-card summary { cursor: pointer; font-weight: 600; }
+
+.cmd-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.cmd-tag { font-size: 12px; padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); opacity: .92; white-space: nowrap; }
+.cmd-tag.is-admin { border-color: rgba(255,114,0,.5); color: #ffb066; }
+.cmd-tag.is-open { border-color: rgba(90,200,120,.45); color: #9be0ac; }
+.cmd-tag.is-needs { border-color: rgba(255,196,84,.45); color: #ffd48a; }
+
+.cmd-sub { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+.cmd-sub th, .cmd-sub td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.09); vertical-align: top; }
+.cmd-sub th { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; opacity: .66; }
+.cmd-sub td code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--sp-accent, #ff7200); }
+.cmd-sub tr:last-child td { border-bottom: 0; }
+
+.cmd-copy { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 11px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.25); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.cmd-copy:hover { border-color: var(--sp-accent, #ff7200); }
+
+.cmd-grid2 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 10px; }
+.cmd-note { border: 1px solid rgba(255,196,84,.35); border-radius: 16px; padding: 18px; background: rgba(255,196,84,.06); }
+.cmd-note h3 { margin: 0 0 8px; font-size: 17px; }
+.cmd-note ul { margin: 0; padding-left: 18px; }
+.cmd-note li { margin: 7px 0; opacity: .92; }
+.cmd-empty { padding: 22px; border-radius: 16px; border: 1px dashed rgba(255,255,255,.2); text-align: center; opacity: .85; }
+.cmd-steps { list-style: none; counter-reset: s; margin: 12px 0 0; padding: 0; }
+.cmd-steps li { counter-increment: s; position: relative; padding: 0 0 16px 46px; }
+.cmd-steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.22); font-size: 14px; }
+
+@media (max-width: 720px) {
+  .cmd-bar { position: static; }
+  .cmd-sub th:nth-child(3), .cmd-sub td:nth-child(3) { display: none; }
+  .cmd-count { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .cmd-bar { backdrop-filter: none; } }

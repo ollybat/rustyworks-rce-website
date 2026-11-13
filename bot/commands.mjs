@@ -23,9 +23,11 @@ const BT = String.fromCharCode(96);
 
 export const COMMANDS = [
   { name: "ping", description: "Bot and website health, measured right now", dm_permission: false },
+  { name: "help", description: "What every command does, and what each one needs set up first", dm_permission: false },
   { name: "setup", description: "Configure Spinback RCE for this server", dm_permission: false,
     options: [
       { type: 1, name: "run", description: "Guided setup: roles, logging channels, then your Rust server" },
+      { type: 1, name: "status", description: "Checklist of what is saved and what is still missing" },
       { type: 1, name: "edit", description: "Change a saved server IP, RCON port or password" },
       { type: 1, name: "refresh", description: "Force a fresh RCON connection and report what the server says" },
     ] },
@@ -52,6 +54,7 @@ export const COMMANDS = [
             choices: AUTH_GROUPS.map(function (g) { return { name: g, value: g }; }) },
           { type: 3, name: "kit", description: "Kit to hand out (blank stops giving one)" },
         ] },
+      { type: 1, name: "cooldowns", description: "See the kit cooldown records the bot is holding" },
       { type: 1, name: "build", description: "Kit Studio: build a kit on the website or work from an install code" },
       { type: 1, name: "add", description: "Install a kit from a Base64 kit install code",
         options: [{ type: 3, name: "code", description: "The Base64 install code", required: true }] },
@@ -201,6 +204,103 @@ export async function testServerByName(ctx, name) {
   return { embeds: [built], flags: EPH };
 }
 
+/* /help -------------------------------------------------------------------- */
+export function helpHome() {
+  return {
+    embeds: [embed(0x5865f2, "Spinback RCE commands",
+      "Pick a command to see every subcommand, who may run it and what it needs set up first.")],
+    components: [
+      row([button("help:cmd:ping", "/ping - live health", 1), button("help:cmd:setup", "/setup - configure", 1), button("help:cmd:kits", "/kits - emote kits", 1)]),
+      row([link("Status page", "https://spinback-j7ao5f.camelai.app/status.html"), link("Commands reference", "https://spinback-j7ao5f.camelai.app/commands.html")]),
+    ],
+    flags: EPH,
+  };
+}
+
+export function helpDetail(name) {
+  var pages = {
+    ping: embed(0x5865f2, "Help: /ping",
+      "One embed, everything in it measured at the moment you run it: the gateway heartbeat, uptime, Node version, memory, the guild this bot is in, how many commands it registered, and a live request to the website with the round-trip time."),
+    setup: embed(0xfaa81a, "Help: /setup",
+      "Your server, wired up in three steps. The Rust connection is tested before anything is saved, so a wrong port or password never lands in your settings."),
+    kits: embed(0xff7200, "Help: /kits",
+      "Emote kits end to end: the real kit names from your server, binds with cooldowns and roles, giving kits out, clearing cooldowns, respawn kits per auth group, and installing kits built in Kit Studio."),
+  };
+  var extras = {
+    ping: [
+      field("Permissions", "Anyone in this server can run it.", false),
+      field("Needs first", "Nothing. It works before setup is finished, and says what is still missing.", false),
+    ],
+    setup: [
+      field("Subcommands", [
+        "**run** - guided panel: roles, logging channels, then your Rust server",
+        "**status** - a checklist of what is saved and what is still missing",
+        "**edit** - change a saved server address, RCON port or password",
+        "**refresh** - open a fresh RCON connection and report exactly what the server answers",
+      ].join("\n"), false),
+      field("Permissions", "Administrator or Manage Server. Panels are ephemeral.", false),
+      field("Needs first", "The RCON port and password from server.cfg, with rcon.web set to 0.", false),
+    ],
+    kits: [
+      field("Subcommands", [
+        "**grab** - read the real kit names from your Rust server",
+        "**config** - binds, cooldowns, roles, lock kits, emote guide",
+        "**give** - hand a kit to a gamertag or a linked Discord user",
+        "**refresh** - clear cooldowns for one user, one kit, everyone or every kit",
+        "**cooldowns** - see the cooldown records the bot is holding",
+        "**auth-spawn** - give a group a kit on every respawn",
+        "**build** - Kit Studio on the website, or work from an install code",
+        "**add** - install a kit from a Base64 install code",
+      ].join("\n"), false),
+      field("Permissions", "Administrator or Manage Server.", false),
+      field("Needs first", "Your kit plugin own command names, and a give template using {player} and {kit}. The bot will not guess either.", false),
+    ],
+  };
+  var out = pages[name] || pages.ping;
+  out.fields = extras[name] || [];
+  return out;
+}
+
+/* /setup status ------------------------------------------------------------ */
+export function setupStatus(ctx) {
+  var roles = ctx.settings.staffRoles || {};
+  var channels = ctx.settings.logChannels || {};
+  var servers = ctx.servers();
+  var kits = ctx.kits();
+  var checks = [
+    ["Staff roles stored", Object.keys(roles).length + " of " + ROLE_SLOTS.length],
+    ["Log channels stored", Object.keys(channels).length + " of " + LOG_TYPES.length],
+    ["Rust servers linked", String(servers.length)],
+    ["Kit binds", String((kits.binds || []).length)],
+    ["Auth groups with a respawn kit", String(Object.keys(kits.authSpawn || {}).length)],
+  ];
+  var next = [];
+  if (!servers.length) next.push("Run **/setup run** and add your Rust server, so the RCON connection can be tested.");
+  if (!Object.keys(roles).length) next.push("Step 1: save your staff roles so staff-only features know who is who.");
+  if (!Object.keys(channels).length) next.push("Step 2: choose a channel for the log types you want.");
+  if (!kits.listCommand) next.push("Set your kit plugin list command, then **/kits grab** reads your real kit names.");
+  if (!kits.giveCommand) next.push("Set a give template using {player} and {kit}, then **/kits give** can hand kits out in game.");
+  if (!ctx.storeTokenSet()) next.push("Set BOT_SETTINGS_TOKEN to the same value on the website and the bot, otherwise saves stay in this bot memory only.");
+  var built = embed(next.length ? 0xfaa81a : 0x3ba55d, "Setup status",
+    next.length ? "What is saved right now is below, then what is still missing, in the order worth doing it." : "Everything the bot can check is in place.");
+  built.fields = checks.map(function (c) { return field(c[0], c[1], true); });
+  if (next.length) built.fields.push(field("What is missing", next.slice(0, 6).map(function (n) { return "- " + n; }).join("\n"), false));
+  built.footer = { text: "Read-only: nothing on this panel changes your settings" };
+  return { embeds: [built], components: [row([button("setup:roles", "Roles", 1), button("setup:channels", "Log channels", 1), button("setup:server", "Rust server", 1)])], flags: EPH };
+}
+
+/* /kits cooldowns ---------------------------------------------------------- */
+export function cooldownsPanel(ctx, rows) {
+  var list = rows || [];
+  var built = embed(0xff7200, "Kit cooldowns",
+    list.length
+      ? "The cooldown records this bot is holding right now."
+      : "No cooldown records are being held. Cooldowns are this bot own bookkeeping, so this stays empty until the in-game hook reports a kit use back to the bot.");
+  if (list.length) built.fields = [field("On record", list.slice(0, 20).join("\n").slice(0, 1000), false)];
+  built.footer = { text: "Clearing is instant: /kits refresh, or the button below" };
+  return { embeds: [built], components: [row([button("kits:config", "Back to Emote Kits", 2), button("kits:clear", "Clear all cooldowns", 2)])], flags: EPH };
+}
+
 /* /kits -------------------------------------------------------------------- */
 export function kitsPanel(ctx) {
   var binds = ctx.kits().binds || [];
@@ -346,8 +446,10 @@ export function modalFields(interaction) {
 }
 export function dispatchCommand(ctx, name, sub, options) {
   if (name === "ping") return pingReply(ctx);
+  if (name === "help") return helpHome();
   if (name === "setup") {
     if (sub === "refresh") return testServerByName(ctx, options.server);
+    if (sub === "status") return setupStatus(ctx);
     var panel = setupPanel(ctx);
     if (sub === "edit") panel.embeds[0].description = "Pick **3. Rust server** to change a saved server address, port or password. New details are tested before anything is saved.";
     return panel;
@@ -358,6 +460,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "give") return giveKit(ctx, { kit: options.kit, gamertag: options.gamertag, user: options.user });
     if (sub === "refresh") return refreshCooldowns(ctx, options.scope, options.target);
     if (sub === "auth-spawn") return authSpawnNote(ctx, options.group, options.kit);
+    if (sub === "cooldowns") return cooldownsPanel(ctx, ctx.cooldownList());
     if (sub === "build") return kitStudioPanel(ctx);
     if (sub === "add") return installKit(ctx, options.code);
   }

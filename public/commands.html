@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <!-- Same first-paint theme handling as the rest of the site: no flash of the wrong palette. -->
+    <script>
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("spinback-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Commands — Spinback RCE</title>
+    <meta name="application-name" content="Spinback RCE">
+    <meta
+      name="description"
+      content="Every Spinback RCE Discord command: /ping, /help, /setup and /kits, with each subcommand, who may run it and what it needs set up first.">
+    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/commands.html">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Spinback RCE">
+    <meta property="og:title" content="Commands — Spinback RCE">
+    <meta property="og:description" content="Every command, every subcommand, who can run it and what it needs set up first.">
+    <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/commands.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Commands — Spinback RCE">
+    <meta name="twitter:description" content="Every command, every subcommand, who can run it and what it needs set up first.">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Spinback RCE commands","url":"https://spinback-j7ao5f.camelai.app/commands.html","isPartOf":{"@type":"WebSite","name":"Spinback RCE","url":"https://spinback-j7ao5f.camelai.app/"}}</script>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="/theme.js"></script>
+    <script src="/config.js" defer></script>
+    <script src="/apiHelper.js" defer></script>
+    <script src="/page.js" defer></script>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+    <script src="/commands.js" defer></script>
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+    <link rel="stylesheet" href="/site-pro.css">
+    <link rel="stylesheet" href="/commands.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="sp-header">
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="status.html">Status</a>
+            <a href="commands.html" aria-current="page">Commands</a>
+            <a
+              href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
+              target="_blank"
+              rel="noopener"
+              class="btn">
+              Add to Discord
+            </a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="cmd-hero">
+        <div class="wrap">
+          <span class="sp-kicker">Every command, documented</span>
+          <h1 class="sp-title">Commands</h1>
+          <p class="sp-lede">
+            Four commands and twelve subcommands. Anything that configures your server needs
+            Administrator or Manage Server, opens as a private panel, and tests before it saves.
+            Nothing on this page is a promise the bot does not keep.
+          </p>
+          <div class="cmd-quick">
+            <span><b>4</b> commands</span>
+            <span><b>12</b> subcommands</span>
+            <span>Panels are <b>private</b></span>
+            <span>Every number is <b>measured</b></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="sp-section">
+        <div class="wrap">
+          <div class="cmd-bar">
+            <label class="skip-link" for="cmdFilter">Filter commands</label>
+            <input id="cmdFilter" type="search" placeholder="Filter commands and subcommands…" autocomplete="off">
+            <div class="cmd-chips" role="group" aria-label="Filter by area">
+              <button type="button" class="cmd-chip" data-group="all" aria-pressed="true">All</button>
+              <button type="button" class="cmd-chip" data-group="health" aria-pressed="false">Health</button>
+              <button type="button" class="cmd-chip" data-group="help" aria-pressed="false">Help</button>
+              <button type="button" class="cmd-chip" data-group="setup" aria-pressed="false">Setup</button>
+              <button type="button" class="cmd-chip" data-group="kits" aria-pressed="false">Emote Kits</button>
+            </div>
+            <span class="cmd-count" id="cmdCount">4 commands shown</span>
+          </div>
+
+          <article class="cmd-card" id="ping" data-group="health">
+            <header>
+              <h3><code>/ping</code> — live health check</h3>
+              <div class="cmd-tags">
+                <span class="cmd-tag is-open">Everyone</span>
+                <span class="cmd-tag">No options</span>
+              </div>
+            </header>
+            <p class="cmd-lede">
+              One embed, and every line in it is measured at the moment you run it: the gateway
+              heartbeat, how long the bot has been up, its Node version, resident and heap memory,
+              the server it is in with member and role counts, how many commands it registered,
+              and a live request to this website with the round-trip time.
+            </p>
+            <details>
+              <summary>What each field means</summary>
+              <p>
+                Gateway is the heartbeat between the bot and Discord, not your ping. Memory is the
+                bot process, in megabytes. The website line is a real request made seconds before
+                you read it, and if the site is unreachable it shows how long it waited and why
+                instead of a green tick. The settings line tells you whether saves can reach this
+                site at all; if it says not configured, every other panel will tell you the same.
+              </p>
+            </details>
+            <p><button type="button" class="cmd-copy" data-copy="/ping" data-label="Copy /ping">Copy /ping</button></p>
+          </article>
+
+          <article class="cmd-card" id="help" data-group="help">
+            <header>
+              <h3><code>/help</code> — what everything does</h3>
+              <div class="cmd-tags">
+                <span class="cmd-tag is-open">Everyone</span>
+                <span class="cmd-tag">Buttons</span>
+              </div>
+            </header>
+            <p class="cmd-lede">
+              A small browser for the other commands. Pick one and it lists every subcommand, who
+              may run it, and what has to exist before it can do anything useful — including the
+              parts that need a command name only you can supply.
+            </p>
+            <p><button type="button" class="cmd-copy" data-copy="/help" data-label="Copy /help">Copy /help</button></p>
+          </article>
+
+          <article class="cmd-card" id="setup" data-group="setup">
+            <header>
+              <h3><code>/setup</code> — configure the bot</h3>
+              <div class="cmd-tags">
+                <span class="cmd-tag is-admin">Administrator or Manage Server</span>
+                <span class="cmd-tag is-needs">Needs RCON details</span>
+              </div>
+            </header>
+            <p class="cmd-lede">
+              Your server, wired up in three steps. The Rust connection is tested with a real
+              <code>serverinfo</code> before anything is saved, so a wrong port or password never
+              lands in your settings, and the server's own reply is shown back to you.
+            </p>
+            <table class="cmd-sub">
+              <thead><tr><th>Subcommand</th><th>What it does</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><code>/setup run</code></td>
+                  <td>The guided panel. Step 1 staff roles (Owner, Co-Owner, Head Admin, Admin, Moderator and the linked role). Step 2 logging channels: pick one of the fifteen log types, then pick its channel. Step 3 your Rust server.</td>
+                  <td>Role-id values that are not ids are counted and reported, never stored silently.</td>
+                </tr>
+                <tr>
+                  <td><code>/setup status</code></td>
+                  <td>A read-only checklist: what is stored, then what is missing, in the order worth doing it.</td>
+                  <td>Changes nothing.</td>
+                </tr>
+                <tr>
+                  <td><code>/setup edit</code></td>
+                  <td>Change a saved server's address, RCON port or password.</td>
+                  <td>The new details are tested before they replace the old ones.</td>
+                </tr>
+                <tr>
+                  <td><code>/setup refresh</code></td>
+                  <td>Opens a fresh RCON connection to a saved server and reports exactly what it answers.</td>
+                  <td>Useful when the game server restarted and a cached connection went stale.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p><button type="button" class="cmd-copy" data-copy="/setup run" data-label="Copy /setup">Copy /setup</button></p>
+          </article>
+
+          <article class="cmd-card" id="kits" data-group="kits">
+            <header>
+              <h3><code>/kits</code> — emote kits and kits</h3>
+              <div class="cmd-tags">
+                <span class="cmd-tag is-admin">Administrator or Manage Server</span>
+                <span class="cmd-tag is-needs">Needs your plugin command names</span>
+              </div>
+            </header>
+            <p class="cmd-lede">
+              Everything kits: the real kit names from your server, binds that tie an emote to up to
+              three kits with a cooldown and an optional role, giving kits out, clearing cooldowns,
+              respawn kits per auth group, and installing kits you built in Kit Studio.
+            </p>
+            <table class="cmd-sub">
+              <thead><tr><th>Subcommand</th><th>What it does</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>/kits grab</code></td><td>Reads the kit names from your Rust server and lists exactly what came back.</td><td>Runs your kit plugin's own list command; set it first.</td></tr>
+                <tr><td><code>/kits config</code></td><td>The Emote Kits panel: add, edit or remove a bind (emote, up to three kits, cooldown in seconds, optional role), lock kits, and the emote guide.</td><td>Emote names are your server's wording; nothing is filled in for you.</td></tr>
+                <tr><td><code>/kits give</code></td><td>Hands a kit to a gamertag, or to a linked Discord user's gamertag.</td><td>Runs the give template you supply, using {player} and {kit}.</td></tr>
+                <tr><td><code>/kits refresh</code></td><td>Clears cooldowns for one user, one kit, every linked user, or every kit.</td><td>Reports the exact number of records cleared.</td></tr>
+                <tr><td><code>/kits cooldowns</code></td><td>Shows the cooldown records the bot is holding right now.</td><td>Empty until the in-game hook reports a kit use back to the bot.</td></tr>
+                <tr><td><code>/kits auth-spawn</code></td><td>Gives an auth group (User, VIP, Moderator, Admin, Owner) a kit on every respawn.</td><td>One kit per group. Respawning is detected in game, so it needs the server-side hook too.</td></tr>
+                <tr><td><code>/kits build</code></td><td>Points at Kit Studio on this website, where a kit is built slot by slot, and offers to install a code.</td><td>The site and the bot share the same 299-item catalogue.</td></tr>
+                <tr><td><code>/kits add</code></td><td>Installs a kit from a Base64 kit install code.</td><td>The code is checked to be real Base64 that decodes to text, then stored exactly as given.</td></tr>
+              </tbody>
+            </table>
+            <p><button type="button" class="cmd-copy" data-copy="/kits config" data-label="Copy /kits">Copy /kits</button></p>
+          </article>
+
+          <div class="cmd-empty" id="cmdEmpty" hidden>Nothing on this page matches that. Clear the filter, or ask the bot with <code>/help</code>.</div>
+        </div>
+      </section>
+
+      <section class="sp-section">
+        <div class="wrap">
+          <div class="sp-head">
+            <span class="sp-kicker">How setup goes</span>
+            <h2 class="sp-title">Three steps, in this order</h2>
+            <p class="sp-lede">Each one is a button on the setup panel. You can stop after any step and come back later; <code>/setup status</code> remembers where you got to.</p>
+          </div>
+          <ol class="cmd-steps">
+            <li><strong>Roles.</strong> Save the six slots so every staff-only feature knows who is who.</li>
+            <li><strong>Logging channels.</strong> Choose the channel for each of the fifteen log types you actually want. A type with no channel is simply switched off.</li>
+            <li><strong>Your Rust server.</strong> Name, address, RCON port and password. The bot connects, sends <code>serverinfo</code>, shows you the answer, and only then saves.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="sp-section">
+        <div class="wrap">
+          <div class="cmd-grid2">
+            <div class="cmd-note">
+              <h3>What the bot will not guess</h3>
+              <ul>
+                <li>Kit plugin command names, and the emote names themselves.</li>
+                <li>Anything your Rust server has not told it: kit lists, rosters, cooldowns.</li>
+                <li>Skin prices, rarities or release dates it cannot read from the store.</li>
+                <li>Numbers. If something cannot be measured, the panel says so instead of showing a placeholder.</li>
+              </ul>
+            </div>
+            <div class="cmd-note">
+              <h3>Before you start</h3>
+              <ul>
+                <li><strong>Permissions:</strong> Administrator or Manage Server on the Discord server the bot lives in.</li>
+                <li><strong>RCON:</strong> the port and password from <code>server.cfg</code>, with <code>rcon.web</code> set to 0. Addresses on the private internet are refused.</li>
+                <li><strong>Saving:</strong> set <code>BOT_SETTINGS_TOKEN</code> to the same value on this website and on the bot, otherwise panels tell you plainly that a save stayed in the bot's memory.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-band">
+        <div class="wrap">
+          <div class="cta-inner reveal">
+            <h2>Try them on your own server</h2>
+            <p>Add Spinback RCE, run /setup, and have your Rust server answering RCON in a couple of minutes.</p>
+            <div class="u-row">
+              <a
+                href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-discord">
+                ⊕ Add to Discord
+              </a>
+              <a href="dashboard/kitbuilder.html" class="btn ghost">Open Kit Studio</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="#" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">© <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</div>
+        <div class="foot-app">
+          <button type="button" id="rwInstallBtn">📲 Get the Spinback app</button>
+          <small>Open Spinback from your home screen. Free, no app store needed.</small>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
