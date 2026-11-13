@@ -190,6 +190,6 @@ const apiFailures = await apiChecksPromise;
 console.log("Bot registered: /" + result.commands.join(", /"));
 console.log(result.interactions + " interactions, " + result.total + " checks, " + result.failed + " interaction checks failed.");
 for (const f of result.failures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
-console.log("HTTP API: " + (7 - apiFailures.length) + " route checks passed, " + apiFailures.length + " failed.");
+console.log("HTTP API: " + (8 - apiFailures.length) + " route checks passed, " + apiFailures.length + " failed.");
 for (const f of apiFailures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
 process.exit(result.failed || apiFailures.length ? 1 : 0);
