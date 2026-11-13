@@ -41,7 +41,8 @@ const initial = {
   logChannels: {},
   servers: [{ id: "srv1", name: "Main", host: "203.0.113.10", port: 28016, hasPassword: true, password: "secret" }],
   kits: { binds: [{ emote: "salute", kits: ["STARTER"], cooldown: 60, roleId: null }], locked: false, authSpawn: {},
-    giveCommand: 'kit givetoplayer {kit} "{player}"', listCommand: "kit list", known: [] },
+    giveCommand: 'kit givetoplayer {kit} "{player}"', listCommand: "kit list", installCommand: "", giveCooldownSeconds: 30, known: [] },
+  installs: {},
   links,
   pending: [],
   linkPanel: null,
@@ -53,6 +54,7 @@ const store = JSON.parse(JSON.stringify(initial));
 function merge(into, body) {
   for (const key of ["staffRoles", "logChannels", "kits"]) if (body[key] && typeof body[key] === "object") into[key] = Object.assign({}, into[key], body[key]);
   for (const key of ["servers", "links", "pending"]) if (Array.isArray(body[key])) into[key] = body[key];
+  if (body.installs && typeof body.installs === "object") into.installs = Object.assign({}, into.installs || {}, body.installs);
   if ("linkPanel" in body) into.linkPanel = body.linkPanel;
 }
 const writes = [];
@@ -155,6 +157,7 @@ const apiChecksPromise = (async function () {
     ["/api/guild", "GET", null],
     ["/api/rcon/test", "POST", "{}"],
     ["/api/reconnect", "POST", "{}"],
+    ["/api/oauth/exchange", "POST", JSON.stringify({ code: "unused", redirectUri: "https://example.invalid/callback" })],
   ]) {
     const response = await request(path, {
       method,
