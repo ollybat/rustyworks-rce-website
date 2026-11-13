@@ -180,7 +180,7 @@
                 </tr>
                 <tr>
                   <td><code>/setup status</code></td>
-                  <td>A read-only checklist: what is stored, then what is missing, in the order worth doing it.</td>
+                  <td>A read-only checklist: what is stored, then what is missing, in the order worth doing it. It also checks live with Discord: can the bot post in each log channel, do the saved roles still exist, and can it hand out the linked role.</td>
                   <td>Changes nothing.</td>
                 </tr>
                 <tr>
@@ -214,14 +214,14 @@
             <table class="cmd-sub">
               <thead><tr><th>Subcommand</th><th>What it does</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>/kits grab</code></td><td>Reads the kit names from your Rust server and lists exactly what came back.</td><td>Runs your kit plugin's own list command; set it first.</td></tr>
-                <tr><td><code>/kits config</code></td><td>The Emote Kits panel: add, edit or remove a bind (emote, up to three kits, cooldown in seconds, optional role), lock kits, and the emote guide.</td><td>Emote names are your server's wording; nothing is filled in for you.</td></tr>
-                <tr><td><code>/kits give</code></td><td>Hands a kit to a gamertag, or to a linked Discord user's gamertag.</td><td>Runs the give template you supply, using {player} and {kit}.</td></tr>
-                <tr><td><code>/kits refresh</code></td><td>Clears cooldowns for one user, one kit, every linked user, or every kit.</td><td>Reports the exact number of records cleared.</td></tr>
+                <tr><td><code>/kits grab</code> <code>server</code></td><td>Reads the kit names from your Rust server and lists exactly what came back. The names it recognises are remembered and suggested as you type kit options.</td><td>Runs your kit plugin's own list command; set it first.</td></tr>
+                <tr><td><code>/kits config</code></td><td>The Emote Kits panel: add, edit or remove a bind (emote, up to three kits, cooldown in seconds, optional role), lock kits, the emote guide, and <strong>Delivery settings</strong>: your kit plugin's list command and give template, set right in Discord.</td><td>Emote names are your server's wording; nothing is filled in for you.</td></tr>
+                <tr><td><code>/kits give</code> <code>kit</code> <code>gamertag</code> or <code>user</code> <code>server</code></td><td>Hands a kit to a gamertag, or to a Discord user under their linked gamertag. Kit names, gamertags and servers are suggested as you type, and the server's answer is shown back.</td><td>Runs the give template you supply, using {player} and {kit}. Quotes and control characters typed into a name are dropped before anything is sent.</td></tr>
+                <tr><td><code>/kits refresh</code> <code>scope</code> <code>target</code></td><td>Clears cooldowns for one user, one kit, every linked user, or every kit.</td><td>Reports the exact number of records cleared.</td></tr>
                 <tr><td><code>/kits cooldowns</code></td><td>Shows the cooldown records the bot is holding right now.</td><td>Empty until the in-game hook reports a kit use back to the bot.</td></tr>
                 <tr><td><code>/kits auth-spawn</code></td><td>Gives an auth group (User, VIP, Moderator, Admin, Owner) a kit on every respawn.</td><td>One kit per group. Respawning is detected in game, so it needs the server-side hook too.</td></tr>
                 <tr><td><code>/kits build</code></td><td>Points at Kit Studio on this website, where a kit is built slot by slot, and offers to install a code.</td><td>The site and the bot share the same 299-item catalogue.</td></tr>
-                <tr><td><code>/kits add</code></td><td>Installs a kit from a Base64 kit install code.</td><td>The code is checked to be real Base64 that decodes to text, then stored exactly as given.</td></tr>
+                <tr><td><code>/kits add</code> <code>code</code></td><td>Installs a kit from a Base64 kit install code. Kit names found in the code are suggested as you type straight away.</td><td>The code is checked to be real Base64 that decodes to text, then stored exactly as given.</td></tr>
               </tbody>
             </table>
             <p><button type="button" class="cmd-copy" data-copy="/kits config" data-label="Copy /kits">Copy /kits</button></p>
@@ -247,7 +247,7 @@
                 <tr><td><code>/user forceunlink</code></td><td>Remove a player's link, after a confirmation that names the player.</td><td>The confirmation says what stops matching.</td></tr>
                 <tr><td><code>/user transfer</code></td><td>Move a link to a new Discord account, a new gamertag, or both at once.</td><td>The new Discord account must not already be linked, and a new gamertag must be free. Both clashes are reported, not forced through.</td></tr>
                 <tr><td><code>/user linkpanel</code></td><td>Post a panel with <strong>Link account</strong> and <strong>Unlink</strong> buttons into a channel.</td><td>Member-facing: those two buttons work for anyone in the server, not just staff.</td></tr>
-                <tr><td><code>/user roster</code></td><td>Every linked player, newest last, with the account that linked them.</td><td>Plus a waiting list of requests that have not been confirmed.</td></tr>
+                <tr><td><code>/user roster</code> <code>search</code></td><td>Every linked player, numbered, 30 to a page, with the account that linked them and when. Add a search to show only the gamertags (or the Discord id) that match.</td><td>The <strong>Waiting list</strong> in <code>/user</code> holds requests from the link panel: approve or reject each one in a single click, and the player is told by direct message.</td></tr>
               </tbody>
             </table>
             <p><button type="button" class="cmd-copy" data-copy="/user roster" data-label="Copy /user">Copy /user</button></p>

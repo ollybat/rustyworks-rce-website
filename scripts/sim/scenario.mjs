@@ -173,6 +173,67 @@ export async function run({ world, make, interact }) {
   it = await go(make.command(MOD, "setup", "status"), "/setup status after the website edit");
   expect("a staff role saved on the website works without a restart", text(last(it)).includes("Setup status"), text(last(it)).slice(0, 200));
 
+  /* 19. kit delivery is set from Discord now (it could only be set on the website) */
+  it = await go(make.button(ADMIN, "kits:delivery"), "open the delivery form");
+  expect("the delivery form opens", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes("kit_give"), text(it.calls));
+  it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: "kit give" }), "save delivery without placeholders");
+  expect("a give command without {player} and {kit} is refused", text(last(it)).includes("Not saved"), text(last(it)));
+  it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"' }), "save delivery");
+  w = await writes();
+  expect("delivery settings are saved to the website", ((latest(w).kits || {}).listCommand === "kit list") && /\{player\}/.test((latest(w).kits || {}).giveCommand || ""), text(latest(w).kits));
+  expect("the saved reply shows an example", text(last(it)).includes("Delivery saved"), text(last(it)));
+  it = await go(make.button(ADMIN, "kits:grab"), "read kit names from the panel");
+  expect("Read kit names answers from the panel", it.firstAckAt !== null && text(last(it)).length > 10, text(last(it)).slice(0, 300));
+
+  /* 20. an install code teaches the bot its kit names */
+  const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
+  it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "install a kit code");
+  expect("the kit names in an install code are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "rai" }, "kit"), "autocomplete an installed kit");
+  expect("an installed kit is suggested straight away", [].concat(last(it) || []).some((c) => c.value === "RAIDER"), text(last(it)));
+
+  /* 21. /setup status checks what Discord really allows, not just what is saved */
+  it = await go(make.command(ADMIN, "setup", "status"), "/setup status with a channel the bot cannot post in");
+  expect("status finds the log channel the bot cannot post in", text(last(it)).includes("Problems found just now") && text(last(it)).includes("100000000000000404"), text(last(it)).slice(0, 900));
+
+  /* 22. a server check is remembered and shown by /ping */
+  it = await go(make.command(ADMIN, "setup", "refresh", { server: "srv1" }), "/setup refresh one server");
+  it = await go(make.command(PLAYER, "ping"), "/ping after a refresh");
+  expect("/ping shows the last server check", !text(last(it)).includes("not checked since the bot started") && /answered|did not answer/.test(text(last(it))), text(last(it)).slice(0, 900));
+
+  /* 23. players hear back about their request by direct message */
+  const dmsBefore = world.dms.length;
+  await go(make.modal(Object.assign({}, PLAYER), "modal:link:self", { link_gamertag: "Approved1" }), "player asks to link (DMs open)");
+  it = await go(make.select(ADMIN, "string", "user:pending:approve", ["100000000000000204"]), "approve (DMs open)");
+  expect("an approved player gets a direct message", world.dms.slice(dmsBefore).some((d) => d.userId === "100000000000000204" && text(d.payload).includes("Approved1")), text(world.dms.slice(dmsBefore)));
+  expect("the approve reply says they were told", text(last(it)).includes("direct message"), text(last(it)));
+  const CLOSED = { id: "100000000000000209" };
+  await go(make.modal(CLOSED, "modal:link:self", { link_gamertag: "Closed1" }), "player asks to link (DMs closed)");
+  it = await go(make.select(ADMIN, "string", "user:pending:reject", ["100000000000000209"]), "reject (DMs closed)");
+  expect("a reject with closed DMs says they were not told", text(last(it)).includes("closed"), text(last(it)));
+
+  /* 24. /user roster search, and its pages keep the search */
+  it = await go(make.command(ADMIN, "user", "roster", { search: "player1" }), "/user roster search");
+  expect("roster search filters the list", text(last(it)).includes("matching") && text(last(it)).includes("Player1"), text(last(it)).slice(0, 400));
+  it = await go(make.command(ADMIN, "user", "roster", { search: "pl" }, "search"), "autocomplete roster search");
+  expect("roster search suggests gamertags", Array.isArray(last(it)) && last(it).length > 0, text(last(it)));
+  it = await go(make.command(ADMIN, "user", "roster", { search: "player" }), "/user roster broad search");
+  const nextId = (text(last(it)).match(/user:roster:2:[^"\\]*/) || [])[0];
+  if (nextId) {
+    it = await go(make.button(ADMIN, nextId), "roster search page 2");
+    expect("page 2 of a search keeps the search", text(last(it)).includes("matching"), text(last(it)).slice(0, 300));
+  } else expect("a broad search has a next page button", false, text(last(it)).slice(0, 300));
+
+  /* 25. posting a new link panel offers to remove the old one */
+  it = await go(make.command(ADMIN, "user", "linkpanel", { channel: { type: 7, value: "100000000000000402" } }), "post a link panel");
+  it = await go(make.command(ADMIN, "user", "linkpanel", { channel: { type: 7, value: "100000000000000403" } }), "post a second link panel");
+  const removeId = (text(last(it)).match(/user:panel:removeold:[0-9a-z]+/) || [])[0];
+  expect("a second panel offers to remove the first", !!removeId, text(last(it)).slice(0, 400));
+  if (removeId) {
+    it = await go(make.button(ADMIN, removeId), "remove the older panel");
+    expect("the older panel is deleted", text(last(it)).includes("Older panel removed") && world.deleted.length === 1, text(last(it)) + " " + text(world.deleted));
+  }
+
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
     expect("answered in time: " + label, one.firstAckAt !== null && one.firstAckAt < 3000, "first answer at " + one.firstAckAt + " ms");
