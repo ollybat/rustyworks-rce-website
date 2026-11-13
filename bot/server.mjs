@@ -25,6 +25,11 @@ import {
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
   testAndSaveServer, kitsPanel, bindModal, bindList, bindRoleMenu, emoteGuide,
   helpHome, helpDetail, setupStatus, cooldownsPanel,
+  setupState, gatePayload, staffRoleNames, userPanel, linkPanelPayload, linkModal,
+  forcelinkPicker, forcelinkModal, adviceOnGamertag, unlinkPicker, unlinkConfirm,
+  transferPicker, transferModal, rosterPanel, pendingPanel, channelPickerForPanel,
+  kitGivePanel, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
+  kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
 } from './commands.mjs';
 
@@ -90,6 +95,9 @@ const settings = {
   servers: [],
   kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '' },
   installs: {},
+  links: [],
+  pending: [],
+  linkPanel: null,
 };
 const cooldowns = new Map();
 
@@ -106,7 +114,15 @@ async function persistSettings() {
     const res = await fetch(SITE_URL + '/api/bot/settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-settings-token': token },
-      body: JSON.stringify({ staffRoles: settings.staffRoles, logChannels: settings.logChannels, servers: settings.servers, kits: settings.kits }),
+      body: JSON.stringify({
+        staffRoles: settings.staffRoles,
+        logChannels: settings.logChannels,
+        servers: settings.servers,
+        kits: settings.kits,
+        links: settings.links,
+        pending: settings.pending,
+        linkPanel: settings.linkPanel,
+      }),
       signal: AbortSignal.timeout(8000),
     });
     const body = await res.json().catch(function () { return {}; });
@@ -132,6 +148,9 @@ async function loadSettings() {
     if (body && body.logChannels) settings.logChannels = body.logChannels;
     if (body && Array.isArray(body.servers)) settings.servers = body.servers;
     if (body && body.kits && typeof body.kits === 'object') settings.kits = Object.assign(settings.kits, body.kits);
+    if (body && Array.isArray(body.links)) settings.links = body.links;
+    if (body && Array.isArray(body.pending)) settings.pending = body.pending;
+    if (body && body.linkPanel && typeof body.linkPanel === 'object') settings.linkPanel = body.linkPanel;
     log('loaded ' + Object.keys(settings.staffRoles).length + ' role slot(s), ' + Object.keys(settings.logChannels).length
       + ' log channel(s), ' + settings.servers.length + ' server(s), ' + settings.kits.binds.length + ' bind(s)');
   } catch (error) {
@@ -225,6 +244,135 @@ function removeBind(emote) {
   return before - settings.kits.binds.length;
 }
 
+/* ------------------------------------------------------- links and staff ---- */
+/* A link is a Discord account with the gamertag it belongs to. Everything player-facing
+   hangs off it: kits by role, auth groups, the roster. Storage is honest about limits: an
+   unconfirmed request is a request, not proof, and the panels say so. */
+function normaliseGamertag(value) { return String(value || '').trim().slice(0, 40); }
+
+function findLinkByGamertag(gamertag) {
+  const wanted = normaliseGamertag(gamertag).toLowerCase();
+  return settings.links.filter(function (l) { return l.gamertag.toLowerCase() === wanted; })[0] || null;
+}
+function findLinkByUser(userId) {
+  return settings.links.filter(function (l) { return l.userId === String(userId); })[0] || null;
+}
+function addLink(userId, gamertag, by) {
+  const tag = normaliseGamertag(gamertag);
+  const id = String(userId || '').trim();
+  if (!tag || !id) return { ok: false, reason: 'empty' };
+  settings.links = settings.links.filter(function (l) {
+    return l.gamertag.toLowerCase() !== tag.toLowerCase() && l.userId !== id;
+  });
+  settings.links.push({ userId: id, gamertag: tag, at: new Date().toISOString(), by: String(by || id) });
+  settings.pending = settings.pending.filter(function (p) {
+    return p.userId !== id && p.gamertag.toLowerCase() !== tag.toLowerCase();
+  });
+  persistSettings().catch(function () {});
+  return { ok: true, gamertag: tag, userId: id };
+}
+function removeLink(which) {
+  const wanted = normaliseGamertag(which);
+  const before = settings.links.length;
+  settings.links = settings.links.filter(function (l) {
+    return l.gamertag.toLowerCase() !== wanted.toLowerCase() && l.userId !== wanted;
+  });
+  settings.pending = settings.pending.filter(function (p) { return p.userId !== wanted; });
+  persistSettings().catch(function () {});
+  return before - settings.links.length;
+}
+function moveLink(gamertag, newUserId, newGamertag) {
+  const current = findLinkByGamertag(gamertag);
+  if (!current) return { ok: false, reason: 'missing', detail: 'That link is no longer on record.' };
+  const id = String(newUserId || '').trim();
+  const tag = normaliseGamertag(newGamertag) || current.gamertag;
+  if (!/^[0-9]{15,25}$/.test(id)) {
+    return { ok: false, reason: 'bad-user-id', detail: 'A Discord user id is 15 to 25 digits. With Developer Mode on, right-click the account and Copy User ID.' };
+  }
+  const already = findLinkByUser(id);
+  if (already && already.gamertag.toLowerCase() !== current.gamertag.toLowerCase()) {
+    return { ok: false, reason: 'user-taken', detail: 'That Discord account is already linked to ' + already.gamertag + '. Unlink it first, then transfer.' };
+  }
+  const tagOwner = findLinkByGamertag(tag);
+  if (tagOwner && tagOwner.gamertag.toLowerCase() !== current.gamertag.toLowerCase()) {
+    return { ok: false, reason: 'tag-taken', detail: 'The gamertag ' + tagOwner.gamertag + ' is already linked to <@' + tagOwner.userId + '>.' };
+  }
+  settings.links = settings.links.filter(function (l) { return l !== current; });
+  settings.links.push({ userId: id, gamertag: tag, at: current.at, by: current.by || id, movedAt: new Date().toISOString() });
+  persistSettings().catch(function () {});
+  return { ok: true, gamertag: tag, userId: id };
+}
+function requestLink(userId, gamertag) {
+  const tag = normaliseGamertag(gamertag);
+  if (!tag) return { ok: false, reason: 'empty' };
+  const taken = findLinkByGamertag(tag);
+  if (taken) {
+    const mine = taken.userId === String(userId);
+    return { ok: false, reason: mine ? 'already-yours' : 'taken', detail: mine
+      ? 'That gamertag is already linked to your account.'
+      : 'That gamertag is already linked. If it is yours, ask staff to move it with /user transfer.' };
+  }
+  settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
+  settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
+  persistSettings().catch(function () {});
+  return { ok: true, gamertag: tag };
+}
+
+/* The roles saved in step 1 of setup are the staff roles. Administrator, Manage Server and
+   the guild owner always count, so a server can never lock itself out. */
+function memberRoleIds(member) {
+  if (!member) return [];
+  const roles = member.roles;
+  if (Array.isArray(roles)) return roles.map(String);
+  if (roles && roles.cache && typeof roles.cache.keys === 'function') return Array.from(roles.cache.keys());
+  return [];
+}
+function hasAdminBypass(interaction) {
+  const guild = interaction.guild;
+  if (guild && guild.ownerId && interaction.user && guild.ownerId === interaction.user.id) return true;
+  const perms = interaction.member && interaction.member.permissions;
+  try {
+    if (perms && typeof perms.has === 'function') {
+      return perms.has(PermissionFlagsBits.Administrator) || perms.has(PermissionFlagsBits.ManageGuild);
+    }
+    if (typeof perms === 'string') {
+      const bits = BigInt(perms);
+      if ((bits & BigInt(PermissionFlagsBits.Administrator)) === BigInt(PermissionFlagsBits.Administrator)) return true;
+    }
+  } catch (error) { /* a string permission we cannot read falls through to the role check */ }
+  return false;
+}
+function isStaff(interaction) {
+  if (hasAdminBypass(interaction)) return true;
+  const ids = ROLE_SLOTS.map(function (s) { return (settings.staffRoles || {})[s[0]]; }).filter(Boolean);
+  if (!ids.length) return false;
+  const held = memberRoleIds(interaction.member);
+  return ids.some(function (id) { return held.indexOf(String(id)) > -1; });
+}
+/* Before any staff role is saved there is nothing to check against, so only the people who
+   could finish setup may act. After that, the saved roles decide. */
+function permitted(interaction, ctx) {
+  const state = setupState(ctx);
+  return state.rolesSaved ? isStaff(interaction) : hasAdminBypass(interaction);
+}
+
+async function postLinkPanel(channelId) {
+  try {
+    const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
+    if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
+    const message = await channel.send(linkPanelPayload());
+    settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
+    const wrote = await persistSettings();
+    return { ok: true, saved: wrote.ok, detail: wrote.detail || '' };
+  } catch (error) {
+    return { ok: false, detail: String((error && error.message) || error) };
+  }
+}
+
+/* When a kit is given by picking a player first, the picked gamertag is remembered here for
+   the next screen. Held in memory only: a restart just means picking again. */
+const pendingGive = new Map();
+
 function botCtx() {
   return {
     siteUrl: SITE_URL,
@@ -237,8 +385,15 @@ function botCtx() {
     storeTokenSet: function () { return !!settingsToken(); },
     servers: function () { return settings.servers; },
     kits: function () { return settings.kits; },
+    links: function () { return settings.links; },
+    pendingLinks: function () { return settings.pending; },
+    linkPanel: function () { return settings.linkPanel; },
     saveServer: saveServer,
     installKit: installKitCode,
+    addLink: addLink,
+    removeLink: removeLink,
+    moveLink: moveLink,
+    requestLink: requestLink,
     setAuthSpawn: setAuthSpawn,
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
@@ -300,18 +455,30 @@ async function routeInteraction(interaction) {
 
 async function runCommand(interaction) {
   const name = interaction.commandName;
-  if (name !== 'ping' && name !== 'setup' && name !== 'kits') return;
-  if (name !== 'ping' && !mayConfigure(interaction)) {
-    await interaction.reply({ embeds: [permissionNote()], flags: 64 }).catch(function () {});
+  if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user') return;
+  const ctx = botCtx();
+  if (name !== 'ping' && !permitted(interaction, ctx)) {
+    await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
   }
-  const ctx = botCtx();
   const opts = optionMap(interaction);
-  const slow = name === 'setup' || name === 'kits';
+  /* Everything that changes something carries a panel, so the first reply is deferred while
+     a panel is assembled or a server is asked a question. */
+  const slow = name !== 'ping' && name !== 'help';
   if (slow) await interaction.deferReply({ flags: 64 }).catch(function () {});
   const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
     return { embeds: [panelEmbed(0xdc4c4c, 'That did not work', String((error && error.message) || error).slice(0, 400))] };
   });
+  if (payload && payload.postPanelTo) {
+    const posted = await postLinkPanel(payload.postPanelTo);
+    const body = posted.ok
+      ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; staff can always confirm one by hand with /user forcelink.'
+        + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
+      : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
+    if (slow) { await interaction.editReply(body).catch(function () {}); return; }
+    await interaction.reply(body).catch(function () {});
+    return;
+  }
   if (slow) {
     const body = Object.assign({}, payload);
     /* flags belong on the first reply only; the deferral already made it ephemeral. */
@@ -326,7 +493,50 @@ async function runButton(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
   if (id === 'ping:again') return await answerPanel(interaction, await pingReply(ctx));
-  if (!mayConfigure(interaction)) return await answerModal(interaction, { embeds: [permissionNote()] });
+  /* The link panel is a member action, so its buttons work for everyone in the server and
+     are handled before the staff check. */
+  if (id === 'link:start') return await interaction.showModal(linkModal());
+  if (id === 'link:cancel') return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Left alone', 'Your link is unchanged.')] });
+  if (id === 'link:unlink') {
+    const mine = findLinkByUser(interaction.user.id);
+    return await answerModal(interaction, mine
+      ? { embeds: [panelEmbed(0xfaa81a, 'Unlink your account?', 'On record: ' + mine.gamertag + '. Anything set up against this link stops matching once it is removed.')],
+        components: [panelRow([panelButton('link:unlink:go', 'Yes, unlink me', 4), panelButton('link:cancel', 'Keep it', 2)])] }
+      : { embeds: [panelEmbed(0xfaa81a, 'Nothing to unlink', 'No link is on record for your account.')],
+        components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
+  }
+  if (id === 'link:unlink:go') {
+    const gone = removeLink(interaction.user.id);
+    return await answerModal(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Unlinked' : 'Nothing to unlink',
+      gone ? 'Your link is removed. Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
+      components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
+  }
+  if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
+  if (id === 'user:config') return await answerPanel(interaction, userPanel(ctx));
+  if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
+  if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
+  if (id === 'user:transfer') return await answerPanel(interaction, transferPicker(ctx));
+  if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx));
+  if (id === 'user:pending') return await answerPanel(interaction, pendingPanel(ctx));
+  if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
+  if (id.indexOf('user:unlink:go:') === 0) {
+    const tag = id.slice('user:unlink:go:'.length);
+    const gone = removeLink(tag);
+    return await answerPanel(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Link removed' : 'Nothing removed',
+      gone ? 'The link for ' + tag + ' is gone.' : 'No link for ' + tag + ' was found.')],
+      components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
+  }
+  if (id === 'kits:give') return await interaction.showModal(kitGiveModal());
+  if (id === 'kits:add:code') return await interaction.showModal(kitAddModal());
+  if (id.indexOf('kits:refresh:') === 0) {
+    const scope = id.slice('kits:refresh:'.length);
+    if (scope === 'all-users' || scope === 'all-kits') return await answerPanel(interaction, refreshCooldowns(ctx, scope, ''));
+    return await interaction.showModal(kitRefreshModal(scope));
+  }
+  if (id.indexOf('kits:spawn:') === 0) {
+    const group = id.slice('kits:spawn:'.length);
+    return await interaction.showModal(kitSpawnModal(group, (settings.kits.authSpawn || {})[group] || ''));
+  }
   if (id === 'setup:roles') return await interaction.showModal(rolesModal());
   if (id === 'setup:linked') return await interaction.showModal(linkedRoleModal());
   if (id === 'setup:channels') return await answerPanel(interaction, logTypeMenu());
@@ -357,7 +567,7 @@ async function runButton(interaction) {
 async function runSelect(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
-  if (!mayConfigure(interaction)) return await answerModal(interaction, { embeds: [permissionNote()] });
+  if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   const first = String((interaction.values || [])[0] || '');
   if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first));
   if (id.indexOf('setup:channel:') === 0) {
@@ -392,6 +602,25 @@ async function runSelect(interaction) {
     saveBind({ emote: id.slice('kits:role:'.length) }, first, true);
     return await answerPanel(interaction, kitsPanel(ctx));
   }
+  if (id === 'user:forcelink:user') return await interaction.showModal(forcelinkModal(first));
+  if (id === 'user:unlink:pick') {
+    const found = findLinkByGamertag(first);
+    if (!found) return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That link is gone', 'Open the list again.')] });
+    return await answerPanel(interaction, unlinkConfirm(found.gamertag, found.userId));
+  }
+  if (id === 'user:transfer:pick') return await interaction.showModal(transferModal(first));
+  if (id === 'user:panel:channel') {
+    const posted = await postLinkPanel(first);
+    return await answerPanel(interaction, posted.ok
+      ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + first + '> now. Members press **Link account** there.'
+        + (posted.saved ? '' : ' The website could not be told, so the panel id is in this bot memory only.'))],
+        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
+      : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] });
+  }
+  if (id === 'kits:give:pick') {
+    pendingGive.set(interaction.user.id, first);
+    return await interaction.showModal(kitGiveModal());
+  }
   log('unhandled select:', id);
 }
 
@@ -399,7 +628,17 @@ async function runModal(interaction) {
   const id = customId(interaction);
   const fields = modalFields(interaction);
   const ctx = botCtx();
-  if (!mayConfigure(interaction)) return await answerModal(interaction, { embeds: [permissionNote()] });
+  /* A member linking themselves is not a staff action. */
+  if (id === 'modal:link:self') {
+    const answer = requestLink(interaction.user.id, fields.link_gamertag);
+    return await answerModal(interaction, answer.ok
+      ? { embeds: [panelEmbed(0x3ba55d, 'Request recorded', 'You asked to link ' + answer.gamertag + '. It is waiting for confirmation:\n\n'
+          + '- staff confirm it with /user forcelink, or\n- your server own in-game verification command does it automatically.\n\nThe bot will not treat an unconfirmed request as proof, so nothing player-facing uses it yet.')],
+        components: [panelRow([panelButton('link:unlink', 'Unlink instead', 2)])] }
+      : { embeds: [panelEmbed(0xfaa81a, 'Not linked', String(answer.detail || '').slice(0, 400))],
+        components: [panelRow([panelButton('link:start', 'Try another gamertag', 1)])] });
+  }
+  if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'modal:roles' || id === 'modal:linked') {
     let saved = 0;
     let skipped = 0;
@@ -436,6 +675,44 @@ async function runModal(interaction) {
     }
     return await answerModal(interaction, bindRoleMenu(entry.emote));
   }
+  if (id.indexOf('modal:forcelink:') === 0) {
+    const userId = id.slice('modal:forcelink:'.length);
+    const gamertag = normaliseGamertag(fields.link_gamertag);
+    const advice = adviceOnGamertag(ctx, gamertag, userId);
+    if (!advice.free && advice.reason === 'already-this-user') {
+      return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'Already linked', 'That gamertag is already linked to that same Discord account. Nothing changed.')],
+        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
+    }
+    if (!advice.free) {
+      return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That gamertag is taken', String(advice.detail || '').slice(0, 400))],
+        components: [panelRow([panelButton('user:transfer', 'Transfer it instead', 1), panelButton('user:config', 'Cancel', 2)])] });
+    }
+    const done = addLink(userId, gamertag, interaction.user.id);
+    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Linked', '<@' + userId + '> is now linked to ' + done.gamertag + '.')],
+      components: [panelRow([panelButton('user:config', 'Back to links', 2), panelButton('user:panel', 'Post the link panel', 1)])] });
+  }
+  if (id.indexOf('modal:transfer:') === 0) {
+    const gamertag = id.slice('modal:transfer:'.length);
+    const moved = moveLink(gamertag, fields.move_user, fields.move_gamertag);
+    return await answerModal(interaction, moved.ok
+      ? { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
+          + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.')],
+        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
+      : { embeds: [panelEmbed(0xdc4c4c, 'Not moved', String(moved.detail || '').slice(0, 400))],
+        components: [panelRow([panelButton('user:transfer', 'Try again', 1), panelButton('user:config', 'Cancel', 2)])] });
+  }
+  if (id === 'modal:kitgive') {
+    const remembered = pendingGive.get(interaction.user.id) || '';
+    pendingGive.delete(interaction.user.id);
+    return await answerModal(interaction, await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, user: fields.give_user || null }));
+  }
+  if (id.indexOf('modal:refresh:') === 0) {
+    return await answerModal(interaction, refreshCooldowns(ctx, id.slice('modal:refresh:'.length), fields.refresh_target));
+  }
+  if (id.indexOf('modal:spawn:') === 0) {
+    return await answerModal(interaction, authSpawnNote(ctx, id.slice('modal:spawn:'.length), fields.spawn_kit));
+  }
+  if (id === 'modal:kitcode') return await answerModal(interaction, installKit(ctx, fields.install_code));
   log('unhandled modal:', id);
 }
 
@@ -466,11 +743,12 @@ client.once(Events.ClientReady, async (c) => {
     await loadSettings();
     /* set() replaces the whole list, so a command removed from the module really does
        disappear from the picker instead of lingering forever. */
-    const applied = await guild.commands.set(COMMANDS.map((cmd) => {
-      const copy = Object.assign({}, cmd, { dm_permission: false });
-      if (cmd.name !== 'ping') copy.default_member_permissions = String(PermissionFlagsBits.Administrator | PermissionFlagsBits.ManageGuild);
-      return copy;
-    }));
+    /* Deliberately no default_member_permissions here. The roles saved in step 1 are the
+       staff roles, so hiding the staff commands from members would hide them from exactly the
+       people this server appointed. The bot checks roles (plus Administrator and the owner)
+       on every use, and staff who want the commands invisible to members can say so per role
+       in Discord's own Integrations screen, which does not change what the bot enforces. */
+    const applied = await guild.commands.set(COMMANDS.map((cmd) => Object.assign({}, cmd, { dm_permission: false })));
     state.commandNames = applied.map((cmd) => cmd.name);
     const setupCmd = applied.get('setup');
     state.command = (setupCmd && setupCmd.id) || (applied.first() && applied.first().id) || null;
