@@ -216,8 +216,11 @@ export function logTypeMenu() {
 }
 export function channelMenu(typeKey) {
   var found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
-  return { embeds: [embed(0x3ba55d, "Pick a channel", "Log type: **" + (found ? found[1] : typeKey) + "**")],
-    components: [row([{ type: 8, custom_id: "setup:channel:" + typeKey, placeholder: "Where should these logs go?", channel_types: [0, 5] }])], flags: EPH };
+  return { embeds: [embed(0x3ba55d, "Pick a channel", "Log type: **" + (found ? found[1] : typeKey) + "**. You can also send a test message after choosing the channel.")],
+    components: [
+      row([{ type: 8, custom_id: "setup:channel:" + typeKey, placeholder: "Where should these logs go?", channel_types: [0, 5] }]),
+      row([button("setup:logtest:" + typeKey, "Send a test log", 2)]),
+    ], flags: EPH };
 }
 export function serverModal(existing) {
   var e = existing || {};
@@ -227,7 +230,7 @@ export function serverModal(existing) {
       row([input("srv_name", "Server name", e.name || "", !existing)]),
       row([input("srv_host", "Server IP or host", e.host || "", true)]),
       row([input("srv_port", "RCON port", e.port ? String(e.port) : "", true)]),
-      row([input("srv_pass", "RCON password", "", !existing)]),
+      row([input("srv_pass", existing ? "New RCON password (leave blank to keep saved password)" : "RCON password", "", !existing)]),
     ] };
 }
 export function serverPicker(ctx) {
@@ -241,7 +244,9 @@ export function serverPicker(ctx) {
 export async function testAndSaveServer(ctx, data, existingId) {
   var host = String(data.srv_host || "").trim();
   var port = Number(String(data.srv_port || "").trim());
-  var password = String(data.srv_pass || "");
+  var existing = existingId ? (ctx.servers() || []).find(function (entry) { return entry.id === existingId; }) : null;
+  var typedPassword = String(data.srv_pass || "");
+  var password = typedPassword || (existing && existing.password) || "";
   var name = String(data.srv_name || "").trim() || (existingId ? "server" : host);
   var answer = await ctx.rconTest({ host: host, port: port, password: password, command: "serverinfo" });
   if (!answer || answer.ok !== true) {
@@ -642,12 +647,16 @@ export function transferModal(gamertag) {
 
 export function rosterPanel(ctx, page, search) {
   var held = linkRecords(ctx);
-  var needle = String(search || "").trim().toLowerCase();
+  var needle = String(search || "").trim().slice(0, 60).toLowerCase();
   var matches = needle ? held.links.filter(function (link) {
     return String(link.gamertag || "").toLowerCase().includes(needle)
       || String(link.userId || "").includes(needle);
   }) : held.links;
-  var shown = matches.slice(0, 40);
+  var pageSize = 20;
+  var pages = Math.max(1, Math.ceil(matches.length / pageSize));
+  var current = Math.max(1, Math.min(pages, Math.floor(Number(page) || 1)));
+  var start = (current - 1) * pageSize;
+  var shown = matches.slice(start, start + pageSize);
   var lines = shown.map(function (link) {
     return "<@" + link.userId + "> -> " + code(link.gamertag) + (link.by ? " (by <@" + link.by + ">)" : "");
   });
@@ -656,10 +665,13 @@ export function rosterPanel(ctx, page, search) {
     matches.length
       ? (needle ? matches.length + " matching link(s)." : "Every link on record, newest last.")
       : (needle ? "No linked players matched that search." : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**."));
-  if (lines.length) built.fields = [field("Roster (" + matches.length + ")", lines.join("\n").slice(0, 1000), false)];
-  if (matches.length > shown.length) built.fields.push(field("Showing", shown.length + " of " + matches.length + " matching links.", false));
-  if (needle) built.footer = { text: "Search: " + needle.slice(0, 80) };
-  return { embeds: [built], components: [row([button("user:config", "Back to links", 2), button("user:panel", "Post the link panel", 1)])], flags: EPH };
+  built.fields = [field("Page " + current + " of " + pages, lines.length ? lines.join("\n").slice(0, 1000) : "No entries on this page.", false)];
+  if (needle) built.footer = { text: "Search: " + needle.slice(0, 60) };
+  var navigation = [];
+  if (current > 1) navigation.push(button("user:roster:" + (current - 1) + (needle ? ":" + encodeURIComponent(needle) : ""), "Previous", 2));
+  if (current < pages) navigation.push(button("user:roster:" + (current + 1) + (needle ? ":" + encodeURIComponent(needle) : ""), "Next", 1));
+  navigation.push(button("user:config", "Back to links", 2), button("user:panel", "Post the link panel", 2));
+  return { embeds: [built], components: [row(navigation)], flags: EPH };
 }
 
 export function pendingPanel(ctx) {
