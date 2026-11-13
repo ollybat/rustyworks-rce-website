@@ -99,7 +99,7 @@ export async function run({ world, make, interact }) {
   /* 9. /kits give to a linked Discord user: their gamertag is used, the kit keeps its case */
   slow.push(go(make.command(ADMIN, "kits", "give", { kit: "STARTER", user: { type: 6, value: "100000000000000210" }, server: "srv1" }), "/kits give to a linked user"));
   const [edited, given] = await Promise.all(slow);
-  expect("the RCON test connects to the vetted DNS answer and keeps the saved password", !text(last(edited)).includes("no-password") && text(last(edited)).includes("rcon.sim.test:28016"), text(last(edited)));
+  expect("the RCON test reaches the pinned DNS address and keeps the saved password", !text(last(edited)).includes("no-password") && text(last(edited)).includes("rcon.sim.test:28016") && text(last(edited)).includes("Reason: timeout") && text(last(edited)).includes("Nothing answered within"), text(last(edited)));
   expect("slow RCON answers are acknowledged in time", edited.firstAckAt !== null && edited.firstAckAt < 3000 && given.firstAckAt < 3000, edited.firstAckAt + " / " + given.firstAckAt);
   expect("a Discord user gets their linked gamertag, not their id", text(last(given)).includes('kit givetoplayer STARTER \\"PlayerOne\\"'), text(last(given)));
   expect("the RCON command is logged", world.sent.some((m) => m.channelId === "100000000000000404" && text(m.payload).includes("kit givetoplayer STARTER")), text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-1)));
