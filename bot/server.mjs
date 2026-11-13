@@ -21,6 +21,7 @@ import handler from './interactions-worker.js';
 import net from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import { isPublicAddress, rconHostAllowed } from './network-guard.mjs';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
@@ -119,6 +120,28 @@ let settingsTimer = null;
 const RELOAD_MS = Math.max(1000, Number(process.env.SETTINGS_RELOAD_MS) || 120000);
 
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
+
+/* These internal endpoints share the website/bot settings credential. It never
+   belongs in browser code: the website Worker adds it on server-to-server calls. */
+function settingsAuthFailure(req) {
+  const expected = settingsToken();
+  if (!expected) return { status: 503, body: { ok: false, reason: 'no-settings-token' } };
+  const supplied = String(req.headers['x-settings-token'] || '');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { status: 403, body: { ok: false, reason: 'forbidden' } };
+  }
+  return null;
+}
+
+function requireSettingsAuth(req, res) {
+  const failure = settingsAuthFailure(req);
+  if (!failure) return false;
+  res.writeHead(failure.status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify(failure.body));
+  return true;
+}
 
 function panelEmbed(color, title, description) { return { color: color, title: title, description: description }; }
 function panelRow(components) { return { type: 1, components: components }; }
@@ -1378,64 +1401,21 @@ function rconParse(buffer) {
   return { packets: packets, rest: rest };
 }
 
-/* Is this literal address somewhere public? Covers the private, loopback, link-local,
-   carrier-grade NAT and multicast ranges for IPv4, and the IPv6 equivalents. */
-function publicAddress(ip) {
-  const a = String(ip || '').toLowerCase();
-  if (net.isIPv4(a)) {
-    const p = a.split('.').map(Number);
-    if (p[0] === 0 || p[0] === 10 || p[0] === 127 || p[0] >= 224) return false;
-    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return false;
-    if (p[0] === 169 && p[1] === 254) return false;
-    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return false;
-    if (p[0] === 192 && p[1] === 168) return false;
-    if (p[0] === 192 && p[1] === 0 && p[2] === 0) return false;
-    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return false;
-    return true;
-  }
-  if (net.isIPv6(a)) {
-    if (a === '::' || a === '::1') return false;
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
-    if (mapped) return publicAddress(mapped[1]);
-    if (/^(fc|fd|fe8|fe9|fea|feb|ff)/.test(a)) return false;
-    return true;
-  }
-  return false;
-}
-
-/* A name is resolved here and the connection goes to the address checked, so a public
-   looking name that points at a private address (or changes between check and connect)
-   cannot reach anything internal. */
+/* Resolve once, reject any private/special-use DNS answers, then connect to the
+   exact address that was checked. This closes the DNS-rebinding gap. */
 async function rconResolve(host) {
   const h = String(host || '').trim().toLowerCase();
-  if (net.isIP(h)) return publicAddress(h) ? h : null;
+  if (net.isIP(h)) return isPublicAddress(h) ? h : null;
   try {
     const all = await lookup(h, { all: true });
-    if (!all.length || all.some((r) => !publicAddress(r.address))) return null;
+    if (!all.length || all.some((record) => !isPublicAddress(record.address))) return null;
     return all[0].address;
   } catch (error) {
     return null;
   }
 }
 
-/* Nothing on the private internet: that keeps this from being pointed at a local service. */
-function rconHostAllowed(host) {
-  const h = String(host || '').trim().toLowerCase();
-  if (!h || h.length > 200) return false;
-  if (h === 'localhost' || /\.local$/.test(h) || /\.internal$/.test(h)) return false;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-    const parts = h.split('.').map(Number);
-    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return false;
-    const a = parts[0], b = parts[1];
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    return true;
-  }
-  return /^[a-z0-9][a-z0-9.-]*$/.test(h);
-}
-
+/* The hostname itself is checked before DNS; every resulting address is checked above. */
 /* Discord has moved channel types from numbers to strings over the years and this bot
    refuses to guess from a name, so both spellings are read and anything else is 'other'. */
 function channelKind(channel) {
@@ -1530,7 +1510,7 @@ function rconConnect(options) {
           return;
         }
         if (packet.type === 0) {
-          answer += packet.body;
+          answer = (answer + packet.body).slice(0, 1200);
           /* Rust answers in one or more packets; a short silence means it is finished. */
           clearTimeout(idle);
           idle = setTimeout(function () {
@@ -1544,12 +1524,14 @@ function rconConnect(options) {
 
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
-  const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  const statusPaths = ['/', '/status', '/api/status'];
+  const healthPaths = new Set(['/health', '/healthz', '/api/health']);
   /* Every server the bot is in right now. The website asks this before it will set anything
      up: a server Spinback is not in cannot be configured, so the page says so plainly and
      offers the invite instead of pretending otherwise. */
   if (req.method === 'GET' && url === '/api/guilds') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     const guilds = [...client.guilds.cache.values()].map((g) => ({
       id: g.id,
       name: g.name,
@@ -1562,7 +1544,8 @@ createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url === '/api/guild') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
     res.writeHead(200, cors);
     res.end(JSON.stringify({ ready: true, guild: state.guildInfo }));
@@ -1585,7 +1568,8 @@ createServer(async (req, res) => {
   /* Ask a Rust server, over RCON, whether it is really there. The website never sends a
      password to a browser: it calls this with the connection it has stored. */
   if (req.method === 'POST' && url === '/api/rcon/test') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!rconAllowed()) {
       res.writeHead(429, cors);
       res.end(JSON.stringify({ ok: false, reason: 'rate-limited', detail: 'Six checks a minute is the limit. Try again shortly.' }));
@@ -1661,13 +1645,17 @@ createServer(async (req, res) => {
   }
 
   if (url === '/api/reconnect') {
-    const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
-    req.resume();
-    if (!TOKEN) { res.writeHead(503, cors); res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
-    if (state.gateway === 'online') { res.writeHead(200, cors); res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
-    await relogin('asked by a request');
-    res.writeHead(200, cors);
-    res.end(JSON.stringify({ ok: true, gateway: state.gateway, forcedLogins: forcedLogins }));
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'application/json', 'cache-control': 'no-store', allow: 'POST' });
+      res.end(JSON.stringify({ ok: false, reason: 'method-not-allowed' }));
+      return;
+    }
+    if (requireSettingsAuth(req, res)) return;
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    if (!TOKEN) { res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
+    if (state.gateway === 'online') { res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
+    await relogin('asked by an authenticated request');
+    res.end(JSON.stringify({ ok: true, gateway: state.gateway }));
     return;
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
@@ -1722,6 +1710,11 @@ createServer(async (req, res) => {
     });
     return;
   }
+  if (req.method === 'GET' && healthPaths.has(url)) {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, service: 'spinback-rce-bot' }));
+    return;
+  }
   if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
@@ -1739,28 +1732,13 @@ createServer(async (req, res) => {
       tag: state.tag,
       guilds: state.guilds,
       command: state.command,
-      port: PORT,
-      host: HOST,
-      tokenPresent: !!TOKEN,
-      tokenSource: TOKEN_INFO.source,
       oauthExchange: !!CLIENT_SECRET,
-      clientIdPresent: !!CLIENT_ID,
-      tokenShape: tokenShape,
-      tokenLength: TOKEN.length,
-      loginAttempts: loginAttempts,
-      lookedFor: TOKEN_NAMES,
-      siteUrl: SITE_URL,
       interactions: !!PUBLIC_KEY,
       guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerSource: OWNER_ID ? 'DISCORD_GUILD_OWNER_ID' : (state.guildInfo && state.guildInfo.ownerId ? 'the guild owner record' : null),
-      forcedLogins: forcedLogins,
-      gatewayDownSeconds: gatewayDownSince ? Math.round((Date.now() - gatewayDownSince) / 1000) : 0,
-      error: state.error,
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
-      /* Only what this process really knows, so the site never shows invented numbers. */
+      /* Only public service facts. Credentials, host details, owner ids and internal
+         exception text stay on the server and are never returned to anonymous visitors. */
       stats: { guilds: state.guilds, gateway: state.gateway },
-      guildInfo: state.guildInfo || null,
     }));
     return;
   }
