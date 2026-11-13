@@ -455,8 +455,26 @@ async function postLinkPanel(channelId) {
 }
 
 /* When a kit is given by picking a player first, the picked gamertag is remembered here for
-   the next screen. Held in memory only: a restart just means picking again. */
+   the next screen. Entries expire and the map is bounded so abandoned forms cannot accumulate. */
 const pendingGive = new Map();
+const PENDING_GIVE_TTL_MS = 10 * 60 * 1000;
+function rememberPendingGive(userId, gamertag) {
+  const now = Date.now();
+  pendingGive.forEach(function (entry, key) {
+    if (!entry || entry.expiresAt <= now) pendingGive.delete(key);
+  });
+  if (pendingGive.size >= 500 && !pendingGive.has(String(userId))) {
+    const oldest = pendingGive.keys().next().value;
+    if (oldest !== undefined) pendingGive.delete(oldest);
+  }
+  pendingGive.set(String(userId), { gamertag: String(gamertag || ''), expiresAt: now + PENDING_GIVE_TTL_MS });
+}
+function takePendingGive(userId) {
+  const key = String(userId);
+  const entry = pendingGive.get(key);
+  pendingGive.delete(key);
+  return entry && entry.expiresAt > Date.now() ? entry.gamertag : '';
+}
 
 function botCtx() {
   return {
@@ -540,9 +558,16 @@ async function routeInteraction(interaction) {
     if (typeof interaction.isRoleSelectMenu === 'function' && interaction.isRoleSelectMenu()) return await runSelect(interaction);
     return;
   } catch (error) {
-    const message = String((error && error.message) || error);
-    log('interaction failed:', message);
-    try { await interaction.reply({ content: 'That failed: ' + message.slice(0, 300), flags: 64 }); } catch (e) { /* already answered */ }
+    const reference = Date.now().toString(36);
+    const message = String((error && (error.stack || error.message)) || error);
+    log('interaction failed [' + reference + ']:', message.slice(0, 1200));
+    const body = { embeds: [panelEmbed(0xdc4c4c, 'That failed', 'The bot could not complete this action. Please try again. Reference: ' + reference)], flags: 64 };
+    try {
+      if (interaction.deferred || interaction.replied) {
+        delete body.flags;
+        await interaction.editReply(body);
+      } else await interaction.reply(body);
+    } catch (e) { /* already answered or expired */ }
   }
 }
 
@@ -560,7 +585,10 @@ async function runCommand(interaction) {
   const slow = name !== 'ping' && name !== 'help';
   if (slow) await interaction.deferReply({ flags: 64 }).catch(function () {});
   const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
-    return { embeds: [panelEmbed(0xdc4c4c, 'That did not work', String((error && error.message) || error).slice(0, 400))] };
+    const reference = Date.now().toString(36);
+    log('command failed [' + reference + ']:', String((error && (error.stack || error.message)) || error).slice(0, 1200));
+    return { embeds: [panelEmbed(0xdc4c4c, 'That did not work',
+      'The bot could not complete this action. Please try again. Reference: ' + reference)] };
   });
   if (payload && payload.postPanelTo) {
     const posted = await postLinkPanel(payload.postPanelTo);
@@ -606,7 +634,8 @@ async function runButton(interaction) {
       gone ? 'Your link is removed. Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
       components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
-  if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
+  const publicHelp = id === 'help:home' || id.indexOf('help:cmd:') === 0;
+  if (!publicHelp && !permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'user:config') return await answerPanel(interaction, userPanel(ctx));
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
@@ -713,7 +742,7 @@ async function runSelect(interaction) {
       : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] });
   }
   if (id === 'kits:give:pick') {
-    pendingGive.set(interaction.user.id, first);
+    rememberPendingGive(interaction.user.id, first);
     return await interaction.showModal(kitGiveModal());
   }
   log('unhandled select:', id);
@@ -797,8 +826,7 @@ async function runModal(interaction) {
         components: [panelRow([panelButton('user:transfer', 'Try again', 1), panelButton('user:config', 'Cancel', 2)])] });
   }
   if (id === 'modal:kitgive') {
-    const remembered = pendingGive.get(interaction.user.id) || '';
-    pendingGive.delete(interaction.user.id);
+    const remembered = takePendingGive(interaction.user.id);
     return await answerModal(interaction, await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, user: fields.give_user || null }));
   }
   if (id.indexOf('modal:refresh:') === 0) {
