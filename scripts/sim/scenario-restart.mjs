@@ -35,6 +35,8 @@ export async function run({ make, interact }) {
   expect("a staff role saved before the restart still works", text(last(it)).includes("Setup status"), text(last(it)).slice(0, 300));
   it = await go(make.command(ADMIN, "user", "roster", { search: "PlayerOne" }), "/user roster after a restart");
   expect("player links came back from the file", text(last(it)).includes("PlayerOne"), text(last(it)).slice(0, 300));
+  const persisted = fileNow();
+  expect("kit-code previews came back from the settings file", !!(persisted && persisted.installs && Object.keys(persisted.installs).length), text(persisted && persisted.installs));
   it = await go(make.command(ADMIN, "setup", "run"), "/setup run with volume storage");
   expect("no red 'not being saved' warning when a volume keeps the settings", !text(last(it)).includes("Settings are not being saved"), text(last(it)).slice(0, 300));
 
