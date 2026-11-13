@@ -697,7 +697,6 @@ function redirect(location, headers = {}) {
 const DEFAULT_STAFF_NAMES = ["astronomator"];
 const PERM_ADMINISTRATOR = 0x8n;
 const PERM_MANAGE_GUILD = 0x20n;
-
 function csv(value) {
   return String(value || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 }
@@ -1841,13 +1840,12 @@ async function dashboard(request, env) {
   /* The shell is served without a session on purpose: the session cannot always live in a
      cookie on this host. It carries no data of its own - every panel fetches, and every
      fetch is checked. */
-  if (!session) return html(CONSOLE_PAGE);
   /* Staff and the owner only. A signed-in non-staff account is told why. */
   if (session.level !== "owner" && session.level !== "staff") return await notStaff(session, env);
   /* The console is served from here rather than as a static file: Cloudflare hands an
      existing asset straight to the visitor without waking the Worker, so a file on disk
      would be readable by anybody even though every endpoint behind it is gated. */
-  return html(CONSOLE_PAGE);
+    return html('<p>This dashboard has been removed. Kit Studio is at /dashboard/kitbuilder.html</p>');
 
   /* Live numbers straight from the bot API (server-side, so no CORS involved). */
   let stats = null;
@@ -1994,25 +1992,8 @@ export default {
     }
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
-    /* The whole /dashboard/ tree is owner-only, not just its front page. */
-    if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) {
-      /* Free tools first - they live under this path but are not the control panel. */
-      if (PUBLIC_DASHBOARD_PAGES.has(url.pathname)) {
-        return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
-      }
-      if (!(await authReady(env))) return needsSetup(env, request);
-      const treeSession = await readSession(request, env);
-      /* Anyone signed in who is not staff gets the explanation page. Without a session the
-         page is still served: it holds no data, and the endpoints it calls do the checking. */
-      if (treeSession && treeSession.level !== "owner" && treeSession.level !== "staff") return await notStaff(treeSession, env);
-      if (url.pathname === "/dashboard") return dashboard(request, env);
-      return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname);
-    }
-    if (url.pathname === "/auth/login") return authLogin(request, env);
-    if (url.pathname === "/auth/callback") return authCallback(request, env);
-    if (url.pathname === "/auth/finish") return authFinish(request, env);
-    if (url.pathname === "/auth/logout") return authLogout(request);
-    if (url.pathname === "/auth/me") return authMe(request, env);
+    /* The dashboard is gone: /dashboard now sends you to the Kit Studio. */
+    if (url.pathname === "/dashboard") return Response.redirect(new URL("/dashboard/kitbuilder.html", url).toString(), 302); return Response.redirect(new URL("/dashboard/kitbuilder.html", url).toString(), 302);
 
     const assetResponse = await env.ASSETS.fetch(request);
     if (assetResponse.status !== 404) return withAssetHeaders(assetResponse, url.pathname);
