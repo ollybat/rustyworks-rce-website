@@ -93,7 +93,7 @@ function makeCtx(configured, big) {
       binds: configured ? many(big ? 30 : 2, (i) => ({ emote: "emote_" + i, kits: ["KIT_" + i, "STARTER"], cooldown: 300, roleId: i % 2 ? "222222222222222222" : null })) : [],
       locked: false, authSpawn: configured ? { VIP: "VIP_KIT" } : {},
       giveCommand: configured ? 'kit givetoplayer {kit} "{player}"' : "", listCommand: "",
-      giveCooldownSeconds: 30, installCodes: {},
+      giveCooldownSeconds: 30, installCodes: {}, known: configured ? ["STARTER", "PVP", "KIT_1"] : [],
     },
     installs: {},
     links: configured ? many(big ? 40 : 2, (i) => ({ userId: "4000000000000000" + String(i).padStart(2, "0"), gamertag: "Player" + i, by: "111111111111111111", at: Date.now() })) : [],
@@ -110,7 +110,10 @@ function makeCtx(configured, big) {
     saveServer: async () => ({ ok: true, detail: "" }), installKit: () => 1,
     addLink: () => ({ ok: true, userId: "400000000000000000", gamertag: "Player0" }), removeLink: () => ({ ok: true }),
     moveLink: () => ({ ok: true, userId: "400000000000000001", gamertag: "Player0" }), requestLink: () => ({ ok: true }),
-    setAuthSpawn: () => {}, clearCooldowns: () => 2, cooldownCount: () => (big ? 50 : 1),
+    setAuthSpawn: () => {},
+    setDelivery: async (delivery) => { Object.assign(settings.kits, delivery); return { ok: true }; },
+    setKnownKits: (names) => { settings.kits.known = names; return names.length; },
+    clearCooldowns: () => 2, cooldownCount: () => (big ? 50 : 1),
     cooldownList: () => many(big ? 50 : 1, (i) => "Player" + i + " -> KIT_" + i + " (120s left)"),
     reserveKitGive: (player, kit, seconds) => {
       const key = String(player).trim().toLowerCase() + "\u0000" + String(kit).trim().toLowerCase();
@@ -223,6 +226,22 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
     ...mod.LOG_TYPES.map((t) => ["channelMenu(" + t[0] + ")", () => mod.channelMenu(t[0], ctx)]),
     ["logTypeMenu", () => mod.logTypeMenu(ctx)],
     ["kitGivePanel", () => mod.kitGivePanel(ctx)],
+    ["deliveryModal", () => mod.deliveryModal(ctx.settings.kits)],
+    ["saveDelivery(valid)", () => mod.saveDelivery(ctx, {
+      kit_list: "kit list",
+      kit_give: 'kit givetoplayer {kit} "{player}"',
+      kit_give_cooldown: "45",
+    })],
+    ["saveDelivery(missing placeholders)", () => mod.saveDelivery(ctx, {
+      kit_list: "kit list",
+      kit_give: "kit give",
+      kit_give_cooldown: "30",
+    })],
+    ["saveDelivery(invalid cooldown)", () => mod.saveDelivery(ctx, {
+      kit_list: "kit list",
+      kit_give: 'kit givetoplayer {kit} "{player}"',
+      kit_give_cooldown: "86401",
+    })],
     ["setupPanel(not saving)", () => mod.setupPanel(Object.assign({}, ctx, { storeTokenSet: () => false }))],
     ["setupStatus(problems)", () => mod.setupStatus(Object.assign({}, ctx, { storeTokenSet: () => false, diagnostics: () => ({ ready: true,
       channels: { command: { id: "1", exists: false }, rcon: { id: "2", exists: true, canSend: false } },
@@ -246,6 +265,8 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
           try {
             const choices = mod.autocompleteChoices(ctx, cmd.name, sub.name, { name: o.name, value: typed }, { scope: "kit" });
             if (!Array.isArray(choices) || choices.length > 25) problems.push(where + ": more than 25 choices");
+            if (cmd.name === "kits" && sub.name === "give" && o.name === "kit" && typed === "st"
+              && !choices.some((choice) => choice.value === "STARTER")) problems.push(where + ": saved kit names are not suggested");
             for (const c of choices) if (!c.name || c.name.length > 100 || !String(c.value).length || String(c.value).length > 100) problems.push(where + ": a choice outside 1-100 characters");
           } catch (error) { problems.push(where + ": threw " + String((error && error.message) || error)); }
         }
