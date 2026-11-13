@@ -228,8 +228,10 @@ giveaways resolve Discord users to their confirmed Rust gamertag and never send 
 snowflake as a player name. Emote-bind and Auth Group respawn settings remain saved
 preferences only until a Rust game-event/plugin connector is connected.
 
-Kit Studio codes are validated and previewed as text. The bot does not execute pasted code
-or install items on the Rust server.
+Kit Studio codes are validated and previewed as text. The bot retains only a SHA-256
+fingerprint, the decoded length and up to 400 characters of preview text; the original
+Base64 code is not saved. The bot does not execute pasted code or install items on the Rust
+server.
 
 ## Configuration
 
