@@ -326,8 +326,22 @@ export async function run({ world, make, interact }) {
   expect("/kits doctor is honest about binds needing the game hook", text(last(it)).includes("Kit setup check"), text(last(it)).slice(0, 300));
   it = await go(make.command(ADMIN, "user", "pending"), "/user pending");
   expect("/user pending opens the waiting list", text(last(it)).includes("user:pending:approve") || text(last(it)).includes("Nobody is waiting") || text(last(it)).includes("aiting"), text(last(it)).slice(0, 300));
-  it = await go(make.command(PLAYER, "help", null, { command: "kits" }), "/help command:kits");
-  expect("/help can open one command's page straight away", text(last(it)).includes("Help: /kits"), text(last(it)).slice(0, 200));
+  /* 33. nothing needs typing: bare commands open forms and pickers */
+  it = await go(make.command(ADMIN, "user", "whois"), "/user whois (bare)");
+  expect("bare /user whois offers the look-up form", text(last(it)).includes("user:whois:go"), text((last(it) || {}).components));
+  it = await go(make.button(ADMIN, "user:whois:go"), "open the whois form");
+  expect("the whois form opens", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes("whois_tag"), text(it.calls));
+  it = await go(make.modal(ADMIN, "modal:whois", { whois_tag: "player3" }), "submit the whois form");
+  expect("the whois form finds the link", text(last(it)).includes("Player3") || text(last(it)).includes("Player30"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "user", "roster"), "/user roster (bare)");
+  expect("the roster has a Search button", text(last(it)).includes("user:roster:search"), text((last(it) || {}).components));
+  it = await go(make.modal(ADMIN, "modal:rostersearch", { roster_search: "player4" }), "search the roster");
+  expect("roster search from the form filters the list", text(last(it)).includes("matching") && text(last(it)).includes("Player4"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "server", "info"), "/server info (bare, one server)");
+  expect("with one server saved, /server asks it straight away", text(last(it)).includes("serverinfo") && text(last(it)).includes("Main"), text(last(it)).slice(0, 300));
+  it = await go(make.select(ADMIN, "string", "kits:give:pick", ["PlayerOne"]), "pick a player to give a kit");
+  expect("picking a player fills the give form with their gamertag", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes('"value":"PlayerOne"'), text(last(it)).slice(0, 400));
+  expect("every registered command takes no typed option", world.registered.every((c) => (c.options || []).every((o) => o.type === 1 && !(o.options || []).length)), text(world.registered.map((c) => c.name)));
 
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {

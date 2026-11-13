@@ -14,6 +14,7 @@
    Exits non-zero if anything fails. RCON goes to 203.0.113.10, a documentation address that
    never answers, so those checks fail on purpose and exercise the slow path. */
 import { createServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { mkdtempSync, readFileSync, rmSync, existsSync, statSync } from "node:fs";
@@ -79,6 +80,12 @@ const site = createServer(async (req, res) => {
 await new Promise((r) => site.listen(0, "127.0.0.1", r));
 const siteUrl = "http://127.0.0.1:" + site.address().port;
 
+/* The pretend Rust server: accepts RCON connections and never answers (see sim/net-sim.mjs). */
+const silentSockets = new Set();
+const silentRcon = createNetServer((socket) => { silentSockets.add(socket); socket.on("error", () => {}); socket.on("close", () => silentSockets.delete(socket)); });
+await new Promise((r) => silentRcon.listen(0, "127.0.0.1", r));
+const SIM_SILENT_RCON = "127.0.0.1:" + silentRcon.address().port;
+
 /* The bot keeps a copy of its settings in a file; the simulation gives it a fresh one. */
 const settingsDir = mkdtempSync(join(tmpdir(), "spinback-sim-"));
 const SETTINGS_FILE = join(settingsDir, "settings.json");
@@ -95,7 +102,11 @@ function runBot(extraEnv, scenario, { stopWith } = {}) {
       SITE_URL: siteUrl,
       SITE_ORIGIN: siteUrl,
       SETTINGS_RELOAD_MS: "2500",
+      /* 203.0.113.10 never answers on CI (locally it may refuse at once): keep each silent
+         RCON wait well above Discord's deferral point but short enough for the whole tour */
+      RCON_TIMEOUT_MS: "2500",
       SETTINGS_FILE,
+      SIM_SILENT_RCON,
       SIM_OWNER_ID: "100000000000000999",
       SIM_SCENARIO: join(repo, "scripts", "sim", scenario),
     }, extraEnv),
@@ -114,7 +125,7 @@ function runBot(extraEnv, scenario, { stopWith } = {}) {
       }
     });
     child.stderr.on("data", (chunk) => { output += chunk; });
-    const killer = setTimeout(() => { child.kill("SIGKILL"); }, 120000);
+    const killer = setTimeout(() => { child.kill("SIGKILL"); }, 300000);
     child.on("exit", (code, signal) => {
       clearTimeout(killer);
       resolve({ result, output, code, signal, stopMs: stopSentAt ? Date.now() - stopSentAt : null });
@@ -199,6 +210,8 @@ between.push(["the shutdown is quick (under 10 s)", second.stopMs !== null && se
 between.push(["the shutdown is logged", /shutting down \(SIGTERM\)/.test(second.output)]);
 between.push(["the shutdown waits for the press still running", /1 interaction\(s\) still running/.test(second.output) && second.stopMs > 500]);
 site.close();
+for (const socket of silentSockets) socket.destroy();
+silentRcon.close();
 rmSync(settingsDir, { recursive: true, force: true });
 
 for (const a of api) between.push(["HTTP API: " + a[0], a[1]]);

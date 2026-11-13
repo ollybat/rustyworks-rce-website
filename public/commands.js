@@ -85,7 +85,11 @@
     });
     if ($('statCommands')) $('statCommands').textContent = String(commands.length);
     if ($('statSubs')) $('statSubs').textContent = String(subs);
-    if ($('statOptions')) $('statOptions').textContent = String(options);
+    /* No command takes a typed option any more: every one opens a panel, a picker or a box.
+       That is worth saying plainly rather than printing a zero. */
+    var optionsStat = $('statOptions') ? $('statOptions').parentNode : null;
+    if (optionsStat && options === 0) optionsStat.innerHTML = '<strong>none</strong> nothing to type';
+    else if ($('statOptions')) $('statOptions').textContent = String(options);
     if ($('statStaff')) $('statStaff').textContent = String(staff);
     if ($('statSetup')) $('statSetup').textContent = String(setup);
   }

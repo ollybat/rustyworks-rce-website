@@ -6,5 +6,8 @@ export async function resolve(specifier, context, next) {
   if (specifier === "./network-guard.mjs" && context.parentURL && /\/bot\/server\.mjs$/.test(context.parentURL)) {
     return { url: new URL("./network-guard-sim.mjs", import.meta.url).href, shortCircuit: true };
   }
+  if (specifier === "node:net" && context.parentURL && /\/bot\/server\.mjs$/.test(context.parentURL)) {
+    return { url: new URL("./net-sim.mjs", import.meta.url).href, shortCircuit: true };
+  }
   return next(specifier, context);
 }

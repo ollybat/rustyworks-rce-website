@@ -179,6 +179,11 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
     ["logTypeMenu", () => mod.logTypeMenu(ctx)],
     ["kitGivePanel", () => mod.kitGivePanel(ctx)],
     ["deliveryModal", () => mod.deliveryModal(ctx.kits())],
+    ["kitGiveModal(several servers)", () => mod.kitGiveModal(Object.assign({}, ctx, { servers: () => [{ id: "a", name: "Main", host: "1.2.3.4", port: 1 }, { id: "b", name: "Second", host: "1.2.3.5", port: 2 }] }), "PlayerOne")],
+    ["serverChoice", () => mod.serverChoice(ctx, "server:pick:info", "Which server?", "Pick one.")],
+    ["serverSnapshot(several servers, none picked)", () => mod.serverSnapshot(Object.assign({}, ctx, { servers: () => [{ id: "a", name: "Main", host: "1.2.3.4", port: 1 }, { id: "b", name: "Second", host: "1.2.3.5", port: 2 }] }), "players", "")],
+    ["whoisModal", () => mod.whoisModal()],
+    ["rosterSearchModal", () => mod.rosterSearchModal()],
     ["saveDelivery(ok)", () => mod.saveDelivery(Object.assign({}, ctx, { setDelivery: () => ({ ok: true }) }), { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"' })],
     ["saveDelivery(no placeholders)", () => mod.saveDelivery(Object.assign({}, ctx, { setDelivery: () => ({ ok: true }) }), { kit_give: "kit give" })],
     ["setupPanel(not saving)", () => mod.setupPanel(Object.assign({}, ctx, { storeTokenSet: () => false }))],
@@ -213,6 +218,22 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
 }
 
 problems.push(...limits.problems);
+/* ---- 3b. every panel function the bot process calls is really imported ----
+   A missing import only fails when someone presses that button (the install-code form and
+   the kit-give form both crashed this way), so it is checked here, without running anything. */
+{
+  const server = readFileSync(join(repo, "bot", "server.mjs"), "utf8");
+  const imported = new Set(((/import \{([^}]*)\} from '\.\/commands\.mjs'/.exec(server) || [])[1] || "").split(",").map((x) => x.trim()).filter(Boolean));
+  const local = new Set([...server.matchAll(/^(?:async )?function (\w+)|^(?:const|let|var) (\w+)/gm)].map((m) => m[1] || m[2]));
+  for (const name of Object.keys(mod)) {
+    if (typeof mod[name] !== "function") continue;
+    checked += 1;
+    if (new RegExp("(?<![\\w.])" + name + "\\s*\\(").test(server) && !imported.has(name) && !local.has(name)) {
+      problems.push("bot/server.mjs calls " + name + "() from commands.mjs without importing it");
+    }
+  }
+}
+
 /* ---- 4. the website's commands reference lists exactly what the bot registers ---- */
 {
   const ref = JSON.parse(readFileSync(join(repo, "public", "data", "commands.json"), "utf8"));

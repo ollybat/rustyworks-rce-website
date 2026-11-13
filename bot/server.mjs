@@ -32,7 +32,7 @@ import {
   setupState, gatePayload, staffRoleNames, userPanel, linkPanelPayload, linkModal,
   forcelinkPicker, forcelinkModal, adviceOnGamertag, unlinkPicker, unlinkConfirm,
   transferPicker, transferModal, rosterPanel, pendingPanel, channelPickerForPanel,
-  kitGivePanel, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
+  kitGivePanel, kitGiveModal, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
   STAFF_SLOTS, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
@@ -40,7 +40,7 @@ import {
   channelSetupPanel, logChannelBuilder, logChannelPlan, logChannelBuilt, serverStepPanel,
   setupSuggest, suggestApplied, setupDoctor, setupImportPanel, setupImportModal, parseServerText,
   setupImportResult, setupExport, setupResetPanel, setupResetModal, setupResetDone,
-  kitCommandsPanel, kitsDoctor,
+  kitCommandsPanel, kitsDoctor, serverChoice, whoisModal, rosterSearchModal, whoisReply,
 } from './commands.mjs';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
@@ -1157,6 +1157,8 @@ async function runButton(interaction) {
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
   if (id === 'user:transfer') return await answerPanel(interaction, transferPicker(ctx));
   if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx, 1));
+  if (id === 'user:roster:search') return await interaction.showModal(rosterSearchModal());
+  if (id === 'user:whois:go') return await interaction.showModal(whoisModal());
   if (id.indexOf('user:roster:') === 0) {
     const parts = id.slice('user:roster:'.length).split(':');
     return await answerPanel(interaction, rosterPanel(ctx, Number(parts[0]), parts.slice(1).join(':')));
@@ -1191,7 +1193,7 @@ async function runButton(interaction) {
         components: [panelRow([panelButton('user:config', 'Back to links', 2)])] };
     })());
   }
-  if (id === 'kits:give') return await interaction.showModal(kitGiveModal());
+  if (id === 'kits:give') return await interaction.showModal(kitGiveModal(ctx, ''));
   if (id === 'kits:delivery') return await interaction.showModal(deliveryModal(settings.kits));
   if (id === 'kits:grab') return await answerPanel(interaction, grabKits(ctx) || grabKitsRun(ctx, ''));
   if (id === 'kits:add:code') return await interaction.showModal(kitAddModal());
@@ -1312,6 +1314,9 @@ async function runSelect(interaction) {
   const values = (interaction.values || []).map(String);
   const first = values[0] || '';
   if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first, ctx));
+  /* the server picker shown when several servers are saved */
+  if (id.indexOf('server:pick:') === 0) return await answerPanel(interaction, serverSnapshot(ctx, id.slice('server:pick:'.length), first));
+  if (id === 'kits:grab:pick') return await answerPanel(interaction, grabKitsRun(ctx, first));
   if (id === 'setup:channels:build:pick') {
     const keys = (interaction.values || []).filter(function (k) { return LOG_TYPES.some(function (t) { return t[0] === k; }); }).slice(0, 10);
     pendingBuild.set(interaction.user.id, keys);
@@ -1419,7 +1424,7 @@ async function runSelect(interaction) {
   }
   if (id === 'kits:give:pick') {
     rememberPendingGive(interaction.user.id, first);
-    return await interaction.showModal(kitGiveModal());
+    return await interaction.showModal(kitGiveModal(ctx, first));
   }
   log('unhandled select:', id);
   return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'That menu is from an older panel', 'Run the command again to get a fresh one.')] });
@@ -1509,7 +1514,7 @@ async function runModal(interaction) {
   if (id === 'modal:kitgive') {
     const remembered = takePendingGive(interaction.user.id);
     return await answerModal(interaction, (async function () {
-      const payload = await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, user: fields.give_user || null });
+      const payload = await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, server: fields.give_server || '' });
       if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Sent') {
         logLater('emoteKits', 'Kit given', payload.embeds[0].description.split('\n')[0] + ' Given by ' + who(ctx.actor) + '.');
       }
@@ -1527,6 +1532,8 @@ async function runModal(interaction) {
     return await answerModal(interaction, authSpawnNote(ctx, group, fields.spawn_kit));
   }
   if (id === 'modal:kitdelivery') return await answerModal(interaction, saveDelivery(ctx, fields));
+  if (id === 'modal:whois') return await answerModal(interaction, whoisReply(ctx, fields.whois_tag));
+  if (id === 'modal:rostersearch') return await answerModal(interaction, rosterPanel(ctx, 1, fields.roster_search));
   if (id === 'modal:import') {
     const parsed = parseServerText(fields.import_text);
     pendingImport.set(interaction.user.id, parsed);
@@ -1783,7 +1790,9 @@ const env = {
 
    Only a fixed list of harmless commands may be sent, only to public addresses, and
    only a few times a minute: this endpoint is not a port scanner and not a console. */
-const RCON_TIMEOUT_MS = 8000;
+/* How long a silent server is given (RCON_TIMEOUT_MS, 2 to 15 seconds, default 8). The
+   simulator shortens it so its never-answering test server does not dominate the run. */
+const RCON_TIMEOUT_MS = Math.min(15000, Math.max(2000, Number(process.env.RCON_TIMEOUT_MS) || 8000));
 const RCON_IDLE_MS = 450;
 const RCON_ALLOWED = ['serverinfo', 'playerlist', 'status', 'gettime'];
 let rconRecent = [];
