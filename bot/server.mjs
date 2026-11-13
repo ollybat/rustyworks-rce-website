@@ -2064,13 +2064,24 @@ createServer(async (req, res) => {
       return;
     }
     let raw = '';
+    let tooBig = false;
     req.on('data', function (chunk) {
+      if (tooBig) return;
       raw += chunk;
-      if (raw.length > 4096) { try { req.destroy(); } catch (error) { /* already gone */ } }
+      if (raw.length > 4096) tooBig = true;
     });
     req.on('end', async function () {
+      if (tooBig) {
+        res.writeHead(413, cors);
+        res.end(JSON.stringify({ ok: false, reason: 'payload-too-large' }));
+        return;
+      }
       let body = {};
-      try { body = JSON.parse(raw || '{}'); } catch (error) { body = {}; }
+      try { body = JSON.parse(raw || '{}'); } catch (error) {
+        res.writeHead(400, cors);
+        res.end(JSON.stringify({ ok: false, reason: 'invalid-json' }));
+        return;
+      }
       let answer;
       /* A saved server is tested by its id, so its password never has to leave this service
          and never reaches a browser. A brand new server can still be tried with the password
@@ -2149,22 +2160,32 @@ createServer(async (req, res) => {
     return;
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
+    if (requireSettingsAuth(req, res)) return;
     let body = '';
     let tooBig = false;
     req.on('data', (chunk) => {
+      if (tooBig) return;
       body += chunk;
-      if (body.length > 16384 && !tooBig) { tooBig = true; req.destroy(); }
+      if (body.length > 16384) tooBig = true;
     });
     req.on('end', async () => {
-      if (tooBig) return;
       const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+      if (tooBig) {
+        res.writeHead(413, cors);
+        res.end(JSON.stringify({ ok: false, error: 'payload_too_large' }));
+        return;
+      }
       if (!CLIENT_SECRET) {
         res.writeHead(503, cors);
         res.end(JSON.stringify({ ok: false, error: 'no_client_secret', message: 'this service has no DISCORD_CLIENT_SECRET set' }));
         return;
       }
       let parsed = {};
-      try { parsed = JSON.parse(body || '{}'); } catch (e) { parsed = {}; }
+      try { parsed = JSON.parse(body || '{}'); } catch (e) {
+        res.writeHead(400, cors);
+        res.end(JSON.stringify({ ok: false, error: 'invalid_json' }));
+        return;
+      }
       const code = String(parsed.code || '');
       const redirectUri = String(parsed.redirectUri || '');
       if (!code || !redirectUri) {
