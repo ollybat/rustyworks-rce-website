@@ -204,7 +204,7 @@ export async function run({ world, make, interact }) {
   /* 20. an install code teaches the bot its kit names */
   const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
   it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "install a kit code");
-  expect("the kit names in an install code are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  expect("the kit names in a kit-code preview are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
   expect("the bot is honest that a code preview is not a server install", text(last(it)).includes("not installed"), text(last(it)).slice(0, 400));
   await new Promise((resolve) => setTimeout(resolve, 50));
   w = await writes();
