@@ -175,8 +175,8 @@
               <tbody>
                 <tr>
                   <td><code>/setup run</code></td>
-                  <td>The guided panel. Step 1 staff roles (Owner, Co-Owner, Head Admin, Admin, Moderator and the linked role). Step 2 logging channels: pick one of the fifteen log types, then pick its channel. Step 3 your Rust server.</td>
-                  <td>Role-id values that are not ids are counted and reported, never stored silently.</td>
+                  <td>The guided panel. Step 1 staff roles (Owner, Co-Owner, Head Admin, Admin, Moderator) and the linked role, picked from Discord's own role menus. Step 2 logging channels: pick one of the fifteen log types, then pick its channel (clear it to switch that log off, or send a test message). Step 3 your Rust servers.</td>
+                  <td>No Developer Mode or copied ids. Each pick saves straight away.</td>
                 </tr>
                 <tr>
                   <td><code>/setup status</code></td>
@@ -185,12 +185,12 @@
                 </tr>
                 <tr>
                   <td><code>/setup edit</code></td>
-                  <td>Change a saved server's address, RCON port or password.</td>
-                  <td>The new details are tested before they replace the old ones.</td>
+                  <td>Pick a saved server and change its name, address, RCON port or password.</td>
+                  <td>Leave the password blank to keep the saved one. The new details are tested before they replace the old ones.</td>
                 </tr>
                 <tr>
-                  <td><code>/setup refresh</code></td>
-                  <td>Opens a fresh RCON connection to a saved server and reports exactly what it answers.</td>
+                  <td><code>/setup refresh</code> <code>server</code></td>
+                  <td>Opens a fresh RCON connection to one saved server, or to every saved server at once, and reports exactly what each answers.</td>
                   <td>Useful when the game server restarted and a cached connection went stale.</td>
                 </tr>
               </tbody>
@@ -214,14 +214,14 @@
             <table class="cmd-sub">
               <thead><tr><th>Subcommand</th><th>What it does</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>/kits grab</code></td><td>Reads the kit names from your Rust server and lists exactly what came back.</td><td>Runs your kit plugin's own list command; set it first.</td></tr>
+                <tr><td><code>/kits grab</code> <code>server</code></td><td>Reads the kit names from your Rust server and lists exactly what came back. The names it recognises are remembered and suggested as you type kit options.</td><td>Runs your kit plugin's own list command; set it first.</td></tr>
                 <tr><td><code>/kits config</code></td><td>The Emote Kits panel: add, edit or remove a bind (emote, up to three kits, cooldown in seconds, optional role), lock kits, and the emote guide.</td><td>Emote names are your server's wording; nothing is filled in for you.</td></tr>
-                <tr><td><code>/kits give</code></td><td>Hands a kit to a gamertag, or to a linked Discord user's gamertag.</td><td>Runs the give template you supply, using {player} and {kit}.</td></tr>
-                <tr><td><code>/kits refresh</code></td><td>Clears cooldowns for one user, one kit, every linked user, or every kit.</td><td>Reports the exact number of records cleared.</td></tr>
+                <tr><td><code>/kits give</code> <code>kit</code> <code>gamertag</code> or <code>user</code> <code>server</code></td><td>Hands a kit to a gamertag, or to a Discord user under their linked gamertag. Kit names, gamertags and servers are suggested as you type, and the server's answer is shown back.</td><td>Runs the give template you supply, using {player} and {kit}. Quotes and control characters typed into a name are dropped before anything is sent.</td></tr>
+                <tr><td><code>/kits refresh</code> <code>scope</code> <code>target</code></td><td>Clears cooldowns for one user, one kit, every linked user, or every kit.</td><td>Reports the exact number of records cleared.</td></tr>
                 <tr><td><code>/kits cooldowns</code></td><td>Shows the cooldown records the bot is holding right now.</td><td>Empty until the in-game hook reports a kit use back to the bot.</td></tr>
-                <tr><td><code>/kits auth-spawn</code></td><td>Gives an auth group (User, VIP, Moderator, Admin, Owner) a kit on every respawn.</td><td>One kit per group. Respawning is detected in game, so it needs the server-side hook too.</td></tr>
+                <tr><td><code>/kits auth-spawn</code> <code>group</code> <code>kit</code></td><td>Gives an auth group (User, VIP, Moderator, Admin, Owner) a kit on every respawn.</td><td>One kit per group. Respawning is detected in game, so it needs the server-side hook too.</td></tr>
                 <tr><td><code>/kits build</code></td><td>Points at Kit Studio on this website, where a kit is built slot by slot, and offers to install a code.</td><td>The site and the bot share the same 299-item catalogue.</td></tr>
-                <tr><td><code>/kits add</code></td><td>Installs a kit from a Base64 kit install code.</td><td>The code is checked to be real Base64 that decodes to text, then stored exactly as given.</td></tr>
+                <tr><td><code>/kits add</code> <code>code</code></td><td>Installs a kit from a Base64 kit install code.</td><td>The code is checked to be real Base64 that decodes to text, then stored exactly as given.</td></tr>
               </tbody>
             </table>
             <p><button type="button" class="cmd-copy" data-copy="/kits config" data-label="Copy /kits">Copy /kits</button></p>
@@ -243,11 +243,11 @@
             <table class="cmd-sub">
               <thead><tr><th>Subcommand</th><th>What it does</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>/user forcelink</code></td><td>Link a Discord account to a gamertag yourself, with panels rather than typed ids.</td><td>If the gamertag is already on record the panel offers Transfer instead of overwriting.</td></tr>
-                <tr><td><code>/user forceunlink</code></td><td>Remove a player's link, after a confirmation that names the player.</td><td>The confirmation says what stops matching.</td></tr>
-                <tr><td><code>/user transfer</code></td><td>Move a link to a new Discord account, a new gamertag, or both at once.</td><td>The new Discord account must not already be linked, and a new gamertag must be free. Both clashes are reported, not forced through.</td></tr>
+                <tr><td><code>/user forcelink</code> <code>user</code> <code>gamertag</code></td><td>Link a Discord account to a gamertag yourself: fill both options to link straight away, or leave them blank for the menus.</td><td>If the gamertag is already on record you are offered Transfer instead of an overwrite. The linked role is given.</td></tr>
+                <tr><td><code>/user forceunlink</code> <code>gamertag</code></td><td>Remove a player's link, after a confirmation that names the player. Linked gamertags are suggested as you type.</td><td>The linked role is taken away.</td></tr>
+                <tr><td><code>/user transfer</code> <code>gamertag</code> <code>to_user</code> <code>to_gamertag</code></td><td>Move a link to a new Discord account, a new gamertag, or both at once - from the options or from the menus.</td><td>The new Discord account must not already be linked, and a new gamertag must be free. Both clashes are reported, not forced through.</td></tr>
                 <tr><td><code>/user linkpanel</code></td><td>Post a panel with <strong>Link account</strong> and <strong>Unlink</strong> buttons into a channel.</td><td>Member-facing: those two buttons work for anyone in the server, not just staff.</td></tr>
-                <tr><td><code>/user roster</code></td><td>Every linked player, newest last, with the account that linked them.</td><td>Plus a waiting list of requests that have not been confirmed.</td></tr>
+                <tr><td><code>/user roster</code></td><td>Every linked player, numbered, 30 to a page, with the account that linked them.</td><td>The <strong>Waiting list</strong> in <code>/user</code> holds requests from the link panel: approve or reject each one in a single click.</td></tr>
               </tbody>
             </table>
             <p><button type="button" class="cmd-copy" data-copy="/user roster" data-label="Copy /user">Copy /user</button></p>
@@ -278,7 +278,7 @@
             <div class="cmd-note">
               <h3>The roles you save are the staff roles</h3>
               <ul>
-                <li>Step 1 saves Owner, Co-Owner, Head Admin, Admin, Moderator and the linked role.</li>
+                <li>Step 1 saves Owner, Co-Owner, Head Admin, Admin and Moderator as staff roles, plus the linked role, which is <em>not</em> a staff role: the bot gives it to confirmed players and takes it away when they are unlinked.</li>
                 <li>Those roles, plus Administrator, Manage Server and the server owner, are the people who may run anything that configures or edits.</li>
                 <li>Until one is saved, only Administrator, Manage Server and the owner can run anything, so a server cannot lock itself out.</li>
                 <li>The bot enforces this on every use, not just in the command list, so a role removed in Discord stops working immediately.</li>
@@ -288,7 +288,7 @@
               <h3>Why a link is not taken on trust</h3>
               <ul>
                 <li>A request from the link panel is a request, and it says clearly that it is waiting.</li>
-                <li>Staff confirm it with <code>/user forcelink</code>, or your server's own in-game verification does it.</li>
+                <li>Staff approve it from the Waiting list in <code>/user</code> (one click), or link someone themselves with <code>/user forcelink</code>.</li>
                 <li>One gamertag belongs to one Discord account. The clash is reported with the account already holding it.</li>
                 <li>Unconfirmed requests never drive kits, auth groups or the roster.</li>
               </ul>

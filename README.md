@@ -68,6 +68,13 @@ refuse the whole list), then runs every command and subcommand against a pretend
 and after setup and with lots of saved data, and checks each reply, panel and form against
 Discord's size limits.
 
+`node scripts/simulate-bot.mjs` runs the real `bot/server.mjs` against a stand-in for
+discord.js (`scripts/sim/`) and a pretend website, and drives every command, button, menu,
+form and suggestion through it: typed form values must reach the bot, every interaction must
+be answered inside Discord's three seconds even when a save or an RCON check is slow, no
+handler may reply twice, settings must really be saved, and the linked role and the log
+channels must really be used. No Discord, token or `npm install` needed.
+
 ## Stylesheet map
 
 `public/style.css` is the whole site's stylesheet, in this order:
