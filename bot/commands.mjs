@@ -175,6 +175,12 @@ export async function pingReply(ctx) {
     field("Website", site.ok ? "answering, " + ms(site.ms) + (site.body && site.body.app ? "\napp: " + code(site.body.app) : "") : "no answer after " + ms(site.ms) + (site.error ? "\n" + site.error.slice(0, 90) : ""), true),
     field("Settings store", ctx.storeTokenSet() ? "the website accepts saves from this bot" : "not configured yet (BOT_SETTINGS_TOKEN)", true),
     field("Servers linked", code(String(ctx.servers().length)), true),
+    field("Last server check", (function () {
+      var check = ctx.lastServerCheck && ctx.lastServerCheck();
+      if (!check) return "not checked since the bot started";
+      return (check.ok ? "answered" : "did not answer") + ": " + code(String(check.host || "unknown") + ":" + String(check.port || 0))
+        + (check.ms == null ? "" : " in " + ms(check.ms)) + " • " + when();
+    })(), false),
     field("How the check works", "one harmless command (serverinfo) over RCON, and whatever the server answers is what you see", false),
   ];
   built.footer = { text: "Site: " + ctx.siteUrl + " | checked at " + when() };
@@ -190,7 +196,9 @@ export function setupPanel(ctx) {
   var servers = ctx.servers();
   var built = embed(0xfaa81a, "Spinback RCE setup",
     "Three steps: roles, logging channels, then your Rust server. The RCON connection is tested before anything is saved, so a wrong port or password never lands in your settings.");
+  var completeSteps = (setRoles.length ? 1 : 0) + (setChannels.length ? 1 : 0) + (servers.length ? 1 : 0);
   built.fields = [
+    field("Setup progress", completeSteps + " of 3 steps complete", true),
     field("Step 1 - Staff roles", setRoles.length ? setRoles.map(function (s) { return s[1] + ": <@&" + roles[s[0]] + ">"; }).join("\n") : "none saved yet", false),
     field("Step 2 - Logging channels", setChannels.length ? setChannels.length + " of " + LOG_TYPES.length + " log types have a channel" : "none saved yet", false),
     field("Step 3 - Rust servers", servers.length ? servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port); }).join("\n") : "none linked yet", false),
@@ -485,10 +493,13 @@ export function setupStatus(ctx) {
   if (!kits.giveCommand) next.push("Set a give template using {player} and {kit}, then **/kits give** can send manual giveaways over RCON.");
   if (Object.keys(kits.authSpawn || {}).length || (kits.binds || []).length) next.push("Emote-bind and Auth Group entries are saved preferences only until a Rust game-event/plugin connector is connected.");
   if (!ctx.storeTokenSet()) next.push("Set BOT_SETTINGS_TOKEN to the same value on the website and the bot, otherwise saves stay in this bot memory only.");
-  var built = embed(next.length ? 0xfaa81a : 0x3ba55d, "Setup status",
+  var diagnostics = ctx.diagnostics && ctx.diagnostics();
+  var problems = diagnostics && Array.isArray(diagnostics.problems) ? diagnostics.problems : [];
+  var built = embed(next.length || problems.length ? 0xfaa81a : 0x3ba55d, "Setup status",
     next.length ? "What is saved right now is below, then what is still missing, in the order worth doing it." : "Everything the bot can check is in place.");
   built.fields = checks.map(function (c) { return field(c[0], c[1], true); });
   if (next.length) built.fields.push(field("What is missing", next.slice(0, 6).map(function (n) { return "- " + n; }).join("\n"), false));
+  if (problems.length) built.fields.push(field("Problems found just now", problems.slice(0, 8).map(function (p) { return "- " + p; }).join("\n").slice(0, 1000), false));
   built.footer = { text: "Read-only: nothing on this panel changes your settings" };
   return { embeds: [built], components: [row([button("setup:roles", "Roles", 1), button("setup:channels", "Log channels", 1), button("setup:server", "Rust server", 1)])], flags: EPH };
 }
