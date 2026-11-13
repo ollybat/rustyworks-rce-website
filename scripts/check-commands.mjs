@@ -113,7 +113,7 @@ function makeCtx(configured, big) {
     setAuthSpawn: () => {}, clearCooldowns: () => 2, cooldownCount: () => (big ? 50 : 1),
     cooldownList: () => many(big ? 50 : 1, (i) => "Player" + i + " -> KIT_" + i + " (120s left)"),
     reserveKitGive: (player, kit, seconds) => {
-      const key = String(player).trim().toLowerCase() + "\\u0000" + String(kit).trim().toLowerCase();
+      const key = String(player).trim().toLowerCase() + "\u0000" + String(kit).trim().toLowerCase();
       const now = Date.now();
       const until = Number(fakeCooldowns.get(key) || 0);
       if (until > now) return { ok: false, key, remainingSeconds: Math.ceil((until - now) / 1000), inProgress: false };
