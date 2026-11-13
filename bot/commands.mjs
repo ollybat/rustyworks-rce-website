@@ -1447,15 +1447,22 @@ export function grabKits(ctx) {
   return null;
 }
 export async function grabKitsRun(ctx) {
-  var server = ctx.servers()[0];
-  if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
-  var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: ctx.kits().listCommand });
-  var lines = String((answer && answer.answer) || "").split("\n").filter(Boolean);
+  var listCommand = String(ctx.kits().listCommand || "").replace(/[\r\n]+/g, " ").trim();
+  if (!listCommand) return grabKits(ctx);
+  var server = (ctx.servers() || [])[0];
+  if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup server.")], flags: EPH };
+  var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: listCommand });
+  var lines = String((answer && answer.answer) || "").split("\n").map(function (line) { return line.trim(); }).filter(Boolean);
+  var known = lines.filter(function (line) { return line.length <= 60 && /^[\p{L}\p{N}_ .-]+$/u.test(line); }).slice(0, 100);
+  if (answer && answer.ok && known.length && ctx.setKnownKits) ctx.setKnownKits(known);
   var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c,
     answer && answer.ok ? "Kits the server reported" : "The server did not answer",
     answer && answer.ok ? (lines.length ? block(lines.slice(0, 40).join("\n").slice(0, 1500)) : "It answered with nothing.") : String((answer && answer.detail) || "no answer"));
+  if (answer && answer.ok && known.length) built.fields = [field("Kit names learned for autocomplete", known.slice(0, 30).map(code).join(", ").slice(0, 1000), false)];
   return { embeds: [built], flags: EPH };
 }
+
+
 export function kitStudioPanel(ctx) {
   return { embeds: [embed(0x5865f2, "Kit Studio",
     "Build a kit slot by slot on the website, then bring it back here as an install code. The site and this bot share the same 299-item catalogue, so a kit made there is the same kit here.")],
@@ -1464,24 +1471,45 @@ export function kitStudioPanel(ctx) {
 export function installKit(ctx, rawCode) {
   var raw = String(rawCode || "").trim();
   if (!raw) return { embeds: [embed(0xdc4c4c, "No code given", "Paste the Base64 install code from Kit Studio.")], flags: EPH };
+  if (raw.length > 16000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(raw) || raw.length % 4 === 1) {
+    return { embeds: [embed(0xdc4c4c, "That code is not valid", "Paste a Base64 text code no longer than 16,000 characters. Nothing was stored.")], flags: EPH };
+  }
   var text = null;
   try { text = Buffer.from(raw, "base64").toString("utf8"); } catch (error) { text = null; }
-  var ok = !!text && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
-  if (!ok) return { embeds: [embed(0xdc4c4c, "That does not decode", "The value is not valid Base64, or it does not decode to readable text. Nothing was stored.")], flags: EPH };
+  var canonical = text && Buffer.from(text, "utf8").toString("base64").replace(/=+$/, "") === raw.replace(/=+$/, "");
+  var ok = !!canonical && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
+  if (!ok) return { embeds: [embed(0xdc4c4c, "That code does not decode", "The value must be valid Base64 that decodes to readable text. Nothing was stored.")], flags: EPH };
+  var found = [];
+  var seen = new Set();
+  text.split(/\r?\n/).forEach(function (line) {
+    var match = /^\s*kit\s+add\s+(?:"([^"]{1,60})"|'([^']{1,60})'|([^\s]{1,60}))/i.exec(line);
+    if (!match) return;
+    var name = String(match[1] || match[2] || match[3] || "").trim();
+    var key = name.toLowerCase();
+    if (!name || seen.has(key) || !/^[\p{L}\p{N}_ .-]+$/u.test(name)) return;
+    seen.add(key);
+    found.push(name);
+  });
+  found = found.slice(0, 100);
   var count = ctx.installKit(raw, text);
-  var built = embed(0x3ba55d, "Install code accepted",
-    "Stored exactly as given, keyed by a hash of the code so two different codes cannot overwrite each other. Sending it to your server needs your own install command, set in the kit settings.");
+  if (found.length && ctx.setKnownKits) ctx.setKnownKits(found);
+  var built = embed(0xfaa81a, "Code preview saved - not installed",
+    "The bot saved a hash and short preview of this code. It does not execute pasted commands or install items on the Rust server. Recognised names below are suggestions only.");
   built.fields = [
+    field("Kit names found", found.length ? found.slice(0, 20).map(code).join(", ") : "No kit add declarations were recognised", false),
     field("Decoded length", text.length + " characters", true),
-    field("Codes stored", String(count), true),
-    field("First line", code(text.split("\n")[0].slice(0, 150)), false),
+    field("Code previews stored", String(count), true),
   ];
   return { embeds: [built], flags: EPH };
 }
+
+
 export function authSpawnNote(ctx, group, kit) {
   ctx.setAuthSpawn(group, kit);
-  return { embeds: [embed(kit ? 0x3ba55d : 0xfaa81a, kit ? "Respawn kit set" : "Respawn kit cleared",
-    kit ? "**" + group + "** will be given " + code(kit) + " on respawn." : "**" + group + "** no longer receives a kit on respawn.")], flags: EPH };
+  return { embeds: [embed(kit ? 0xfaa81a : 0x3ba55d, kit ? "Respawn preference saved - not active" : "Respawn preference cleared",
+    kit
+      ? "**" + group + "** is saved with preference " + code(kit) + ". Automatic respawn delivery needs a Rust game-event/plugin connector, which is not connected yet."
+      : "**" + group + "** no longer has a saved respawn-kit preference.")], flags: EPH };
 }
 export function refreshCooldowns(ctx, scope, target) {
   var cleared = ctx.clearCooldowns(scope, target);
@@ -1489,21 +1517,51 @@ export function refreshCooldowns(ctx, scope, target) {
   return { embeds: [embed(0x3ba55d, "Cooldowns cleared", "Cleared **" + cleared + "** record" + (cleared === 1 ? "" : "s") + " for " + what + ".")], flags: EPH };
 }
 export async function giveKit(ctx, opts) {
-  var command = String(ctx.kits().giveCommand || "").trim();
-  var target = opts.gamertag || opts.user || "";
-  if (!command) {
-    return { embeds: [embed(0xfaa81a, "Delivery needs one more setting",
-      "To hand a kit over in game the bot must send your server own give command over RCON, and it will not guess what that is called.\n\nSet a template in the kit settings using {player} and {kit}, and this command runs exactly that.")], flags: EPH };
+  opts = opts || {};
+  var kits = ctx.kits();
+  if (kits.locked) return { embeds: [embed(0xfaa81a, "Kit delivery is paused",
+    "A staff member paused manual kit delivery. Open **/kits config** and resume it before sending another kit.")], flags: EPH };
+  var command = String(kits.giveCommand || "").replace(/[\r\n]+/g, " ").trim();
+  var kit = String(opts.kit || "").replace(/[\r\n]+/g, " ").trim().slice(0, 60);
+  if (!kit) return { embeds: [embed(0xdc4c4c, "Which kit?", "Enter the exact kit name you want to give.")], flags: EPH };
+  var userValue = opts.user && typeof opts.user === "object" ? (opts.user.id || opts.user.value || "") : opts.user;
+  var userId = String(userValue || "").trim();
+  var linked = userId ? (ctx.links() || []).find(function (entry) { return String(entry.userId) === userId; }) : null;
+  if (userId && !linked) return { embeds: [embed(0xfaa81a, "That Discord account is not linked",
+    "Link the Discord account to its Rust gamertag first. The bot will never send a Discord id to the Rust server.")], flags: EPH };
+  var target = String(opts.gamertag || (linked && linked.gamertag) || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40);
+  if (!target) return { embeds: [embed(0xdc4c4c, "Who should get it?", "Enter a gamertag or choose a Discord account that already has a confirmed link.")], flags: EPH };
+  if (/[\u0000-\u001f;'"\\]/.test(target) || /[\u0000-\u001f;'"\\]/.test(kit)) {
+    return { embeds: [embed(0xdc4c4c, "That name cannot be sent safely",
+      "The gamertag or kit name contains a command separator, quote, backslash or control character. Remove those characters and try again.")], flags: EPH };
   }
-  if (!target) return { embeds: [embed(0xdc4c4c, "Who should get it?", "Name a gamertag, or a Discord user whose gamertag is linked.")], flags: EPH };
-  var server = ctx.servers()[0];
-  if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
-  var final = command.split("{player}").join(target).split("{kit}").join(opts.kit);
-  var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: final });
+  if (!command || !command.includes("{player}") || !command.includes("{kit}")) {
+    return { embeds: [embed(0xfaa81a, "Delivery needs one more setting",
+      "Set a give template in **/kits commands** containing both {player} and {kit}. The bot will not guess the plugin's command syntax.")], flags: EPH };
+  }
+  var server = (ctx.servers() || [])[0];
+  if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link and test a Rust server in **/setup server** first.")], flags: EPH };
+  var cooldownSeconds = Math.max(0, Math.min(86400, Number(kits.giveCooldownSeconds == null ? 30 : kits.giveCooldownSeconds) || 0));
+  var reservation = ctx.reserveKitGive ? ctx.reserveKitGive(target, kit, cooldownSeconds) : { ok: true, key: null, cooldownSeconds: 0 };
+  if (!reservation.ok) return { embeds: [embed(0xfaa81a, reservation.inProgress ? "That giveaway is already running" : "Giveaway cooldown",
+    reservation.inProgress
+      ? "A giveaway for " + code(target) + " and " + code(kit) + " is already in progress. Wait for its result."
+      : "Wait **" + reservation.remainingSeconds + " seconds** before giving " + code(kit) + " to " + code(target) + " again.")], flags: EPH };
+  var final = command.split("{player}").join(target).split("{kit}").join(kit).slice(0, 300);
+  var answer = null;
+  try {
+    answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: final });
+  } finally {
+    if (ctx.finishKitGive) ctx.finishKitGive(reservation, !!(answer && answer.ok));
+  }
   var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c, answer && answer.ok ? "Sent" : "The server refused it",
-    "Command: " + code(final) + "\n" + (answer && answer.answer ? "It said: " + answer.answer.slice(0, 400) : String((answer && answer.detail) || "no answer")));
+    "Player: " + code(target) + "\nKit: " + code(kit) + "\nCommand: " + code(final) + "\n"
+    + (answer && answer.answer ? answer.answer.slice(0, 400) : String((answer && answer.detail) || "no answer"))
+    + (answer && answer.ok && cooldownSeconds > 0 ? "\n\nA " + cooldownSeconds + "s per-player + kit cooldown is now active." : ""));
   return { embeds: [built], flags: EPH };
 }
+
+
 export function permissionNote(ctx) {
   var names = ctx ? staffRoleNames(ctx) : null;
   return embed(0xdc4c4c, "Not allowed",
@@ -1528,9 +1586,20 @@ export function customId(interaction) {
 }
 export function modalFields(interaction) {
   var out = {};
-  (((interaction.data || {}).components) || []).forEach(function (r) {
-    ((r.components) || []).forEach(function (c) { if (c && c.custom_id) out[c.custom_id] = c.value; });
+  var rows = interaction.components || ((interaction.data || {}).components) || [];
+  rows.forEach(function (row) {
+    (row.components || []).forEach(function (component) {
+      var id = component && (component.customId || component.custom_id);
+      if (id) out[id] = component.value == null ? "" : component.value;
+    });
   });
+  var collection = interaction.fields && interaction.fields.fields;
+  if (collection && typeof collection.values === "function") {
+    for (var fieldValue of collection.values()) {
+      var key = fieldValue && (fieldValue.customId || fieldValue.custom_id);
+      if (key && out[key] === undefined) out[key] = fieldValue.value == null ? "" : fieldValue.value;
+    }
+  }
   return out;
 }
 export function kitGivePanel(ctx) {
