@@ -411,6 +411,9 @@ async function statusHistory(request, env) {
 /* ---------- the bot API proxy ---------- */
 
 async function proxyApi(request, env, ctx) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return json({ error: 'method_not_allowed' }, 405);
+  }
   const requestUrl = new URL(request.url);
   const watching = requestUrl.pathname === "/api/status";
   const started = Date.now();
@@ -828,21 +831,16 @@ async function authCallback(request, env) {
   const expectedState = cookies(request).spinback_oauth_state;
 
   if (url.searchParams.get("error")) return html("<p>Discord refused the sign-in. <a href=\"/dashboard\">Try again</a>.</p>", 400);
-  /* The nonce guards against login CSRF, and the usual way of checking it - a cookie that
-     has to survive a trip to discord.com and back - breaks for real people: a phone that
-     signs in through Discord's QR code, a second tab, or any browser that blocks cross-site
-     cookies. When that happened the site refused its own sign-in and sent the person back
-     to Discord, which looked like an endless loop. So a miss is recorded and the sign-in
-     carries on: a forged nonce could at worst sign somebody in as whoever sent them the
-     link, which gains nothing on a page that only reports your own access. */
+  /* The signed nonce travels in Discord's redirect URL, so it can be verified even
+     when the browser drops cross-site cookies. Never accept an unverified callback. */
   const signedState = await verifySigned(env, state);
-  const cookieMatches = Boolean(expectedState) && sameString(String(state), String(expectedState));
   if (!code) {
     await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "no code came back from Discord" });
     return html("<p>Discord did not send a sign-in code back. <a href=\"/dashboard\">Start again</a>.</p>", 400);
   }
-  if (!signedState && !cookieMatches) {
-    await appendLog(env, { kind: "sign_in_state_miss", by: { id: "callback", name: "oauth callback" }, detail: "nonce not proven (state cookie " + (expectedState ? "present" : "absent") + "); carried on" });
+  if (!signedState) {
+    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "state verification failed; sign-in stopped" });
+    return html("<p>That sign-in could not be verified. Please <a href=\"/auth/login\">start again</a>.</p>", 400);
   }
 
   const redirectUri = url.origin + "/auth/callback";
@@ -1338,7 +1336,12 @@ async function botJson(env, path) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
-    const response = await fetch(base + path, { headers: { accept: "application/json" }, signal: controller.signal });
+    const headers = { accept: "application/json" };
+    /* The bot only releases guild metadata to this trusted Worker. The shared token
+       stays in Worker secrets and is never sent to a browser. */
+    const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+    if (settingsToken) headers["x-settings-token"] = settingsToken;
+    const response = await fetch(base + path, { headers: headers, signal: controller.signal });
     clearTimeout(timer);
     if (!response.ok) return null;
     return await response.json();
