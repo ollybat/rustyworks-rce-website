@@ -736,9 +736,59 @@ export function kitsPanel(ctx) {
   built.footer = { text: "Manual giveaways use RCON; automated in-game events need a Rust plugin feed" };
   return { embeds: [built], components: [
     row([button("kits:add", "Add a bind", 1), button("kits:edit", "Edit a bind", 2), button("kits:remove", "Remove a bind", 2)]),
-    row([button("kits:lock", ctx.kits().locked ? "Unlock kits" : "Lock kits", 2), button("kits:guide", "Emote guide", 2), button("kits:refresh", "Cooldowns", 2)]),
+    row([button("kits:lock", ctx.kits().locked ? "Resume kit delivery" : "Pause kit delivery", 2), button("kits:guide", "Emote guide", 2), button("kits:refresh", "Cooldowns", 2)]),
+    row([button("kits:delivery", "Delivery settings", 1), button("kits:grab", "Read kit names", 2), button("kits:give", "Give a kit", 1)]),
+    row([button("kits:studio", "Open Kit Studio", 5), button("kits:add:code", "Preview a code", 2)]),
   ], flags: EPH };
 }
+export function deliveryModal(kits) {
+  var saved = kits || {};
+  return {
+    title: "Rust kit delivery settings",
+    custom_id: "modal:kitdelivery",
+    components: [
+      row([input("kit_list", "Your Rust plugin list command (optional)", saved.listCommand || "", false)]),
+      row([input("kit_give", "Give template with {player} + {kit}", saved.giveCommand || "", false)]),
+      row([input("kit_give_cooldown", "Give cooldown seconds (0 disables)", String(saved.giveCooldownSeconds == null ? 30 : saved.giveCooldownSeconds), true)]),
+    ],
+  };
+}
+
+export async function saveDelivery(ctx, data) {
+  var list = String(data.kit_list || "").replace(/[\r\n]+/g, " ").trim();
+  var give = String(data.kit_give || "").replace(/[\r\n]+/g, " ").trim();
+  var cooldownText = String(data.kit_give_cooldown == null ? "30" : data.kit_give_cooldown).trim();
+  var cooldown = cooldownText === "" ? 30 : Number(cooldownText);
+  var problems = [];
+  if (list.length > 120) problems.push("The list command must be 120 characters or fewer.");
+  if (give.length > 200) problems.push("The give template must be 200 characters or fewer.");
+  if (give && (!give.includes("{player}") || !give.includes("{kit}"))) {
+    problems.push("A give template must contain both {player} and {kit}. Leave it blank to switch manual giveaways off.");
+  }
+  if (!Number.isInteger(cooldown) || cooldown < 0 || cooldown > 86400) {
+    problems.push("The cooldown must be a whole number from 0 to 86400 seconds.");
+  }
+  if (problems.length) {
+    return { embeds: [embed(0xdc4c4c, "Delivery settings not saved", problems.map(function (p) { return "• " + p; }).join("\n"))], flags: EPH };
+  }
+
+  var saved = await ctx.setDelivery({
+    listCommand: list,
+    giveCommand: give,
+    giveCooldownSeconds: cooldown,
+  });
+  var example = give
+    ? give.split("{player}").join("PlayerOne").split("{kit}").join("STARTER")
+    : "manual giveaways are disabled until a template is added";
+  var result = embed(saved && saved.ok === false ? 0xfaa81a : 0x3ba55d,
+    saved && saved.ok === false ? "Delivery settings kept in bot memory" : "Delivery settings saved",
+    (list ? "Kit list command: " + code(list) : "Kit list command: not set") +
+    "\n" + (give ? "Give example: " + code(example) : "Give template: not set") +
+    "\nManual giveaway cooldown: " + cooldown + "s per player + kit" +
+    (saved && saved.ok === false ? "\n\nWebsite sync failed: " + String(saved.detail || "unknown error") : ""));
+  return { embeds: [result], components: [row([button("kits:config", "Back to Emote Kits", 2), button("kits:give", "Give a kit", 1)])], flags: EPH };
+}
+
 export function bindModal(existing) {
   var e = existing || {};
   var kits = e.kits || [];
@@ -783,13 +833,18 @@ export function grabKits(ctx) {
   return null;
 }
 export async function grabKitsRun(ctx, serverName) {
+  var listCommand = String(ctx.kits().listCommand || "").trim();
+  if (!listCommand) return grabKits(ctx);
   var server = ctx.servers().filter(function (entry) { return !serverName || entry.name === serverName; })[0] || ctx.servers()[0];
   if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
-  var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: ctx.kits().listCommand });
-  var lines = String((answer && answer.answer) || "").split("\n").filter(Boolean);
+  var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: listCommand });
+  var lines = String((answer && answer.answer) || "").split("\n").map(function (line) { return line.trim(); }).filter(Boolean);
+  var known = lines.filter(function (line) { return line.length <= 60 && /^[\p{L}\p{N}_ .-]+$/u.test(line); }).slice(0, 100);
+  if (answer && answer.ok && known.length && ctx.setKnownKits) ctx.setKnownKits(known);
   var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c,
     answer && answer.ok ? "Kits the server reported" : "The server did not answer",
     answer && answer.ok ? (lines.length ? block(lines.slice(0, 40).join("\n").slice(0, 1500)) : "It answered with nothing.") : String((answer && answer.detail) || "no answer"));
+  if (answer && answer.ok && known.length) built.fields = [field("Names learned for autocomplete", known.slice(0, 25).map(code).join(", "), false)];
   return { embeds: [built], flags: EPH };
 }
 export function kitStudioPanel(ctx) {
