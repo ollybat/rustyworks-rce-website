@@ -84,6 +84,15 @@ their own time, and an icon on each button. Log posts name their log type in the
 players are embeds, and the bot's status line shows how many servers and linked players it
 looks after. `check-commands.mjs` checks every reply both plain and dressed.
 
+Settings are kept by the website when `BOT_SETTINGS_TOKEN` is set on both sides. They are also
+written to a file: with a Railway volume attached to the bot's service (the bot reads
+`RAILWAY_VOLUME_MOUNT_PATH`), or `SETTINGS_FILE` set, that file survives redeploys, so a volume
+alone is enough. The file holds RCON passwords and is written owner-only. In front of every
+handler: a double press of the same button runs once, members who are not staff are slowed
+down past 12 presses in 10 seconds, and on SIGTERM the bot lets running presses finish before
+it exits. The simulator runs twice: once with website storage, then a restart with only the
+file, ending with a SIGTERM.
+
 ## Stylesheet map
 
 `public/style.css` is the whole site's stylesheet, in this order:

@@ -188,8 +188,9 @@ export function dress(payload, ctx) {
 export function storageWarning(ctx) {
   if (ctx.storeTokenSet()) return null;
   return embed(0xdc4c4c, "Settings are not being saved",
-    "BOT_SETTINGS_TOKEN is not set on the bot, so everything set up here - roles, servers, log channels, binds and player links - lives in the bot's memory and is lost the next time it restarts or redeploys.\n\n" +
-    "**Fix:** choose a long random value and set it as BOT_SETTINGS_TOKEN in two places: the bot's service on Railway, and the website's environment. Use the same value in both. The website's Settings page then works too.");
+    "Everything set up here - roles, servers, log channels, binds and player links - is lost the next time the bot redeploys.\n\n" +
+    "**Easiest fix:** on Railway, open the bot's service and attach a **volume** (any mount path). The bot finds it by itself and keeps its settings in a file there.\n" +
+    "**Or:** set the same long random value as BOT_SETTINGS_TOKEN on the bot's service and on the website, so settings are kept by the website.");
 }
 /* The last RCON check of a saved server, as one line: "answered 2 minutes ago, 41 ms". */
 function checkDot(ctx, server) {
@@ -295,7 +296,7 @@ export async function pingReply(ctx) {
     field("Guild", guild ? code(guild.name) + "\n" + guild.memberCount + " members, " + ((guild.roles && guild.roles.length) || 0) + " roles" : "not reported yet", true),
     field("Commands", code(String(ctx.commandCount())) + " registered here", true),
     field((site.ok ? "\ud83d\udfe2" : "\ud83d\udd34") + " Website", site.ok ? "answering, " + ms(site.ms) + (site.body && site.body.app ? "\napp: " + code(site.body.app) : "") : "no answer after " + ms(site.ms) + (site.error ? "\n" + site.error.slice(0, 90) : ""), true),
-    field((ctx.storeTokenSet() ? "\ud83d\udfe2" : "\ud83d\udd34") + " Settings store", ctx.storeTokenSet() ? "the website accepts saves from this bot" : "not saved anywhere: BOT_SETTINGS_TOKEN is not set, so a restart forgets everything", true),
+    field((ctx.storeTokenSet() ? "\ud83d\udfe2" : "\ud83d\udd34") + " Settings store", !ctx.storeTokenSet() ? "not kept: no BOT_SETTINGS_TOKEN and no volume, so a redeploy forgets everything" : (ctx.storeKind && ctx.storeKind() === "file") ? "kept in a file on the attached volume" : "the website accepts saves from this bot", true),
     field("Rust servers (" + ctx.servers().length + ")", ctx.servers().length
       ? fitLines(ctx.servers().map(function (s) { return checkDot(ctx, s) + " **" + s.name + "**: " + lastCheckLine(ctx, s); }), 1000)
       : "none linked yet", false),
@@ -439,7 +440,7 @@ export async function testAndSaveServer(ctx, data, existingId) {
   var lines = String(answer.answer || "").split("\n").slice(0, 6).join("\n");
   var built = embed(0x3ba55d, existingId ? "Server updated" : "Server linked and tested",
     "**" + name + "** answered " + code(answer.command || "serverinfo") + " in " + ms(answer.ms) + ".\n" +
-    (saved.ok ? "Saved to the website." : "Kept in this bot memory only: " + saved.detail));
+    (saved.ok ? (saved.where === "file" ? "Saved to the data file on the volume." : "Saved to the website.") : "Kept in this bot memory only: " + saved.detail));
   if (lines) built.fields = [field("What the server said", block(lines.slice(0, 900)), false)];
   return { embeds: [built], components: [row([button("setup:test", "Test connections", 2), button("setup:server", "Add another", 2), button("setup:home", "Back to setup", 2)])], flags: EPH };
 }
@@ -512,7 +513,7 @@ export function helpDetail(name, ctx) {
         "**edit** - pick a saved server and change its address, port or password",
         "**refresh** `server` - a fresh RCON check of one server, or of every server (the result also shows in /ping)",
       ].join("\n"), false),
-      field("Saving", "Settings are kept on the website. If the bot cannot write there (no BOT_SETTINGS_TOKEN), /setup says so in red: changes then last only until the bot restarts.", false),
+      field("Saving", "Settings are kept on the website (with BOT_SETTINGS_TOKEN), or in a file on a Railway volume attached to the bot. With neither, /setup says so in red: changes then last only until the next redeploy.", false),
       field("Permissions", STAFF_RULE + " Panels are only visible to you.", false),
       field("Needs first", "The RCON port and password from server.cfg, with rcon.web set to 0.", false),
     ],
@@ -564,7 +565,7 @@ export function setupStatus(ctx) {
     ["Auth groups with a respawn kit", String(Object.keys(kits.authSpawn || {}).length)],
   ];
   var next = [];
-  if (!ctx.storeTokenSet()) next.push("**Settings are not being saved.** Set BOT_SETTINGS_TOKEN to the same long random value on the bot (Railway) and the website, or a restart forgets everything.");
+  if (!ctx.storeTokenSet()) next.push("**Settings are not being saved.** Attach a volume to the bot's service on Railway (simplest), or set BOT_SETTINGS_TOKEN to the same value on the bot and the website. Until then a redeploy forgets everything.");
   if (!servers.length) next.push("Run **/setup run** and add your Rust server, so the RCON connection can be tested.");
   if (!STAFF_SLOTS.some(function (s) { return roles[s[0]]; })) next.push("Step 1: save your staff roles so staff-only features know who is who.");
   if (!LOG_TYPES.some(function (t) { return channels[t[0]]; })) next.push("Step 2: choose a channel for the log types you want.");

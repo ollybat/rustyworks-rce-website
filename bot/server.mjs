@@ -21,6 +21,8 @@ import handler from './interactions-worker.js';
 import net from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
@@ -120,6 +122,56 @@ const RELOAD_MS = Math.max(1000, Number(process.env.SETTINGS_RELOAD_MS) || 12000
 
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
 
+/* ------------------------------------------------------------ settings file ---- */
+/* A second home for settings, on this machine. With a Railway volume attached
+   (RAILWAY_VOLUME_MOUNT_PATH), or SETTINGS_FILE pointing somewhere that lasts, settings survive
+   restarts and redeploys even without BOT_SETTINGS_TOKEN. Without either, the file sits in the
+   container and only outlives a crash-restart of the same container. The file holds RCON
+   passwords, so it is written owner-only (0600), whole, and swapped in atomically. */
+const VOLUME_DIR = cleanEnvValue(process.env.RAILWAY_VOLUME_MOUNT_PATH || '');
+const SETTINGS_FILE = cleanEnvValue(process.env.SETTINGS_FILE || '') || (VOLUME_DIR ? join(VOLUME_DIR, 'spinback-settings.json') : join(process.cwd(), 'data', 'spinback-settings.json'));
+const FILE_IS_DURABLE = !!(cleanEnvValue(process.env.SETTINGS_FILE || '') || VOLUME_DIR);
+const FILE_SECTIONS = ['staffRoles', 'logChannels', 'servers', 'kits', 'links', 'pending', 'linkPanel'];
+let fileTimer = null;
+let fileState = { ok: null, at: null, detail: '' };
+function writeSettingsFileNow() {
+  if (fileTimer) { clearTimeout(fileTimer); fileTimer = null; }
+  try {
+    const out = { version: 1, savedAt: new Date().toISOString() };
+    FILE_SECTIONS.forEach(function (k) { out[k] = settings[k]; });
+    mkdirSync(dirname(SETTINGS_FILE), { recursive: true });
+    const tmp = SETTINGS_FILE + '.tmp';
+    writeFileSync(tmp, JSON.stringify(out), { mode: 0o600 });
+    renameSync(tmp, SETTINGS_FILE);
+    fileState = { ok: true, at: out.savedAt, detail: '' };
+  } catch (error) {
+    fileState = { ok: false, at: new Date().toISOString(), detail: String((error && error.message) || error).slice(0, 200) };
+    log('settings file write failed:', fileState.detail);
+  }
+  return fileState;
+}
+/* Saves come in bursts (a role menu, then another): one write a moment later covers them. */
+function writeSettingsFileSoon() {
+  if (fileTimer) return;
+  fileTimer = setTimeout(writeSettingsFileNow, 400);
+  if (fileTimer.unref) fileTimer.unref();
+}
+function readSettingsFile() {
+  try {
+    if (!existsSync(SETTINGS_FILE)) return false;
+    const body = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8'));
+    applySettings(body);
+    fileState = { ok: true, at: body.savedAt || null, detail: '' };
+    log('read settings from ' + (FILE_IS_DURABLE ? 'the data file' : 'this container') + ' (saved ' + (body.savedAt || 'at an unknown time') + ')');
+    return true;
+  } catch (error) {
+    log('settings file unreadable, ignored:', String((error && error.message) || error).slice(0, 200));
+    return false;
+  }
+}
+/* Where settings really live: the website, a lasting file, or nowhere that outlives a redeploy. */
+function storeKind() { return settingsToken() ? 'website' : FILE_IS_DURABLE ? 'file' : 'memory'; }
+
 function panelEmbed(color, title, description) { return { color: color, title: title, description: description }; }
 function panelRow(components) { return { type: 1, components: components }; }
 function panelButton(id, label, style) { return { type: 2, custom_id: id, label: label, style: style || 2 }; }
@@ -129,8 +181,13 @@ function panelButton(id, label, style) { return { type: 2, custom_id: id, label:
    bot's older copy of a section back over a newer edit made on the website. */
 let lastPersistAt = 0;
 async function persistSettings(sections) {
+  writeSettingsFileSoon();
   const token = settingsToken();
-  if (!token) return { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set on this service, so the website cannot be written to' };
+  if (!token) {
+    return FILE_IS_DURABLE
+      ? { ok: true, detail: '', where: 'file' }
+      : { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set and no volume is attached, so this lasts until the next redeploy' };
+  }
   const everything = {
     staffRoles: settings.staffRoles,
     logChannels: settings.logChannels,
@@ -161,6 +218,17 @@ async function persistSettings(sections) {
 }
 
 
+function applySettings(body) {
+  if (!body || typeof body !== 'object') return;
+  if (body.staffRoles && typeof body.staffRoles === 'object') settings.staffRoles = body.staffRoles;
+  if (body.logChannels && typeof body.logChannels === 'object') settings.logChannels = body.logChannels;
+  if (Array.isArray(body.servers)) settings.servers = body.servers;
+  if (body.kits && typeof body.kits === 'object') settings.kits = Object.assign(settings.kits, body.kits);
+  if (Array.isArray(body.links)) settings.links = body.links;
+  if (Array.isArray(body.pending)) settings.pending = body.pending;
+  if (body.linkPanel && typeof body.linkPanel === 'object') settings.linkPanel = body.linkPanel;
+}
+
 async function loadSettings(quiet) {
   const token = settingsToken();
   if (!token) { if (!quiet) log('BOT_SETTINGS_TOKEN is not set, so saved settings cannot be read from the website'); return; }
@@ -173,13 +241,8 @@ async function loadSettings(quiet) {
     });
     if (!res.ok) { log('settings read answered ' + res.status); return; }
     const body = await res.json();
-    if (body && body.staffRoles) settings.staffRoles = body.staffRoles;
-    if (body && body.logChannels) settings.logChannels = body.logChannels;
-    if (body && Array.isArray(body.servers)) settings.servers = body.servers;
-    if (body && body.kits && typeof body.kits === 'object') settings.kits = Object.assign(settings.kits, body.kits);
-    if (body && Array.isArray(body.links)) settings.links = body.links;
-    if (body && Array.isArray(body.pending)) settings.pending = body.pending;
-    if (body && body.linkPanel && typeof body.linkPanel === 'object') settings.linkPanel = body.linkPanel;
+    applySettings(body);
+    writeSettingsFileSoon();
     if (!quiet) {
       log('loaded ' + Object.keys(settings.staffRoles).filter(function (k) { return settings.staffRoles[k]; }).length + ' role slot(s), '
         + Object.keys(settings.logChannels).filter(function (k) { return settings.logChannels[k]; }).length
@@ -434,7 +497,8 @@ function botCtx(interaction) {
     ping: function () { return client.ws.ping; },
     uptime: function () { return (Date.now() - state.since) / 1000; },
     commandCount: function () { return state.commandNames ? state.commandNames.length : 0; },
-    storeTokenSet: function () { return !!settingsToken(); },
+    storeTokenSet: function () { return storeKind() !== 'memory'; },
+    storeKind: storeKind,
     servers: function () { return settings.servers; },
     kits: function () { return settings.kits; },
     links: function () { return settings.links; },
@@ -711,7 +775,56 @@ async function respond(interaction, work, kind) {
 function answerModal(interaction, payload) { return respond(interaction, payload, 'reply'); }
 function answerPanel(interaction, payload) { return respond(interaction, payload, 'update'); }
 
+/* ------------------------------------------------------- traffic control ---- */
+/* Three guards in front of every handler:
+   - a second press of the same button (or the same command) by the same person while the
+     first is still running is answered with "still working", so a double click cannot
+     approve, give or save twice;
+   - a member who is not staff sending more than RATE_MAX interactions in RATE_WINDOW_MS is
+     asked to slow down, which keeps a script or a stuck mouse on the public link panel from
+     flooding the bot and the logs (staff clicking through setup are never slowed);
+   - while the bot shuts down for a redeploy, new presses get a clear "restarting" answer
+     instead of silence, and the ones already running are allowed to finish. */
+const RATE_MAX = 12;
+const RATE_WINDOW_MS = 10000;
+const running = new Set();
+const recentByUser = new Map();
+let activeInteractions = 0;
+let shuttingDown = false;
+function interactionKey(interaction) {
+  const what = interaction.customId || interaction.commandName || 'x';
+  return String((interaction.user && interaction.user.id) || '?') + '|' + what;
+}
+function overRate(userId) {
+  const now = Date.now();
+  const list = (recentByUser.get(userId) || []).filter(function (t) { return now - t < RATE_WINDOW_MS; });
+  list.push(now);
+  recentByUser.set(userId, list);
+  if (recentByUser.size > 5000) recentByUser.clear();
+  return list.length > RATE_MAX;
+}
+async function quickNote(interaction, color, title, text) {
+  if (typeof interaction.isRepliable === 'function' && !interaction.isRepliable()) return;
+  await interaction.reply(dress({ embeds: [panelEmbed(color, title, text)], flags: 64 }, { siteUrl: SITE_URL })).catch(function () {});
+}
 async function routeInteraction(interaction) {
+  const isSuggest = typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete();
+  if (isSuggest) return routeOne(interaction);
+  if (shuttingDown) return quickNote(interaction, 0xfaa81a, 'Restarting', 'The bot is restarting for an update. Try again in a few seconds.');
+  const userId = String((interaction.user && interaction.user.id) || '?');
+  if (overRate(userId) && !permitted(interaction, botCtx(interaction))) return quickNote(interaction, 0xfaa81a, 'Slow down a moment', 'That is a lot of presses in a few seconds. Wait a moment, then try again.');
+  const key = interactionKey(interaction);
+  if (running.has(key)) return quickNote(interaction, 0xfaa81a, 'Still working on that', 'Your last press of this is still running. The answer will appear on its own.');
+  running.add(key);
+  activeInteractions += 1;
+  try {
+    return await routeOne(interaction);
+  } finally {
+    running.delete(key);
+    activeInteractions -= 1;
+  }
+}
+async function routeOne(interaction) {
   try {
     const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
     if (!rightGuild) {
@@ -1177,6 +1290,7 @@ client.once(Events.ClientReady, async (c) => {
       log('WARNING: the bot is not in that server yet — invite it with its own invite link');
       return;
     }
+    readSettingsFile();
     await loadSettings();
     updatePresence();
     /* Changes made on the website's Settings page reach the bot within two minutes, without a
@@ -1775,6 +1889,10 @@ createServer(async (req, res) => {
       loginAttempts: loginAttempts,
       lookedFor: TOKEN_NAMES,
       siteUrl: SITE_URL,
+      /* where settings live: website, file (a lasting volume) or memory; never the path */
+      storage: storeKind(),
+      storageFileOk: fileState.ok,
+      shuttingDown: shuttingDown || undefined,
       interactions: !!PUBLIC_KEY,
       guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
       ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
@@ -1825,9 +1943,18 @@ createServer(async (req, res) => {
   if (!TOKEN) log('the bot has no token, so it will not come online — set DISCORD_BOT_TOKEN on this Railway service');
 });
 
+/* Railway sends SIGTERM before it swaps in a new deploy. Presses already running get up to
+   eight seconds to finish, the settings file is written one last time, then the bot leaves. */
+async function shutdown(sig) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log('shutting down (' + sig + '), ' + activeInteractions + ' interaction(s) still running');
+  const until = Date.now() + 8000;
+  while (activeInteractions > 0 && Date.now() < until) await new Promise(function (r) { setTimeout(r, 100); });
+  writeSettingsFileNow();
+  await Promise.resolve(client.destroy()).catch(function () {});
+  process.exit(0);
+}
 for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    log('shutting down');
-    Promise.resolve(client.destroy()).catch(() => {}).finally(() => process.exit(0));
-  });
+  process.on(sig, () => { shutdown(sig); });
 }
