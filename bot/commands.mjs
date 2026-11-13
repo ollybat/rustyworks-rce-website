@@ -731,7 +731,7 @@ export function kitsPanel(ctx) {
   var built = embed(0xff7200, "Emote Kits",
     "Save emote-bind and Auth Group preferences, read kit names, and give kits manually. Important: automatic emote binds and respawn kits need a Rust game-event/plugin connector, which is not connected yet.");
   built.fields = [
-    field("Binds", binds.length ? binds.map(function (b) {
+    field("Saved bind preferences", binds.length ? binds.map(function (b) {
       return code(b.emote) + " -> " + (b.kits || []).join(", ") + (b.cooldown ? " (" + b.cooldown + "s)" : "") + (b.roleId ? " <@&" + b.roleId + ">" : "");
     }).join("\n").slice(0, 1000) : "none yet", false),
     field("Manual kit delivery", ctx.kits().locked ? "paused by staff" : "available", true),
@@ -887,7 +887,7 @@ export function installKit(ctx, rawCode) {
     found.push(name);
   });
   found = found.slice(0, 100);
-  if (ctx.setKnownKits) ctx.setKnownKits(found);
+  if (found.length && ctx.setKnownKits) ctx.setKnownKits(found);
   var count = ctx.installKit(raw, text);
   var built = embed(0xfaa81a, "Code preview saved - not installed",
     "The bot saved a hash and short preview of this code. It does not execute any pasted commands or install items on your Rust server. The names below are suggestions only.");
