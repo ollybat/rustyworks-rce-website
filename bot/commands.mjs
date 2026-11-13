@@ -784,7 +784,7 @@ export async function giveKit(ctx, opts) {
   }
   var kit = String(opts.kit || "").replace(/[\r\n]+/g, " ").trim().slice(0, 60);
   if (!kit) return { embeds: [embed(0xdc4c4c, "Which kit?", "Enter the exact kit name you want to give.")], flags: EPH };
-  var userId = opts.user && typeof opts.user === "object" ? String(opts.user.id || "") : String(opts.user || "");
+  var userId = opts.user && typeof opts.user === "object" ? String(opts.user.id || opts.user.value || "") : String(opts.user || "");
   var linked = userId ? (ctx.links() || []).find(function (link) { return String(link.userId) === userId; }) : null;
   if (userId && !linked) {
     return { embeds: [embed(0xfaa81a, "That Discord account is not linked",
