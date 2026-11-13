@@ -191,8 +191,12 @@ export async function run({ world, make, interact }) {
   expect("Read kit names answers from the panel", it.firstAckAt !== null && text(last(it)).length > 10, text(last(it)).slice(0, 300));
 
   /* 20. an install code teaches the bot its kit names */
+  const beforeBadCode = await writes();
+  const installWriteCount = beforeBadCode.filter((write) => write.installs).length;
   const invalidCode = await go(make.modal(ADMIN, "modal:kitcode", { install_code: "%%%not-base64%%%" }), "submit malformed kit code");
-  expect("malformed Base64 is rejected without storing a preview", text(last(invalidCode)).includes("not valid") && Object.keys(store.installs || {}).length === 0, text(last(invalidCode)));
+  w = await writes();
+  expect("malformed Base64 is rejected without writing a preview", text(last(invalidCode)).includes("not valid")
+    && w.filter((write) => write.installs).length === installWriteCount, text(last(invalidCode)));
   const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
   it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "preview a kit code");
   expect("the kit names in a code preview are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
@@ -200,7 +204,9 @@ export async function run({ world, make, interact }) {
   await new Promise((resolve) => setTimeout(resolve, 80));
   w = await writes();
   expect("preview metadata is written to the website installs section", w.some((write) => write.installs && Object.keys(write.installs).length === 1), text(w.slice(-3)));
-  const previewRecord = Object.values(store.installs || {})[0];
+  const previewWrites = w.filter((write) => write.installs && Object.keys(write.installs).length);
+  const previewSnapshot = previewWrites[previewWrites.length - 1] || {};
+  const previewRecord = Object.values(previewSnapshot.installs || {})[0];
   expect("only a short excerpt is persisted, never the full Base64 code", !!previewRecord && previewRecord.head.length <= 400
     && previewRecord.chars === Buffer.from(code64, "base64").toString("utf8").length
     && !JSON.stringify(previewRecord).includes(code64), text(previewRecord));
@@ -355,14 +361,20 @@ export async function run({ world, make, interact }) {
 
   /* Reset is a complete clear of bot configuration, including the private preview map.
      Player links remain, as promised by the reset panel. */
-  expect("preview metadata exists before reset", Object.keys(store.installs || {}).length > 0, text(store.installs));
+  w = await writes();
+  expect("preview metadata exists before reset", w.some((write) => write.installs && Object.keys(write.installs).length > 0), text(w.slice(-5)));
   it = await go(make.command(ADMIN, "setup", "reset"), "/setup reset");
   expect("reset opens its confirmation panel", text(last(it)).includes("Reset the settings?"), text(last(it)).slice(0, 300));
   it = await go(make.button(ADMIN, "setup:reset:go"), "open reset confirmation");
   it = await go(make.modal(ADMIN, "modal:reset", { reset_word: "RESET" }), "confirm settings reset");
-  expect("website storage and memory drop kit-code previews", !Object.keys(store.installs || {}).length
-    && writes.some((write) => write.installs && !Object.keys(write.installs).length), text({ installs: store.installs, writes: writes.slice(-3) }));
-  expect("reset keeps confirmed player links", (store.links || []).length > 0, String((store.links || []).length));
+  const resetWrites = await writes();
+  const persistedSettings = await (await fetch(SITE + "/api/bot/settings?full=1", {
+    headers: { "x-settings-token": "sim-settings-token" },
+  })).json();
+  const resetInstallSnapshot = resetWrites.slice().reverse().find((write) => write.installs && !Object.keys(write.installs).length);
+  expect("reset writes an empty preview snapshot to website storage", !!resetInstallSnapshot, text(resetWrites.slice(-4)));
+  expect("the Worker-side settings store no longer has kit previews", persistedSettings.installs && !Object.keys(persistedSettings.installs).length, text(persistedSettings.installs));
+  expect("reset keeps confirmed player links in website storage", Array.isArray(persistedSettings.links) && persistedSettings.links.length > 0, String((persistedSettings.links || []).length));
 
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
