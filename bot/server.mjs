@@ -436,7 +436,9 @@ function hasAdminBypass(interaction) {
 }
 function isStaff(interaction) {
   if (hasAdminBypass(interaction)) return true;
-  const ids = ROLE_SLOTS.map(function (s) { return (settings.staffRoles || {})[s[0]]; }).filter(Boolean);
+  /* The Linked role is a member marker, not a staff permission. */
+  const ids = ROLE_SLOTS.filter(function (slot) { return slot[0] !== 'linked'; })
+    .map(function (slot) { return (settings.staffRoles || {})[slot[0]]; }).filter(Boolean);
   if (!ids.length) return false;
   const held = memberRoleIds(interaction.member);
   return ids.some(function (id) { return held.indexOf(String(id)) > -1; });
