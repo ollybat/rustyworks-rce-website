@@ -1776,10 +1776,14 @@ export function kitStudioPanel(ctx) {
 export function installKit(ctx, rawCode) {
   var raw = String(rawCode || "").trim();
   if (!raw) return { embeds: [embed(0xdc4c4c, "No code given", "Paste the Base64 code from Kit Studio.")], flags: EPH };
+  if (raw.length > 16000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(raw) || raw.length % 4 === 1) {
+    return { embeds: [embed(0xdc4c4c, "That code is not valid", "Paste a Base64 text code no longer than 16,000 characters. Nothing was stored.")], flags: EPH };
+  }
   var text = null;
   try { text = Buffer.from(raw, "base64").toString("utf8"); } catch (error) { text = null; }
-  var ok = !!text && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
-  if (!ok) return { embeds: [embed(0xdc4c4c, "That does not decode", "The value is not valid Base64, or it does not decode to readable text. Nothing was stored.")], flags: EPH };
+  var canonical = !!text && Buffer.from(text, "utf8").toString("base64").replace(/=+$/, "") === raw.replace(/=+$/, "");
+  var ok = canonical && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
+  if (!ok) return { embeds: [embed(0xdc4c4c, "That does not decode", "The value must be canonical Base64 that decodes to readable text. Nothing was stored.")], flags: EPH };
   var count = ctx.installKit(raw, text);
   /* Kit Studio codes decode to kit add "NAME" lines: those names join the suggestions. */
   var names = [];
