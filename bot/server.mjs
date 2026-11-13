@@ -1472,13 +1472,14 @@ function rconPacket(id, type, body) {
   return buf;
 }
 
-/* Pull whatever complete packets have arrived, leaving a partial one for next time. */
+/* Pull complete packets, leaving a partial packet for the next TCP chunk.
+   Invalid lengths fail closed instead of pinning unparseable bytes in memory. */
 function rconParse(buffer) {
   const packets = [];
   let rest = buffer;
   while (rest.length >= 12) {
     const size = rest.readInt32LE(0);
-    if (size < 10 || size > 8192) break;
+    if (size < 10 || size > 8192) return { packets: packets, rest: rest, error: 'invalid-packet-size' };
     if (rest.length < size + 4) break;
     packets.push({
       id: rest.readInt32LE(4),
@@ -1487,21 +1488,75 @@ function rconParse(buffer) {
     });
     rest = rest.slice(size + 4);
   }
-  return { packets: packets, rest: rest };
+  return { packets: packets, rest: rest, error: null };
 }
 
-/* Resolve all DNS answers, reject the host if any answer is private or special-use,
-   and connect to the exact vetted address (not the hostname) to avoid DNS rebinding. */
+const RCON_DNS_TIMEOUT_MS = 3500;
+const RCON_MAX_ACTIVE = 3;
+const RCON_MAX_QUEUED = 20;
+const RCON_QUEUE_WAIT_MS = 12000;
+const RCON_MAX_BUFFER_BYTES = 64 * 1024;
+let rconActive = 0;
+const rconWaiting = [];
+
+function acquireRconSlot() {
+  return new Promise(function (resolve, reject) {
+    function grant() {
+      rconActive += 1;
+      let released = false;
+      resolve(function release() {
+        if (released) return;
+        released = true;
+        rconActive = Math.max(0, rconActive - 1);
+        const next = rconWaiting.shift();
+        if (next) {
+          clearTimeout(next.timer);
+          next.grant();
+        }
+      });
+    }
+    if (rconActive < RCON_MAX_ACTIVE) return grant();
+    if (rconWaiting.length >= RCON_MAX_QUEUED) {
+      return reject(new Error('The RCON queue is full. Try again in a few seconds.'));
+    }
+    const entry = {
+      grant: grant,
+      timer: setTimeout(function () {
+        const index = rconWaiting.indexOf(entry);
+        if (index !== -1) rconWaiting.splice(index, 1);
+        reject(new Error('The RCON queue is busy. Try again shortly.'));
+      }, RCON_QUEUE_WAIT_MS),
+    };
+    rconWaiting.push(entry);
+  });
+}
+
+/* Resolve all DNS answers with a deadline, reject any private/special-use answer,
+   then connect to the exact vetted IP rather than resolving the hostname twice. */
 async function rconResolve(host) {
   const h = String(host || '').trim().toLowerCase();
   if (net.isIP(h)) return isPublicAddress(h) ? h : null;
-  try {
-    const records = await lookup(h, { all: true });
-    if (!records.length || records.some((record) => !isPublicAddress(record.address))) return null;
-    return records[0].address;
-  } catch (error) {
-    return null;
-  }
+  const records = await new Promise(function (resolve) {
+    let settled = false;
+    const timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    }, RCON_DNS_TIMEOUT_MS);
+    lookup(h, { all: true }).then(function (all) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(all);
+    }, function () {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(null);
+    });
+  });
+  if (!Array.isArray(records) || !records.length || records.some((record) => !isPublicAddress(record.address))) return null;
+  return records[0].address;
 }
 
 /* Discord has moved channel types from numbers to strings over the years and this bot
@@ -1518,11 +1573,21 @@ function channelKind(channel) {
 }
 
 async function rconRun(options) {
-  const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
-  if (!target) {
-    return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or does not resolve), so the bot will not connect to it.' };
+  let release;
+  try {
+    release = await acquireRconSlot();
+  } catch (error) {
+    return { ok: false, reason: 'busy', detail: String((error && error.message) || error) };
   }
-  return rconConnect(Object.assign({}, options, { address: target }));
+  try {
+    const target = rconHostAllowed(options && options.host) ? await rconResolve(options.host) : null;
+    if (!target) {
+      return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or did not resolve safely), so the bot will not connect to it.' };
+    }
+    return await rconConnect(Object.assign({}, options, { address: target }));
+  } finally {
+    release();
+  }
 }
 
 function rconConnect(options) {
@@ -1545,6 +1610,7 @@ function rconConnect(options) {
     }
     if (!(port >= 1 && port <= 65535)) return resolve({ ok: false, reason: 'refused-port', detail: 'That port number cannot exist.' });
     if (!password) return resolve({ ok: false, reason: 'no-password', detail: 'No RCON password was given for that server.' });
+    if (password.length > 256) return resolve({ ok: false, reason: 'bad-password-length', detail: 'The saved RCON password is unexpectedly long; check the server settings.' });
 
     let socket = null;
     let idle = null;
@@ -1577,6 +1643,7 @@ function rconConnect(options) {
     });
 
     socket.on('connect', function () {
+      socket.setNoDelay(true);
       socket.write(rconPacket(1, 3, password));
     });
 
@@ -1585,8 +1652,13 @@ function rconConnect(options) {
     });
 
     socket.on('data', function (chunk) {
+      if (settled) return;
+      if (buffer.length + chunk.length > RCON_MAX_BUFFER_BYTES) {
+        return finish({ ok: false, reason: 'response-too-large', detail: 'The server response exceeded the bot safety limit.' });
+      }
       buffer = Buffer.concat([buffer, chunk]);
       const parsed = rconParse(buffer);
+      if (parsed.error) return finish({ ok: false, reason: 'invalid-response', detail: 'The server sent a malformed RCON packet.' });
       buffer = parsed.rest;
       parsed.packets.forEach(function (packet) {
         if (!authed) {
