@@ -483,6 +483,34 @@ function takePendingGive(userId) {
   return entry && entry.expiresAt > Date.now() ? entry.gamertag : '';
 }
 
+const SIMULATION_MODE = process.env.SPINBACK_TEST_MODE === '1' && !!process.env.SIM_SCENARIO;
+
+/* End-to-end tests never open sockets to fake game servers. The real RCON parser,
+   network guard and HTTP endpoint remain covered by the separate protocol/IP tests. */
+function simulatedRconResult(options) {
+  const command = String((options && options.command) || 'serverinfo').replace(/[\r\n]+/g, ' ').trim();
+  const lower = command.toLowerCase();
+  if (lower === 'serverinfo') {
+    return { ok: true, authenticated: true, command, answer: 'hostname: Spinback Simulation\nplayers: 3\nmaxplayers: 100', ms: 25 };
+  }
+  if (lower === 'kit list') {
+    return { ok: true, authenticated: true, command, answer: 'STARTER\nPVP', ms: 25 };
+  }
+  if (lower.startsWith('kit givetoplayer ')) {
+    return { ok: false, authenticated: true, command, reason: 'simulated-refusal', detail: 'The simulator intentionally refuses kit delivery so retry/cooldown behavior can be tested.', ms: 25 };
+  }
+  if (lower === 'playerlist') {
+    return { ok: true, authenticated: true, command, answer: 'PlayerOne (76561198000000001)\nPlayerTwo (76561198000000002)', ms: 25 };
+  }
+  if (lower === 'gettime') {
+    return { ok: true, authenticated: true, command, answer: '12:00', ms: 25 };
+  }
+  if (lower === 'status') {
+    return { ok: true, authenticated: true, command, answer: 'hostname: Spinback Simulation\nplayers: 3', ms: 25 };
+  }
+  return { ok: true, authenticated: true, command, answer: 'Simulation response', ms: 25 };
+}
+
 async function writeRconAudit(actorId, options, result) {
   const channelId = String((settings.logChannels || {}).rcon || '');
   if (!channelId) return;
@@ -553,12 +581,16 @@ function botCtx() {
     },
 
     rconTest: async function (o) {
-      const result = await rconRun(Object.assign({}, o, { allowAny: false }));
+      const result = SIMULATION_MODE
+        ? simulatedRconResult(o)
+        : await rconRun(Object.assign({}, o, { allowAny: false }));
       await writeRconAudit(this.actorId, o, result);
       return result;
     },
     rconRun: async function (o) {
-      const result = await rconRun(Object.assign({}, o, { allowAny: true }));
+      const result = SIMULATION_MODE
+        ? simulatedRconResult(o)
+        : await rconRun(Object.assign({}, o, { allowAny: true }));
       await writeRconAudit(this.actorId, o, result);
       return result;
     },
