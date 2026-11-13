@@ -466,8 +466,8 @@ export function setupStatus(ctx) {
   var servers = ctx.servers();
   var kits = ctx.kits();
   var checks = [
-    ["Staff roles stored", Object.keys(roles).length + " of " + ROLE_SLOTS.length],
-    ["Log channels stored", Object.keys(channels).length + " of " + LOG_TYPES.length],
+    ["Staff roles stored", ROLE_SLOTS.filter(function (slot) { return slot[0] !== "linked" && roles[slot[0]]; }).length + " of " + (ROLE_SLOTS.length - 1)],
+    ["Log channels stored", LOG_TYPES.filter(function (slot) { return !!channels[slot[0]]; }).length + " of " + LOG_TYPES.length],
     ["Rust servers linked", String(servers.length)],
     ["Kit binds", String((kits.binds || []).length)],
     ["Saved Auth Group preferences", String(Object.keys(kits.authSpawn || {}).length) + " (game hook required)"],
@@ -507,7 +507,8 @@ export function cooldownsPanel(ctx, rows) {
    /setup is the one exception, because it is how you get there. */
 export function setupState(ctx) {
   var roles = ctx.settings.staffRoles || {};
-  var saved = ROLE_SLOTS.map(function (s) { return s[0]; }).filter(function (key) { return roles[key]; });
+  var saved = ROLE_SLOTS.filter(function (slot) { return slot[0] !== "linked"; })
+    .map(function (slot) { return slot[0]; }).filter(function (key) { return roles[key]; });
   return {
     rolesSaved: saved.length,
     serverLinked: ctx.servers().length > 0,
@@ -536,7 +537,8 @@ export function gatePayload(ctx, wanted) {
    are the people who may run anything that configures or edits. */
 export function staffRoleList(ctx) {
   var roles = ctx.settings.staffRoles || {};
-  return ROLE_SLOTS.map(function (s) { return { slot: s[0], label: s[1], id: roles[s[0]] || null }; }).filter(function (r) { return r.id; });
+  return ROLE_SLOTS.filter(function (slot) { return slot[0] !== "linked"; })
+    .map(function (s) { return { slot: s[0], label: s[1], id: roles[s[0]] || null }; }).filter(function (r) { return r.id; });
 }
 
 export function staffRoleNames(ctx) {
