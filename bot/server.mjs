@@ -1215,24 +1215,6 @@ function rconParse(buffer) {
   return { packets: packets, rest: rest };
 }
 
-/* Nothing on the private internet: that keeps this from being pointed at a local service. */
-function rconHostAllowed(host) {
-  const h = String(host || '').trim().toLowerCase();
-  if (!h || h.length > 200) return false;
-  if (h === 'localhost' || /\.local$/.test(h) || /\.internal$/.test(h)) return false;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-    const parts = h.split('.').map(Number);
-    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return false;
-    const a = parts[0], b = parts[1];
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    return true;
-  }
-  return /^[a-z0-9][a-z0-9.-]*$/.test(h);
-}
-
 /* Discord has moved channel types from numbers to strings over the years and this bot
    refuses to guess from a name, so both spellings are read and anything else is 'other'. */
 function channelKind(channel) {
@@ -1246,24 +1228,96 @@ function channelKind(channel) {
   return 'other';
 }
 
-function rconRun(options) {
+const RCON_DNS_TIMEOUT_MS = 3500;
+const RCON_MAX_ACTIVE = 3;
+const RCON_MAX_QUEUED = 20;
+const RCON_QUEUE_WAIT_MS = 12000;
+const RCON_MAX_BUFFER_BYTES = 64 * 1024;
+let rconActive = 0;
+const rconWaiting = [];
+
+function acquireRconSlot() {
+  return new Promise(function (resolve, reject) {
+    function grant() {
+      rconActive += 1;
+      let released = false;
+      resolve(function release() {
+        if (released) return;
+        released = true;
+        rconActive = Math.max(0, rconActive - 1);
+        const next = rconWaiting.shift();
+        if (next) { clearTimeout(next.timer); next.grant(); }
+      });
+    }
+    if (rconActive < RCON_MAX_ACTIVE) return grant();
+    if (rconWaiting.length >= RCON_MAX_QUEUED) return reject(new Error('The RCON queue is full. Try again in a few seconds.'));
+    const entry = {
+      grant: grant,
+      timer: setTimeout(function () {
+        const index = rconWaiting.indexOf(entry);
+        if (index !== -1) rconWaiting.splice(index, 1);
+        reject(new Error('The RCON queue is busy. Try again shortly.'));
+      }, RCON_QUEUE_WAIT_MS),
+    };
+    rconWaiting.push(entry);
+  });
+}
+
+/* Resolve all DNS answers under a deadline. A hostname with even one private or special-use
+   answer is refused, and the socket connects to the exact checked IP to stop DNS rebinding. */
+async function rconResolve(host) {
+  const value = String(host || '').trim().toLowerCase();
+  if (net.isIP(value)) return isPublicAddress(value) ? value : null;
+  const records = await new Promise(function (resolve) {
+    let settled = false;
+    const timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    }, RCON_DNS_TIMEOUT_MS);
+    lookup(value, { all: true }).then(function (all) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(all);
+    }, function () {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(null);
+    });
+  });
+  if (!Array.isArray(records) || !records.length || records.some((record) => !isPublicAddress(record.address))) return null;
+  return records[0].address;
+}
+
+async function rconRun(options) {
+  let release;
+  try { release = await acquireRconSlot(); }
+  catch (error) { return { ok: false, reason: 'busy', detail: String((error && error.message) || error) }; }
+  try {
+    const host = options && options.host;
+    const target = rconHostAllowed(host) ? await rconResolve(host) : null;
+    if (!target) return { ok: false, reason: 'refused-host', detail: 'That address is not a public internet host (or did not resolve safely), so the bot will not connect to it.' };
+    return await rconConnect(Object.assign({}, options, { address: target }));
+  } finally {
+    release();
+  }
+}
+
+function rconConnect(options) {
   return new Promise(function (resolve) {
     const started = Date.now();
-    const host = String(options.host || '').trim();
+    const host = String(options.address || '').trim();
     const port = Number(options.port);
     const password = String(options.password || '');
     const asked = String(options.command || 'serverinfo').toLowerCase();
-    /* The fixed list is what the automatic health check may ask for. When an administrator
-       asks for a command they configured themselves - a kit plugin command, for instance -
-       it is passed through as a single line with a hard length cap. */
-    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300).toLowerCase();
+    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
     const command = options.allowAny && requested ? requested : (RCON_ALLOWED.indexOf(asked) > -1 ? asked : 'serverinfo');
-
-    if (!rconHostAllowed(host)) {
-      return resolve({ ok: false, reason: 'refused-host', detail: 'That address is not on the public internet, so the bot will not connect to it.' });
-    }
+    if (!isPublicAddress(host)) return resolve({ ok: false, reason: 'refused-host', detail: 'That address is not a public internet host.' });
     if (!(port >= 1 && port <= 65535)) return resolve({ ok: false, reason: 'refused-port', detail: 'That port number cannot exist.' });
     if (!password) return resolve({ ok: false, reason: 'no-password', detail: 'No RCON password was given for that server.' });
+    if (password.length > 256) return resolve({ ok: false, reason: 'bad-password-length', detail: 'The saved RCON password is unexpectedly long; check the server settings.' });
 
     let socket = null;
     let idle = null;
@@ -1271,7 +1325,6 @@ function rconRun(options) {
     let buffer = Buffer.alloc(0);
     let authed = false;
     let answer = '';
-
     function finish(result) {
       if (settled) return;
       settled = true;
@@ -1280,45 +1333,37 @@ function rconRun(options) {
       try { if (socket) socket.destroy(); } catch (error) { /* already gone */ }
       resolve(Object.assign({ ms: Date.now() - started }, result));
     }
-
     const timer = setTimeout(function () {
       finish({ ok: false, reason: 'timeout', detail: 'Nothing answered within ' + Math.round(RCON_TIMEOUT_MS / 1000) + ' seconds. Either the port is closed, RCON is off, or rcon.web is set to 1 (this talks the other kind).' });
     }, RCON_TIMEOUT_MS);
-
-    try {
-      socket = net.connect({ host: host, port: port });
-    } catch (error) {
-      return finish({ ok: false, reason: 'connect-failed', detail: String(error.message || error) });
-    }
-
+    try { socket = net.connect({ host: host, port: port }); }
+    catch (error) { return finish({ ok: false, reason: 'connect-failed', detail: String(error.message || error) }); }
     socket.on('error', function (error) {
       finish({ ok: false, reason: 'connect-failed', detail: String((error && (error.code || error.message)) || error) });
     });
-
     socket.on('connect', function () {
+      socket.setNoDelay(true);
       socket.write(rconPacket(1, 3, password));
     });
-
     socket.on('close', function () {
       if (!settled) finish({ ok: authed, authenticated: authed, command: command, answer: answer.trim().slice(0, 1200), reason: authed ? 'closed' : 'closed-before-auth' });
     });
-
     socket.on('data', function (chunk) {
+      if (settled) return;
+      if (buffer.length + chunk.length > RCON_MAX_BUFFER_BYTES) {
+        return finish({ ok: false, reason: 'response-too-large', detail: 'The server response exceeded the bot safety limit.' });
+      }
       buffer = Buffer.concat([buffer, chunk]);
       const parsed = rconParse(buffer);
       buffer = parsed.rest;
       parsed.packets.forEach(function (packet) {
         if (!authed) {
           if (packet.id === -1) return finish({ ok: false, reason: 'bad-password', detail: 'The server refused that RCON password.' });
-          if (packet.type === 2) {
-            authed = true;
-            socket.write(rconPacket(2, 2, command));
-          }
+          if (packet.type === 2) { authed = true; socket.write(rconPacket(2, 2, command)); }
           return;
         }
         if (packet.type === 0) {
-          answer += packet.body;
-          /* Rust answers in one or more packets; a short silence means it is finished. */
+          answer = (answer + packet.body).slice(0, 1200);
           clearTimeout(idle);
           idle = setTimeout(function () {
             finish({ ok: true, authenticated: true, command: command, answer: answer.trim().slice(0, 1200) });
