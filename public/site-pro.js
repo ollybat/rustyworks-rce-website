@@ -1,7 +1,8 @@
 /* Home page extras, all from real data:
-   - an uptime chip that reads the same 24-hour history the status page reads
+   - an uptime chip reading the same 24-hour history the status page reads
    - a search over the real 299-item Kit Studio catalogue, with the short name to copy
-   Nothing here invents a number: if the history endpoint says nothing, the chip says so. */
+   The chip re-inserts itself if the hero section is re-rendered, and every number shown
+   comes from /api/history or /data/items.json. Nothing here invents a figure. */
 (function () {
   function el(tag, cls, text) {
     var node = document.createElement(tag);
@@ -10,36 +11,52 @@
     return node;
   }
 
-  function addChip() {
-    var hero = document.querySelector('section.hero');
-    if (!hero || document.querySelector('.sp-pro-strip')) return;
-    var strip = el('div', 'sp-pro-strip');
-    var dot = el('span', 'sp-pro-dot');
-    var text = el('span', 'sp-pro-chip', 'Reading the last 24 hours\u2026');
-    strip.appendChild(dot);
-    strip.appendChild(text);
-    var link = el('a', null, 'Status page');
-    link.href = '/status.html';
-    strip.appendChild(link);
-    hero.appendChild(strip);
+  function skipLink() {
+    if (document.querySelector('.sp-pro-skip')) return;
+    var link = el('a', 'sp-pro-skip', 'Skip to content');
+    link.href = '#main';
+    document.body.insertBefore(link, document.body.firstChild);
+  }
+
+  function read(tell, dot) {
     fetch('/api/history', { headers: { accept: 'application/json' } })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var t = (d && d.totals) || {};
         if (!d || d.available === false || !t.checks) {
-          text.textContent = 'The site has not recorded a check window yet.';
+          tell.textContent = 'No check window has been recorded yet.';
           dot.className = 'sp-pro-dot bad';
           return;
         }
-        text.textContent = t.uptimePct + '% up over ' + (d.hours || 24) + ' hours \u00b7 ' + t.checks + ' checks \u00b7 ' + t.avgMs + ' ms average';
+        tell.textContent = t.uptimePct + '% up over ' + (d.hours || 24) + ' hours \u00b7 ' + t.checks + ' checks \u00b7 ' + t.avgMs + ' ms average';
         dot.className = 'sp-pro-dot' + (t.failures ? ' bad' : '');
       })
-      .catch(function () { text.textContent = 'Could not read the history just now.'; dot.className = 'sp-pro-dot bad'; });
+      .catch(function () {
+        tell.textContent = 'Could not read the history just now.';
+        dot.className = 'sp-pro-dot bad';
+      });
+  }
+
+  function addChip() {
+    if (document.querySelector('.sp-pro-strip')) return;
+    var main = document.querySelector('#main') || document.body;
+    var strip = el('div', 'sp-pro-strip');
+    var dot = el('span', 'sp-pro-dot');
+    var tell = el('span', 'sp-pro-chip', 'Reading the last 24 hours\u2026');
+    var link = el('a', null, 'Status page');
+    link.href = '/status.html';
+    strip.appendChild(dot);
+    strip.appendChild(tell);
+    strip.appendChild(link);
+    var first = main.querySelector('section');
+    if (first && first.parentNode === main) main.insertBefore(strip, first.nextSibling);
+    else main.insertBefore(strip, main.firstChild || null);
+    read(tell, dot);
   }
 
   function addSearch() {
-    var host = document.querySelector('#main') || document.body;
     if (document.querySelector('.sp-pro-search')) return;
+    var host = document.querySelector('#main') || document.body;
     var box = el('div', 'sp-pro-search');
     box.appendChild(el('h3', null, 'Find any item the Kit Studio knows'));
     box.appendChild(el('p', null, 'Type a name, a group or a short name. Copy the short name straight into Kit Studio.'));
@@ -53,7 +70,7 @@
     var list = el('ul', 'sp-pro-results');
     list.setAttribute('role', 'listbox');
     box.appendChild(list);
-    var hint = el('div', 'sp-pro-hint', 'Tip: press / anywhere on the page to search the whole site.');
+    var hint = el('div', 'sp-pro-hint', 'Press / anywhere on the page to jump back here.');
     box.appendChild(hint);
     host.appendChild(box);
 
@@ -62,10 +79,7 @@
       if (items) return Promise.resolve(items);
       return fetch('/data/items.json', { headers: { accept: 'application/json' } })
         .then(function (r) { return r.json(); })
-        .then(function (d) {
-          items = Array.isArray(d) ? d : (d && Array.isArray(d.items) ? d.items : []);
-          return items;
-        })
+        .then(function (d) { items = Array.isArray(d) ? d : (d && Array.isArray(d.items) ? d.items : []); return items; })
         .catch(function () { items = []; return items; });
     }
     function render() {
@@ -95,11 +109,12 @@
     function use(it) {
       if (!it) return;
       var short = it.short || it.name || '';
-      navigator.clipboard.writeText(short).then(function () {
-        hint.textContent = 'Copied "' + short + '" \u2014 paste it into Kit Studio and press Enter.';
-      }).catch(function () {
-        hint.textContent = 'Short name: ' + short;
-      });
+      var done = function (message) { hint.textContent = message; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(short).then(function () {
+          done('Copied "' + short + '" \u2014 paste it into Kit Studio and press Enter.');
+        }).catch(function () { done('Short name: ' + short); });
+      } else done('Short name: ' + short);
     }
     input.addEventListener('input', render);
     input.addEventListener('keydown', function (event) {
@@ -118,7 +133,7 @@
     load().then(render);
   }
 
-  function focusShortcut() {
+  function slashFocus() {
     document.addEventListener('keydown', function (event) {
       if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
       var tag = (document.activeElement && document.activeElement.tagName) || '';
@@ -130,6 +145,19 @@
     });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { addChip(); addSearch(); focusShortcut(); });
-  else { addChip(); addSearch(); focusShortcut(); }
+  function start() {
+    skipLink();
+    addChip();
+    addSearch();
+    slashFocus();
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries += 1;
+      addChip();
+      if (tries > 8 || document.querySelector('.sp-pro-strip')) clearInterval(timer);
+    }, 1500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
 })();

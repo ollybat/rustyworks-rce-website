@@ -16,15 +16,28 @@
     setTimeout(function () { node.remove(); }, 2600);
   }
   function grid() { return document.querySelector('#mainGrid'); }
-  function filledCount() {
+  var baseline = null;
+  function slots() {
     var g = grid();
-    if (!g) return null;
-    var slots = g.querySelectorAll('[data-slot], .slot, .kb-slot');
+    if (!g) return [];
+    return Array.prototype.slice.call(g.querySelectorAll('[data-slot], .slot, .kb-slot'));
+  }
+  function snapshot() {
+    return slots().map(function (slot) { return slot.innerHTML; });
+  }
+  /* A slot counts as filled when it either holds an item element or no longer looks the way
+     it did on an empty board. That adapts to the page instead of guessing its class names. */
+  function filledCount() {
+    var all = slots();
+    if (!all.length) return null;
+    if (!baseline || baseline.length !== all.length) baseline = snapshot();
     var filled = 0;
-    Array.prototype.forEach.call(slots, function (slot) {
-      if (slot.querySelector('img, canvas, .item, .filled, [data-item]')) filled += 1;
+    all.forEach(function (slot, i) {
+      var hasItem = slot.querySelector('img, canvas, [data-item], .item, .filled, .has-item');
+      var changed = baseline[i] != null && slot.innerHTML !== baseline[i];
+      if (hasItem || changed) filled += 1;
     });
-    return { filled: filled, total: slots.length };
+    return { filled: filled, total: all.length };
   }
   function fillLine() {
     var g = grid();

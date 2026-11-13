@@ -1,11 +1,5 @@
-# Everything is public except the owner-only control panel and the sign-in
-# plumbing. The two studio tools are public, so they are named explicitly.
+# Spinback RCE
 User-agent: *
 Allow: /
-Allow: /dashboard/kitbuilder.html
-Allow: /dashboard/colortext.html
-Disallow: /dashboard/
-Disallow: /auth/
-Disallow: /api/
 
 Sitemap: https://spinback-j7ao5f.camelai.app/sitemap.xml

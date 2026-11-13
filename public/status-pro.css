@@ -12,3 +12,5 @@
 .spx-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; font-size: 13px; color: #9c9088; }
 .spx-btn { padding: 9px 14px; border-radius: 10px; border: 1px solid #3a2f25; background: rgba(255,154,0,.1); color: inherit; font: inherit; cursor: pointer; }
 .spx-btn[disabled] { opacity: .6; cursor: progress; }
+
+.spx-history p.spx-sub { line-height: 1.6; color: #c8bdb3; }
