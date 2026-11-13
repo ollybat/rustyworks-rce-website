@@ -411,6 +411,9 @@ async function statusHistory(request, env) {
 /* ---------- the bot API proxy ---------- */
 
 async function proxyApi(request, env, ctx) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return json({ error: 'method_not_allowed' }, 405);
+  }
   const requestUrl = new URL(request.url);
   const watching = requestUrl.pathname === "/api/status";
   const started = Date.now();
@@ -815,7 +818,6 @@ async function authLogin(request, env) {
   authorize.searchParams.set("scope", "identify guilds guilds.members.read");
   authorize.searchParams.set("state", state);
   const headers = new Headers();
-  headers.append("set-cookie", cookieHeader("spinback_oauth_state", state, 600));
   headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));
   return redirect(authorize.toString(), headers);
 }
@@ -825,24 +827,18 @@ async function authCallback(request, env) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const expectedState = cookies(request).spinback_oauth_state;
 
   if (url.searchParams.get("error")) return html("<p>Discord refused the sign-in. <a href=\"/dashboard\">Try again</a>.</p>", 400);
-  /* The nonce guards against login CSRF, and the usual way of checking it - a cookie that
-     has to survive a trip to discord.com and back - breaks for real people: a phone that
-     signs in through Discord's QR code, a second tab, or any browser that blocks cross-site
-     cookies. When that happened the site refused its own sign-in and sent the person back
-     to Discord, which looked like an endless loop. So a miss is recorded and the sign-in
-     carries on: a forged nonce could at worst sign somebody in as whoever sent them the
-     link, which gains nothing on a page that only reports your own access. */
+  /* The nonce is signed and returned in Discord's redirect URL, so it remains
+     verifiable even when browsers block cross-site cookies. Refuse unverified callbacks. */
   const signedState = await verifySigned(env, state);
-  const cookieMatches = Boolean(expectedState) && sameString(String(state), String(expectedState));
   if (!code) {
     await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "no code came back from Discord" });
     return html("<p>Discord did not send a sign-in code back. <a href=\"/dashboard\">Start again</a>.</p>", 400);
   }
-  if (!signedState && !cookieMatches) {
-    await appendLog(env, { kind: "sign_in_state_miss", by: { id: "callback", name: "oauth callback" }, detail: "nonce not proven (state cookie " + (expectedState ? "present" : "absent") + "); carried on" });
+  if (!signedState) {
+    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "state verification failed; sign-in stopped" });
+    return html("<p>That sign-in could not be verified. Please <a href=\"/auth/login\">start again</a>.</p>", 400);
   }
 
   const redirectUri = url.origin + "/auth/callback";
@@ -1193,9 +1189,11 @@ async function botExchange(env, code, redirectUri) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+    const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+    if (!settingsToken) return { error: "bot_not_configured" };
     const response = await fetch(base + "/api/oauth/exchange", {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json", "x-settings-token": settingsToken },
       body: JSON.stringify({ code: code, redirectUri: redirectUri }),
       signal: controller.signal,
     });
@@ -1338,7 +1336,12 @@ async function botJson(env, path) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
-    const response = await fetch(base + path, { headers: { accept: "application/json" }, signal: controller.signal });
+    const headers = { accept: "application/json" };
+    /* Internal bot metadata is protected by the same server-side token as RCON tests.
+       This header is only sent from the Worker, never exposed to a visitor. */
+    const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+    if (settingsToken) headers["x-settings-token"] = settingsToken;
+    const response = await fetch(base + path, { headers: headers, signal: controller.signal });
     clearTimeout(timer);
     if (!response.ok) return null;
     return await response.json();
@@ -1371,6 +1374,7 @@ async function botSettings(request, env) {
     staffRoles: (await readJson(env, ROLES_KEY)) || null,
     logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
     kits: (await readJson(env, KITS_KEY)) || null,
+    installs: (await readJson(env, INSTALLS_KEY)) || {},
     /* Flat lists, because this is the shape the bot loads and writes back. */
     links: Array.isArray(storedLinks.links) ? storedLinks.links : [],
     pending: Array.isArray(storedLinks.pending) ? storedLinks.pending : [],
@@ -1422,6 +1426,7 @@ const ROLES_KEY = "spinback-rce/settings/roles.json";
 const LOGCHANNELS_KEY = "spinback-rce/settings/logchannels.json";
 const SERVERS_KEY = "spinback-rce/settings/servers.json";
 const KITS_KEY = "spinback-rce/settings/kits.json";
+const INSTALLS_KEY = "spinback-rce/settings/installs.json";
 const LINKS_KEY = "spinback-rce/settings/links.json";
 
 /* What the bot's own panels collect. Sections it does not send are left alone, and servers
@@ -1482,6 +1487,9 @@ async function botSettingsWrite(request, env) {
   if (body.kits && typeof body.kits === "object") {
     const current = (await readJson(env, KITS_KEY)) || {};
     if (await writeJson(env, KITS_KEY, Object.assign({}, current, body.kits, { updatedAt: Date.now() }))) wrote.push("kits");
+  }
+  if (body.installs && typeof body.installs === "object") {
+    if (await writeJson(env, INSTALLS_KEY, Object.assign({}, body.installs, { updatedAt: Date.now() }))) wrote.push("installs");
   }
   /* The saved servers are handed back (without passwords) so a form can pick up the ids
      the site just issued instead of guessing them. */
@@ -1777,9 +1785,11 @@ async function ownerApi(request, env) {
     const command = ["serverinfo", "playerlist", "status", "gettime"].indexOf(tidy(body.command, 20)) > -1 ? tidy(body.command, 20) : "serverinfo";
     let answer = null;
     try {
+      const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+      if (!settingsToken) return json({ error: "bot_not_configured", message: "Set BOT_SETTINGS_TOKEN on the website and Railway bot service." }, 503);
       const response = await fetch(botApiBase(env) + "/api/rcon/test", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-settings-token": settingsToken },
         body: JSON.stringify({ host: row.host, port: row.port, password: row.password, command: command }),
       });
       answer = await response.json();
