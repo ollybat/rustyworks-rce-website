@@ -403,9 +403,16 @@ async function proxyApi(request, env, ctx) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
+    /* A body is forwarded only for the routes that need one, and only these: the RCON check
+       is the one the website runs. Everything else keeps the read-only shape it has always had. */
+    const FORWARD_BODY_PATHS = ["/api/rcon/test"];
+    const forwardBody = FORWARD_BODY_PATHS.indexOf(requestUrl.pathname) > -1;
+    const upstreamHeaders = { accept: "application/json" };
+    if (forwardBody) upstreamHeaders["content-type"] = request.headers.get("content-type") || "application/json";
     const upstream = await fetch(base + requestUrl.pathname + requestUrl.search, {
       method: request.method === "HEAD" ? "GET" : request.method,
-      headers: { accept: "application/json" },
+      headers: upstreamHeaders,
+      body: forwardBody ? await request.arrayBuffer() : undefined,
       signal: controller.signal,
     });
     const body = request.method === "HEAD" ? null : await upstream.text();
