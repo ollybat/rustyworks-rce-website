@@ -18,14 +18,7 @@ if (!DISCORD_BOT_TOKEN || !DISCORD_APPLICATION_ID || !DISCORD_GUILD_ID) {
   process.exit(1);
 }
 
-const command = {
-  name: "dashboard",
-  description: "Open your Spinback RCE dashboard (server owner only)",
-  type: 1,                          /* CHAT_INPUT */
-  dm_permission: false,             /* never in DMs */
-  contexts: [0],                    /* GUILD only — no user-install */
-  default_member_permissions: "0",  /* hidden from everyone except admins/owner */
-};
+const commands = [];   /* the /dashboard command was removed with the dashboard */
 
 const url = "https://discord.com/api/v10/applications/" + DISCORD_APPLICATION_ID +
   "/guilds/" + DISCORD_GUILD_ID + "/commands";
@@ -36,7 +29,7 @@ const response = await fetch(url, {
     authorization: "Bot " + DISCORD_BOT_TOKEN,
     "content-type": "application/json",
   },
-  body: JSON.stringify(command),
+  body: JSON.stringify(commands),
 });
 
 console.log(response.status, await response.text());

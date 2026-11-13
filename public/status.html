@@ -52,7 +52,6 @@
     <script src="/theme.js"></script>
     <script src="/config.js" defer></script>
     <script src="/apiHelper.js" defer></script>
-    <script src="/nav-auth.js" defer></script>
     <script src="/status.js" defer></script>
     <link rel="stylesheet" href="/theme-spinback.css">
   <link rel="stylesheet" href="/motion.css">
@@ -77,8 +76,6 @@
               class="btn">
               Add to Discord
             </a>
-            <!-- Signed-in capsule or "Login" pill, drawn by nav-auth.js. -->
-            <div class="rw-auth" id="rwAuth"></div>
           </div>
           <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
         </nav>
@@ -227,13 +224,6 @@
               <span class="nm">Bot heartbeat</span>
               <span class="dt" id="svcBeatDetail">The last time the bot told the API it was alive.</span>
               <span class="mt"><span class="pill-out" id="svcBeatPill">Checking</span></span>
-            </div>
-            <div class="st-svc-row">
-              <span class="nm">Dashboard sign-in</span>
-              <span class="dt" id="svcAuthDetail">The owner-only dashboard at <code class="u-ember">/dashboard</code>, opened with a Discord sign-in.</span>
-              <span class="mt"><span class="pill-out" id="svcAuthPill">Unknown</span></span>
-            </div>
-          </div>
         </div>
 
         <div class="panel-box" id="stRawPanel">

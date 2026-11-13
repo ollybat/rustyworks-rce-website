@@ -58,7 +58,6 @@
     <!-- Progressive enhancement: the page works without these, they just add the live counts, the app install prompt and the signed-in shortcuts. -->
     <script src="/config.js" defer></script>
     <script src="/apiHelper.js" defer></script>
-    <script src="/nav-auth.js" defer></script>
     <script src="/home.js" defer></script>
     <link rel="stylesheet" href="/theme-spinback.css">
   <link rel="stylesheet" href="/motion.css">
@@ -82,8 +81,6 @@
               class="btn">
               Add to Discord
             </a>
-            <!-- Signed-in capsule or "Login" pill, drawn by nav-auth.js. -->
-            <div class="rw-auth" id="rwAuth"></div>
           </div>
           <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
         </nav>
@@ -105,322 +102,23 @@
         <span class="fs-check">✅</span>
       </div>
       <!-- ============ HERO ============ -->
-      <section class="hero">
-        <div class="wrap">
-          <span class="tag reveal">Built for Rust Console Edition</span>
-          <span class="tag reveal">5x EU Clan Server</span>
-          <div class="hero-sub-badge reveal"><span>✅</span><span>100% Free — Always Has Been, Always Will Be</span></div>
-          <h1 class="hero-title reveal"><span class="ht-pre">Your Rust server,</span><span class="ht-accent">running itself.</span></h1>
-          <p class="reveal">
-            Spinback RCE is the all-in-one free Discord bot for Rust Console servers. Offline
-            raid protection, full economy, 14 fully interactable games, killfeed, battle-pass,
-            and live automation — one bot handles everything your community needs. It runs our own
-            5x EU clan server, so it is built for fast wipes, high pop and no second chances.
-          </p>
-          <div class="hero-cta-3 reveal">
-            <a
-              href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
-              target="_blank"
-              rel="noopener"
-              class="btn btn-discord">
-              ⊕ Add to Discord — Free
-            </a>
-            <a
-              href="https://discord.gg/NFRkb9NYNd"
-              target="_blank"
-              rel="noopener"
-              class="btn btn-support">
-              💬 Join Support Server
-            </a>
-          </div>
-          <div class="hero-banner reveal">
-            <picture>
-              <source srcset="/media/spinback-banner.webp" type="image/webp">
-              <img
-                src="/media/spinback-banner-poster.jpg"
-                alt="Spinback RCE - the free Discord bot for Rust Console Edition servers"
-                width="426"
-                height="240"
-                loading="lazy"
-                decoding="async">
-            </picture>
-          </div>
-          </div>
-      </section>
-      <!-- ============ 3-CTA STRIP ============ -->
-      <section class="u-strip-space">
-        <div class="wrap">
-          <div class="cta-strip">
-            <div class="cta-strip-card reveal">
-              <span class="csc-ico">🤖</span>
-              <h3>Add the Bot</h3>
-              <p>One click and the bot is in your Discord. No config files, no hosting, just invite and run <code>/setup</code>.</p>
-              <a
-                href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
-                target="_blank"
-                rel="noopener"
-                class="btn btn-discord u-btn-block">
-                ⊕ Add to Discord
-              </a>
-            </div>
-            <div class="cta-strip-card reveal">
-              <span class="csc-ico">💬</span>
-              <h3>Join Our Community</h3>
-              <p>
-                Get official help, report issues, suggest features, and chat with other Rust
-                Console server owners and get exclusive perks.
-              </p>
-              <a
-                href="https://discord.gg/NFRkb9NYNd"
-                target="_blank"
-                rel="noopener"
-                class="btn btn-support u-btn-block">
-                💬 Join Support Server
-              </a>
-            </div>
-            <div class="cta-strip-card reveal">
-              <span class="csc-ico">🎛️</span>
-              <h3>Web Dashboard</h3>
-              <p>Manage every setting, player, and module from a clean web dashboard — no Discord commands needed.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-    <!-- /.rw-video-hero -->
-    <!-- ============ KIT STUDIO FEATURE ============ -->
-    <section class="kit-studio-section">
-      <div class="wrap">
-        <div class="ks-split">
-          <div class="ks-text">
-            <span class="tag reveal">Free Tool — No Login Required</span>
-            <h2 class="reveal">🛠️ Kit <span class="accent">Studio</span></h2>
-            <p class="reveal">
-              Build custom Rust kit loadouts visually with real item icons, drag-and-drop
-              inventory slots, and instant code generation. No login needed — open it, build a
-              kit, install it.
-            </p>
-            <ul class="ks-list reveal">
-              <li>Drag-and-drop Wear, Main &amp; Belt inventory slots</li>
-              <li>400+ Rust items with in-game icons</li>
-              <li>18 pre-made loadouts — click to install</li>
-              <li>Export as RCON commands or Base64 install code</li>
-              <li>Save &amp; manage your kits (login required)</li>
-            </ul>
-            <a href="dashboard/kitbuilder.html" class="btn reveal">🛠️ Open Kit Studio</a>
-          </div>
-          <div class="ks-visual reveal">
-            <div class="ks-mockup">
-              <div class="ksm-section">
-                <div class="ksm-label">👕 Wear — 7 slots</div>
-                <div class="ksm-row">
-                  <div class="ksm-slot w">⛑️</div>
-                  <div class="ksm-slot w">🛡️</div>
-                  <div class="ksm-slot w">👖</div>
-                  <div class="ksm-slot w">🥾</div>
-                  <div class="ksm-slot w">🧤</div>
-                  <div class="ksm-slot w">🎒</div>
-                  <div class="ksm-slot w"></div>
-                </div>
-              </div>
-              <div class="ksm-section">
-                <div class="ksm-label">📦 Main Inventory — 24 slots</div>
-                <div class="ksm-row-main">
-                  <div class="ksm-slot m">🔫</div>
-                  <div class="ksm-slot m">💣</div>
-                  <div class="ksm-slot m">🪨</div>
-                  <div class="ksm-slot m">🪵</div>
-                  <div class="ksm-slot m">🔩</div>
-                  <div class="ksm-slot m">💊</div>
-                  <div class="ksm-slot m">🧱</div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                  <div class="ksm-slot m"></div>
-                </div>
-              </div>
-              <div class="ksm-section">
-                <div class="ksm-label">🎯 Belt — 6 slots</div>
-                <div class="ksm-row-6">
-                  <div class="ksm-slot b">🔫</div>
-                  <div class="ksm-slot b">💉</div>
-                  <div class="ksm-slot b">💊</div>
-                  <div class="ksm-slot b"></div>
-                  <div class="ksm-slot b"></div>
-                  <div class="ksm-slot b"></div>
-                </div>
-              </div>
-              <div class="ksm-btn-row">
-                <div class="ksm-btn primary">📋 Commands</div>
-                <div class="ksm-btn primary">⚡ Install Code</div>
-                <div class="ksm-btn">💾 Save</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-    <!-- ============ COLOUR STUDIO FEATURE ============ -->
-    
-    <!-- ============ SERVER BROWSER + SKIN STORE (side by side) ============ -->
-    
-    <!-- ============ FEATURES TEASER ============ -->
-    <section id="features">
-      <div class="wrap">
-        <div class="sec-head reveal">
-          <span class="eyebrow">What it does</span>
-          <h2>One bot. Your whole server.</h2>
-          <p>
-            Over 44 feature modules covering economy, community, automation and server
-            management — all completely free.
-          </p>
-        </div>
-        <div class="grid">
-          <div class="card reveal">
-            <span class="ico">🧱</span>
-            <h3>Zorps</h3>
-            <p>Offline base protection with dome zones that auto-toggle as your team logs on and off.</p>
-          </div>
-          <div class="card reveal">
-            <span class="ico">💰</span>
-            <h3>Economy &amp; Shop</h3>
-            <p>Full currency system, 550+ item shop, player bags, kits, roles and in-game delivery.</p>
-          </div>
-          <div class="card reveal">
-            <span class="ico">🎰</span>
-            <h3>14 Games</h3>
-            <p>all fully interactive.</p>
-          </div>
-          <div class="card reveal">
-            <span class="ico">🎟️</span>
-            <h3>Battle-Pass</h3>
-            <p>Earn rewards just by playing — claim items in-game or sell them straight to the bot.</p>
-          </div>
-          <div class="card reveal">
-            <span class="ico">☢️</span>
-            <h3>Nuclear Fallout Drops</h3>
-            <p>Server-wide reward drops players race to claim, fully configurable by staff.</p>
-          </div>
-          <div class="card reveal">
-            <span class="ico">🎛️</span>
-            <h3>Master Dashboard</h3>
-            <p>Manage servers, players, and automation from one web control panel — no Discord needed.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-    <!-- ============ EXPLORE TEASER ============ -->
-    <section id="explore">
-      <div class="wrap">
-        <div class="grid u-grid-auto">
-          <div class="card reveal">
-            <span class="ico">🌍</span>
-            <h3>Server Browser</h3>
-            <p>
-              Search every official and community Rust Console server by platform, region, wipe
-              day, team size and monuments. Free, no login.
-            </p>
-            <div class="u-mt-18"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-    <!-- ============ PARTNERS TEASER ============ -->
-    <section id="partners-teaser" class="u-pt-0">
-      <div class="wrap">
-        <div class="card reveal u-center">
-          <span class="ico">🤝</span>
-          <h3>Our Partners</h3>
-          <p>
-            Spinback RCE wouldn't be the same without the people who helped build it. Meet RCE
-            Maps and KINGS3X V2.
-          </p>
-          <div class="u-mt-18"><a href="#" class="btn ghost" data-open-partners>Meet the Partners →</a></div>
-        </div>
-      </div>
-    </section>
+      
     <!-- ============ CAPABILITY STRIP ============ -->
     <section class="sp-section is-tight">
       <div class="wrap">
         <div class="sp-marquee" data-sp-marquee aria-hidden="true">
           <div class="sp-track">
-            <span>Zorps offline protection</span><span>550+ item economy shop</span><span>14 interactive games</span><span>Battle-pass</span><span>Nuclear fallout drops</span><span>Kit Studio</span><span>Colour Studio</span><span>Server browser</span><span>Skin store</span><span>Killfeed</span><span>Live automation</span><span>Free forever</span>
+            <span>Zorps offline protection</span><span>550+ item economy shop</span><span>14 interactive games</span><span>Battle-pass</span><span>Nuclear fallout drops</span><span>Kit Studio</span><span>Colour Studio</span><span></span><span></span><span>Killfeed</span><span>Live automation</span><span>Free forever</span>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ============ NUMBERS ============ -->
-    <section class="sp-section">
-      <div class="wrap">
-        <div class="sp-head is-center" data-sp-reveal>
-          <span class="sp-kicker">Straight numbers</span>
-          <h2 class="sp-title">No trials. No tiers. No card.</h2>
-          <p class="sp-lede">Built by players who run their own Rust Console servers, and given away. These are the figures this site can actually stand behind.</p>
-        </div>
-        <div class="sp-stats">
-          <div class="sp-stat" data-sp-reveal><b data-sp-count="299">0</b><span>Items in the kit catalogue</span></div>
-          <div class="sp-stat" data-sp-reveal style="--sp-i:1"><b data-sp-count="15">0</b><span>Item groups</span></div>
-          <div class="sp-stat" data-sp-reveal style="--sp-i:2"><b data-sp-count="44">0</b><span>Feature modules, as advertised</span></div>
-          <div class="sp-stat" data-sp-reveal style="--sp-i:3"><b>&#163;0</b><span>Your bill, every month</span></div>
-        </div>
-      </div>
-    </section>
+    
 
     <!-- ============ HOW IT WORKS ============ -->
-    <section class="sp-section">
-      <div class="wrap sp-split">
-        <div>
-          <div class="sp-head" data-sp-reveal>
-            <span class="sp-kicker">How it works</span>
-            <h2 class="sp-title">Three steps, then forget about it</h2>
-            <p class="sp-lede">No account, no API keys, nothing to install on your own machine. You invite the bot, you press one command, and the features are on.</p>
-          </div>
-          <div class="sp-steps">
-            <div class="sp-step" data-sp-reveal>
-              <h3>Invite Spinback to your server</h3>
-              <p>Use the Add to Discord button. Discord shows you exactly which permissions are requested, and you approve them there.</p>
-            </div>
-            <div class="sp-step" data-sp-reveal style="--sp-i:1">
-              <h3>Run /dashboard once</h3>
-              <p>One command, owner only. Only the server owner sees it: nobody else gets a command list full of tools they cannot use.</p>
-            </div>
-            <div class="sp-step" data-sp-reveal style="--sp-i:2">
-              <h3>Set things up once, play on</h3>
-              <p>Zorps, economy, shop, games, drops and automation are configured from your console and then run themselves, so staff can actually play the game.</p>
-            </div>
-          </div>
-        </div>
-        <div class="sp-card sp-tilt" data-sp-reveal style="--sp-i:2">
-          <span class="sp-badge is-live">Owner only</span>
-          <div class="sp-mockbot" style="margin-top:18px">
-            <div class="sp-mockrow">
-              <span class="sp-mockavatar">S</span>
-              <div>
-                <b>Spinback RCE</b>
-                <small style="display:block;color:var(--sp-dim)">BOT</small>
-              </div>
-            </div>
-            <div class="sp-mockmsg"><b>/dashboard</b><br><span style="color:var(--sp-dim)">Open the Spinback RCE owner console for this server</span></div>
-            <div class="sp-mockreply">Owner console: <span class="sp-glow-text">spinback-j7ao5f.camelai.app/dashboard</span><br><span style="color:var(--sp-dim)">Sign in with Discord and everything is on that page.</span></div>
-          </div>
-          <p style="margin-top:18px">Members never see the command at all. It is registered as an administrator command, and the bot answers an ephemeral reply that only the owner can read.</p>
-        </div>
-      </div>
-    </section>
+    
 
     <!-- ============ FREE TOOLS ============ -->
     <section class="sp-section">
@@ -437,21 +135,9 @@
             <p>Build a full loadout slot by slot, pick your server multiplier, read the generated command, and save kits locally.</p>
             <div style="margin-top:16px"><a href="dashboard/kitbuilder.html" class="btn ghost">Open Kit Studio</a></div>
           </div>
-          <div class="sp-card" data-sp-reveal style="--sp-i:1">
-            <span class="sp-ico">&#127912;</span>
-            <h3>Colour Studio</h3>
-            <p>Gradient and coloured Discord text with the exact markup ready to paste into embeds and announcements.</p>
-            <div style="margin-top:16px"></div>
-          </div>
-          <div class="sp-card" data-sp-reveal style="--sp-i:2">
-            <span class="sp-ico">&#128507;</span>
-            <h3>Server Browser</h3>
-            <p>Search official and community Rust Console servers by platform, region, wipe day, team size and monuments, with no login.</p>
-            <div style="margin-top:16px"></div>
-          </div>
           <div class="sp-card" data-sp-reveal style="--sp-i:3">
             <span class="sp-ico">&#127914;</span>
-            <h3>Skin store and items</h3>
+            <h3></h3>
             <p>All 29 products from the official Rust Console store expanded into 59 individual skins, plus every item the Kit Studio knows about: group, stack size, real in-game icon and a short name you can copy straight into a kit.</p>
             <div style="margin-top:16px"></div>
           </div>
@@ -470,11 +156,6 @@
         <div class="sp-table-wrap" data-sp-reveal>
           <table class="sp-compare">
             <thead>
-              <tr><th>What it is about</th><th>Spinback RCE</th><th>Details</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>Price</td><td class="sp-yes">Free</td><td class="sp-mid">No tiers, no trials, no card, no per-player pricing.</td></tr>
-              <tr><td>Commands members see</td><td class="sp-yes">One, owner only</td><td class="sp-mid">/dashboard is administrator-only and answered privately.</td></tr>
               <tr><td>Account needed for the browser tools</td><td class="sp-yes">None</td><td class="sp-mid">Kits and colour text are saved in your own browser.</td></tr>
               <tr><td>Servers at once</td><td class="sp-yes">One per bot</td><td class="sp-mid">Spinback is built to look after a single Discord server properly.</td></tr>
               <tr><td>Skin catalogue</td><td class="sp-yes">29 products, 59 skins</td><td class="sp-mid">Read from the official Rust Console Edition store, expanded into the individual skins inside each pack, with search, filters and a link to every store page.</td></tr>
@@ -493,14 +174,6 @@
           <h2 class="sp-title">Questions people actually ask</h2>
         </div>
         <div class="sp-faq">
-          <details data-sp-reveal>
-            <summary>Is it really free, or free until it is not?</summary>
-            <div class="sp-answer">Really free. There is no premium tier, no locked feature list and no card anywhere in the setup. Spinback is a project run by people who play on a Rust Console server, not a shop.</div>
-          </details>
-          <details data-sp-reveal style="--sp-i:1">
-            <summary>Will my members see a wall of commands?</summary>
-            <div class="sp-answer">No. There is one command, /dashboard, and it is registered as an administrator command. If a member types it anyway, the bot answers privately that the command is only for the server owner.</div>
-          </details>
           <details data-sp-reveal style="--sp-i:2">
             <summary>Do I have to make an account for the Kit Studio?</summary>
             <div class="sp-answer">No. The Kit Studio, the Colour Studio and the item catalogue all run in your browser. Kits are saved in your browser storage, so they work without signing in, and you can clear them whenever you like.</div>
