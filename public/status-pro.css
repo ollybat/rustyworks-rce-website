@@ -1,0 +1,14 @@
+/* Status page: per-page checks measured in the visitor's own browser. */
+.spx-panel { margin: 22px 0; padding: 20px; border: 1px solid #2e251d; border-radius: 16px; background: rgba(255,255,255,.02); }
+.spx-panel h3 { margin: 0 0 4px; font-size: 17px; }
+.spx-panel p.spx-sub { margin: 0 0 14px; font-size: 13.5px; color: #9c9088; }
+.spx-grid { display: grid; gap: 10px; }
+.spx-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 11px 13px; border: 1px solid #2e251d; border-radius: 12px; }
+.spx-row b { font-weight: 600; font-size: 14px; }
+.spx-ms { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }
+.spx-badge { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid #3a2f25; color: #9c9088; }
+.spx-badge.ok { color: #6cc24a; border-color: rgba(108,194,74,.45); }
+.spx-badge.bad { color: #e0574a; border-color: rgba(224,87,74,.45); }
+.spx-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; font-size: 13px; color: #9c9088; }
+.spx-btn { padding: 9px 14px; border-radius: 10px; border: 1px solid #3a2f25; background: rgba(255,154,0,.1); color: inherit; font: inherit; cursor: pointer; }
+.spx-btn[disabled] { opacity: .6; cursor: progress; }

@@ -1,0 +1,9 @@
+/* Kit Studio power features: notifications, a shortcuts sheet, a fill counter. */
+.kp-toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 90; padding: 10px 16px; border-radius: 999px; border: 1px solid #3a2f25; background: #17120e; color: #f4ece4; font-size: 13.5px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.kp-sheet { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; background: rgba(6,4,3,.72); padding: 20px; }
+.kp-sheet-card { max-width: 420px; width: 100%; border: 1px solid #3a2f25; border-radius: 16px; background: #14100c; padding: 20px 22px; }
+.kp-sheet-card h3 { margin: 0 0 10px; font-size: 17px; }
+.kp-sheet-card dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0; font-size: 14px; }
+.kp-sheet-card dt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #ffb347; }
+.kp-fill { font-size: 13px; color: #9c9088; margin: 6px 0 0; }
+.kp-copy { margin-left: 8px; padding: 7px 12px; border-radius: 9px; border: 1px solid #3a2f25; background: rgba(255,154,0,.1); color: inherit; font: inherit; cursor: pointer; }
