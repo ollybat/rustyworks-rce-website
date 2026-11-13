@@ -20,6 +20,7 @@ import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from
 import handler from './interactions-worker.js';
 import net from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import { isPublicAddress, rconHostAllowed } from './network-guard.mjs';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
@@ -575,7 +576,7 @@ async function runCommand(interaction) {
   const name = interaction.commandName;
   if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user' && name !== 'server') return;
   const ctx = botCtx();
-  if (name !== 'ping' && !permitted(interaction, ctx)) {
+  if (name !== 'ping' && name !== 'help' && !permitted(interaction, ctx)) {
     await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
   }
@@ -1119,7 +1120,7 @@ async function rconResolve(host) {
       settled = true;
       resolve(null);
     }, RCON_DNS_TIMEOUT_MS);
-    import('node:dns/promises').then(({ lookup }) => lookup(value, { all: true })).then(function (all) {
+    lookup(value, { all: true }).then(function (all) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -1395,8 +1396,19 @@ createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
     let body = '';
-    req.on('data', (chunk) => { body += chunk; });
+    let tooBig = false;
+    req.on('data', (chunk) => {
+      if (tooBig) return;
+      body += chunk;
+      if (body.length > 16384) {
+        tooBig = true;
+        res.writeHead(413, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify({ ok: false, error: 'payload_too_large' }));
+        req.destroy();
+      }
+    });
     req.on('end', async () => {
+      if (tooBig) return;
       const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
       if (!CLIENT_SECRET) {
         res.writeHead(503, cors);
@@ -1464,8 +1476,19 @@ createServer(async (req, res) => {
     return;
   }
   let raw = '';
-  req.on('data', (c) => { raw += c; });
+  let interactionTooLarge = false;
+  req.on('data', (chunk) => {
+    if (interactionTooLarge) return;
+    raw += chunk;
+    if (raw.length > 1024 * 1024) {
+      interactionTooLarge = true;
+      res.writeHead(413, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'payload_too_large' }));
+      req.destroy();
+    }
+  });
   req.on('end', async () => {
+    if (interactionTooLarge) return;
     try {
       const response = await handler.fetch(toRequest(req, raw), env);
       const text = await response.text();
