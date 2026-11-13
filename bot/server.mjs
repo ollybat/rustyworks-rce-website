@@ -458,14 +458,78 @@ function permitted(interaction, ctx) {
   return state.rolesSaved ? isStaff(interaction) : hasAdminBypass(interaction);
 }
 
+async function setLinkedRole(userId, action) {
+  const roleId = String((settings.staffRoles || {}).linked || '');
+  if (!roleId) return { ok: false, skipped: true, detail: 'No Linked role is configured.' };
+  try {
+    const guild = client.guilds.cache.get(GUILD_ID) || await client.guilds.fetch(GUILD_ID);
+    const member = await guild.members.fetch(String(userId));
+    if (action === 'remove') await member.roles.remove(roleId);
+    else await member.roles.add(roleId);
+    return { ok: true };
+  } catch (error) {
+    const detail = String((error && error.message) || error).slice(0, 180);
+    log('linked role ' + action + ' failed:', detail);
+    return { ok: false, detail: detail };
+  }
+}
+
+async function sendLinkNotice(userId, gamertag, action) {
+  try {
+    const user = await client.users.fetch(String(userId));
+    const linked = action === 'linked';
+    const embed = panelEmbed(linked ? 0x3ba55d : 0xfaa81a,
+      linked ? 'You are linked' : 'Your link was moved',
+      linked
+        ? 'Your Discord account is now linked to the Rust Console gamertag ' + gamertag + '.'
+        : 'Your Rust Console gamertag is now linked to this Discord account: ' + gamertag + '.');
+    await user.send(decorateDiscordPayload({ embeds: [embed] }));
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, detail: String((error && error.message) || error).slice(0, 180) };
+  }
+}
+
+async function writeLinkAudit(action, actorId, userId, gamertag) {
+  const channelId = String((settings.logChannels || {}).linking || '');
+  if (!channelId) return;
+  const embed = panelEmbed(0x3ba55d, 'Player link updated',
+    action + '\nPlayer: ' + String(gamertag || 'unknown').slice(0, 60) +
+    '\nDiscord: <@' + String(userId || '') + '>' +
+    '\nRequested by: ' + (actorId ? '<@' + actorId + '>' : 'unknown'));
+  embed.footer = { text: 'Linking log' };
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel && typeof channel.send === 'function') await channel.send(decorateDiscordPayload({ embeds: [embed] }));
+  } catch (error) {
+    log('linking log could not be posted:', String((error && error.message) || error).slice(0, 180));
+  }
+}
+
 async function postLinkPanel(channelId) {
   try {
     const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
-    const message = await channel.send(linkPanelPayload());
+    const previous = settings.linkPanel;
+    const message = await channel.send(decorateDiscordPayload(linkPanelPayload()));
+    let replaced = false;
+    if (previous && previous.messageId) {
+      try {
+        const oldChannel = await client.channels.fetch(String(previous.channelId));
+        const oldMessage = oldChannel && oldChannel.messages
+          ? await oldChannel.messages.fetch(String(previous.messageId))
+          : null;
+        if (oldMessage && typeof oldMessage.delete === 'function') {
+          await oldMessage.delete();
+          replaced = true;
+        }
+      } catch (error) {
+        log('older link panel could not be removed:', String((error && error.message) || error).slice(0, 180));
+      }
+    }
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
     const wrote = await persistSettings(['linkPanel']);
-    return { ok: true, saved: wrote.ok, detail: wrote.detail || '' };
+    return { ok: true, saved: wrote.ok, replaced: replaced, detail: wrote.detail || '' };
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
   }
@@ -530,7 +594,7 @@ async function writeCommandAudit(actorId, commandName, subcommand) {
   embed.footer = { text: 'Command log' };
   try {
     const channel = await client.channels.fetch(channelId);
-    if (channel && typeof channel.send === 'function') await channel.send({ embeds: [embed] });
+    if (channel && typeof channel.send === 'function') await channel.send(decorateDiscordPayload({ embeds: [embed] }));
   } catch (error) {
     log('command log could not be posted:', String((error && error.message) || error).slice(0, 200));
   }
@@ -791,6 +855,7 @@ async function runCommand(interaction) {
     const posted = await postLinkPanel(payload.postPanelTo);
     const body = posted.ok
       ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; staff can always confirm one by hand with /user forcelink.'
+        + (posted.replaced ? ' The previous panel was removed.' : '')
         + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
       : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
     if (slow) { await interaction.editReply(decorateDiscordPayload(body)).catch(function () {}); return; }
@@ -850,10 +915,15 @@ async function runButton(interaction) {
   }
   if (id === 'link:unlink:go') {
     await interaction.deferUpdate().catch(function () {});
+    const previous = findLinkByUser(interaction.user.id);
     const gone = removeLink(interaction.user.id);
     await persistQueue;
+    if (gone && previous) {
+      await setLinkedRole(previous.userId, 'remove');
+      await writeLinkAudit('Unlinked by member', interaction.user.id, previous.userId, previous.gamertag);
+    }
     return await answerPanel(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Unlinked' : 'Nothing to unlink',
-      gone ? 'Your link is removed. Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
+      gone ? 'Your link is removed and the Linked role was removed where configured. Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
       components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
   const publicHelp = id === 'help:home' || id.indexOf('help:cmd:') === 0;
@@ -873,9 +943,15 @@ async function runButton(interaction) {
   if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
   if (id.indexOf('user:unlink:go:') === 0) {
     const tag = id.slice('user:unlink:go:'.length);
+    const previous = findLinkByGamertag(tag);
     const gone = removeLink(tag);
+    await persistQueue;
+    if (gone && previous) {
+      await setLinkedRole(previous.userId, 'remove');
+      await writeLinkAudit('Unlinked by staff', interaction.user.id, previous.userId, previous.gamertag);
+    }
     return await answerPanel(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Link removed' : 'Nothing removed',
-      gone ? 'The link for ' + tag + ' is gone.' : 'No link for ' + tag + ' was found.')],
+      gone ? 'The link for ' + tag + ' is gone. The Linked role was removed where configured.' : 'No link for ' + tag + ' was found.')],
       components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
   }
   if (id === 'kits:give') return await interaction.showModal(kitGiveModal());
@@ -983,6 +1059,7 @@ async function runSelect(interaction) {
     const posted = await postLinkPanel(first);
     return await answerPanel(interaction, posted.ok
       ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + first + '> now. Members press **Link account** there.'
+        + (posted.replaced ? ' The previous panel was replaced.' : '')
         + (posted.saved ? '' : ' The website could not be told, so the panel id is in this bot memory only.'))],
         components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
       : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] });
@@ -1074,19 +1151,32 @@ async function runModal(interaction) {
     }
     const done = addLink(userId, gamertag, interaction.user.id);
     await persistQueue;
-    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Linked', '<@' + userId + '> is now linked to ' + done.gamertag + '.')],
+    const roleResult = await setLinkedRole(userId, 'add');
+    const dmResult = await sendLinkNotice(userId, done.gamertag, 'linked');
+    await writeLinkAudit('Linked', interaction.user.id, userId, done.gamertag);
+    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Linked', '<@' + userId + '> is now linked to ' + done.gamertag + '.'
+      + (roleResult.ok ? ' The Linked role was given.' : '')
+      + (dmResult.ok ? ' A direct message was sent.' : ' The player could not be sent a direct message.'))],
       components: [panelRow([panelButton('user:config', 'Back to links', 2), panelButton('user:panel', 'Post the link panel', 1)])] });
   }
   if (id.indexOf('modal:transfer:') === 0) {
     const gamertag = id.slice('modal:transfer:'.length);
+    const previous = findLinkByGamertag(gamertag);
     const moved = moveLink(gamertag, fields.move_user, fields.move_gamertag);
     await persistQueue;
-    return await answerModal(interaction, moved.ok
-      ? { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
-          + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.')],
-        components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
-      : { embeds: [panelEmbed(0xdc4c4c, 'Not moved', String(moved.detail || '').slice(0, 400))],
+    if (!moved.ok) {
+      return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'Not moved', String(moved.detail || '').slice(0, 400))],
         components: [panelRow([panelButton('user:transfer', 'Try again', 1), panelButton('user:config', 'Cancel', 2)])] });
+    }
+    if (previous) await setLinkedRole(previous.userId, 'remove');
+    const roleResult = await setLinkedRole(moved.userId, 'add');
+    const dmResult = await sendLinkNotice(moved.userId, moved.gamertag, 'moved');
+    await writeLinkAudit('Transferred', interaction.user.id, moved.userId, moved.gamertag);
+    return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
+      + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.'
+      + (roleResult.ok ? ' The Linked role was moved.' : '')
+      + (dmResult.ok ? ' A direct message was sent.' : ' The new owner could not be sent a direct message.'))],
+      components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
   }
   if (id === 'modal:kitgive') {
     const remembered = takePendingGive(interaction.user.id);
