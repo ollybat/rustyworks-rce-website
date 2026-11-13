@@ -34,7 +34,8 @@ export const COMMANDS = [
     ] },
   { name: "kits", description: "Rust kit settings, manual giveaways and kit-code previews", dm_permission: false,
     options: [
-      { type: 1, name: "grab", description: "Read the real kit names from the Rust server" },
+      { type: 1, name: "grab", description: "Read the real kit names from a saved Rust server",
+        options: [{ type: 3, name: "server", description: "Saved server to ask (blank uses the first)", autocomplete: true }] },
       { type: 1, name: "config", description: "Emote kit wizard: binds, cooldowns, roles, lock kits, emote guide" },
       { type: 1, name: "give", description: "Give a kit to a gamertag or a linked Discord user",
         options: [
@@ -69,7 +70,7 @@ export const COMMANDS = [
       { type: 1, name: "transfer", description: "Move a link to a new Discord account or a new gamertag" },
       { type: 1, name: "linkpanel", description: "Post a panel with Link Account and Unlink buttons in a channel",
         options: [{ type: 7, name: "channel", description: "Channel to post it in", channel_types: [0] }] },
-      { type: 1, name: "roster", description: "See every linked player",
+      { type: 1, name: "roster", description: "See linked players, optionally filtered",
         options: [{ type: 3, name: "search", description: "Filter linked players by gamertag", autocomplete: true }] },
     ] },
   { name: "server", description: "Ask your Rust server over RCON without changing anything", dm_permission: false,
@@ -589,16 +590,25 @@ export function transferModal(gamertag) {
   ] };
 }
 
-export function rosterPanel(ctx) {
+export function rosterPanel(ctx, page, search) {
   var held = linkRecords(ctx);
-  var lines = held.links.slice(0, 40).map(function (l) {
-    return "<@" + l.userId + "> -> " + code(l.gamertag) + (l.by ? " (by <@" + l.by + ">)" : "");
+  var needle = String(search || "").trim().toLowerCase();
+  var matches = needle ? held.links.filter(function (link) {
+    return String(link.gamertag || "").toLowerCase().includes(needle)
+      || String(link.userId || "").includes(needle);
+  }) : held.links;
+  var shown = matches.slice(0, 40);
+  var lines = shown.map(function (link) {
+    return "<@" + link.userId + "> -> " + code(link.gamertag) + (link.by ? " (by <@" + link.by + ">)" : "");
   });
-  var built = embed(0x3ba55d, "Linked players", held.links.length
-    ? "Every link on record, newest last."
-    : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**.");
-  if (lines.length) built.fields = [field("Roster (" + held.links.length + ")", lines.join("\n").slice(0, 1000), false)];
-  if (held.links.length > 40) built.fields.push(field("Cut off", "Showing the first 40 of " + held.links.length + ".", false));
+  var built = embed(matches.length ? 0x3ba55d : 0xfaa81a,
+    needle ? "Linked players matching " + code(needle) : "Linked players",
+    matches.length
+      ? (needle ? matches.length + " matching link(s)." : "Every link on record, newest last.")
+      : (needle ? "No linked players matched that search." : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**."));
+  if (lines.length) built.fields = [field("Roster (" + matches.length + ")", lines.join("\n").slice(0, 1000), false)];
+  if (matches.length > shown.length) built.fields.push(field("Showing", shown.length + " of " + matches.length + " matching links.", false));
+  if (needle) built.footer = { text: "Search: " + needle.slice(0, 80) };
   return { embeds: [built], components: [row([button("user:config", "Back to links", 2), button("user:panel", "Post the link panel", 1)])], flags: EPH };
 }
 
@@ -729,8 +739,8 @@ export function grabKits(ctx) {
   }
   return null;
 }
-export async function grabKitsRun(ctx) {
-  var server = ctx.servers()[0];
+export async function grabKitsRun(ctx, serverName) {
+  var server = ctx.servers().filter(function (entry) { return !serverName || entry.name === serverName; })[0] || ctx.servers()[0];
   if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
   var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: ctx.kits().listCommand });
   var lines = String((answer && answer.answer) || "").split("\n").filter(Boolean);
@@ -900,7 +910,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     return panel;
   }
   if (name === "kits") {
-    if (sub === "grab") { var quick = grabKits(ctx); return quick || grabKitsRun(ctx); }
+    if (sub === "grab") { var quick = grabKits(ctx); return quick || grabKitsRun(ctx, options.server); }
     if (sub === "config") return kitsPanel(ctx);
     if (sub === "give") {
       if (!options.kit && !options.gamertag && !options.user) return kitGivePanel(ctx);
@@ -928,7 +938,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "forceunlink") return unlinkPicker(ctx);
     if (sub === "transfer") return transferPicker(ctx);
     if (sub === "linkpanel") return options.channel ? { postPanelTo: options.channel } : channelPickerForPanel();
-    if (sub === "roster") return rosterPanel(ctx);
+    if (sub === "roster") return rosterPanel(ctx, 1, options.search);
     return userPanel(ctx);
   }
   return { content: "That command is not wired up here yet.", flags: EPH };
