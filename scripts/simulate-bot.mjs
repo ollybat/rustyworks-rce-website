@@ -226,6 +226,16 @@ between.push(["SIGTERM ends the bot cleanly (exit 0)", second.code === 0]);
 between.push(["the shutdown is quick (under 10 s)", second.stopMs !== null && second.stopMs < 10000]);
 between.push(["the shutdown is logged", /shutting down \(SIGTERM\)/.test(second.output)]);
 between.push(["the shutdown waits for the press still running", /1 interaction\(s\) still running/.test(second.output) && second.stopMs > 500]);
+
+/* The second bot run used file storage and reset its local preview map. Check that an empty
+   complete snapshot also clears the pretend website store, matching the Worker R2 behavior. */
+const clearInstallResponse = await fetch(siteUrl + "/api/bot/settings", {
+  method: "POST",
+  headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+  body: JSON.stringify({ installs: {} }),
+});
+between.push(["an empty preview snapshot clears website-side metadata", clearInstallResponse.ok && !Object.keys(store.installs || {}).length]);
+
 site.close();
 for (const socket of silentSockets) socket.destroy();
 silentRcon.close();
