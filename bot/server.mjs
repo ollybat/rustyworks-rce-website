@@ -761,7 +761,7 @@ async function routeInteraction(interaction) {
     const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
     if (!rightGuild) {
       if (typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
-        await interaction.reply({ embeds: [wrongGuildNote()], flags: 64 }).catch(function () {});
+        await interaction.reply(decorateDiscordPayload({ embeds: [wrongGuildNote()], flags: 64 })).catch(function () {});
       }
       return;
     }
@@ -789,6 +789,7 @@ async function runCommand(interaction) {
   const name = interaction.commandName;
   if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user' && name !== 'server') return;
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   if (name !== 'ping' && !permitted(interaction, ctx)) {
     await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
@@ -798,8 +799,11 @@ async function runCommand(interaction) {
      a panel is assembled or a server is asked a question. */
   const slow = name !== 'ping' && name !== 'help';
   if (slow) await interaction.deferReply({ flags: 64 }).catch(function () {});
+  void writeCommandAudit(ctx.actorId, '/' + name + (opts.__sub ? ' ' + opts.__sub : ''));
   const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
-    return { embeds: [panelEmbed(0xdc4c4c, 'That did not work', String((error && error.message) || error).slice(0, 400))] };
+    const reference = createHash('sha256').update(Date.now() + ':' + String((error && error.message) || error)).digest('hex').slice(0, 8);
+    log('command handler failed [' + reference + ']:', String((error && error.message) || error));
+    return { embeds: [panelEmbed(0xdc4c4c, 'That did not work', 'The bot could not complete this command. Please try again. Reference: ' + reference)] };
   });
   /* A panel that offers Apply carries the exact list it is showing. It is kept per person here
      and removed before the panel is sent, because Discord does not know that key. */
@@ -810,23 +814,24 @@ async function runCommand(interaction) {
       ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; staff can always confirm one by hand with /user forcelink.'
         + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
       : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
-    if (slow) { await interaction.editReply(body).catch(function () {}); return; }
-    await interaction.reply(body).catch(function () {});
+    if (slow) { await interaction.editReply(decorateDiscordPayload(body)).catch(function () {}); return; }
+    await interaction.reply(decorateDiscordPayload(body)).catch(function () {});
     return;
   }
   if (slow) {
     const body = Object.assign({}, payload);
     /* flags belong on the first reply only; the deferral already made it ephemeral. */
     delete body.flags;
-    await interaction.editReply(body).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
+    await interaction.editReply(decorateDiscordPayload(body)).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
     return;
   }
-  await interaction.reply(payload).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
+  await interaction.reply(decorateDiscordPayload(payload)).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
 }
 
 async function runButton(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   if (id === 'ping:again') return await answerPanel(interaction, await pingReply(ctx));
   /* /server buttons re-ask the same read-only question, so they are one line. */
   if (id.indexOf('server:') === 0) return await answerPanel(interaction, await serverSnapshot(ctx, id.slice('server:'.length)));
@@ -1011,6 +1016,7 @@ async function runButton(interaction) {
 async function runSelect(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   const first = String((interaction.values || [])[0] || '');
   if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first));
@@ -1085,6 +1091,7 @@ async function runModal(interaction) {
   const id = customId(interaction);
   const fields = modalFields(interaction);
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   /* A member linking themselves is not a staff action. */
   if (id === 'modal:link:self') {
     const answer = requestLink(interaction.user.id, fields.link_gamertag);
