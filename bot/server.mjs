@@ -592,15 +592,25 @@ function mayConfigure(interaction) {
 
 async function answerModal(interaction, payload) {
   const body = Object.assign({}, payload);
-  if (body.flags === undefined) body.flags = 64;
-  try { await interaction.reply(body); } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
+  try {
+    if (interaction.deferred) {
+      delete body.flags;
+      await interaction.editReply(body);
+    } else {
+      if (body.flags === undefined) body.flags = 64;
+      await interaction.reply(body);
+    }
+  } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
 }
 
 async function answerPanel(interaction, payload) {
   const body = Object.assign({}, payload);
   delete body.flags;
   if (body.components === undefined) body.components = [];
-  try { await interaction.update(body); } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
+  try {
+    if (interaction.deferred) await interaction.editReply(body);
+    else await interaction.update(body);
+  } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
 }
 
 function autocompleteChoicesFor(interaction, ctx) {
@@ -699,9 +709,15 @@ async function runButton(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
   ctx.actorId = String((interaction.user && interaction.user.id) || '');
-  if (id === 'ping:again') return await answerPanel(interaction, await pingReply(ctx));
-  /* /server buttons re-ask the same read-only question, so they are one line. */
-  if (id.indexOf('server:') === 0) return await answerPanel(interaction, await serverSnapshot(ctx, id.slice('server:'.length)));
+  if (id === 'ping:again') {
+    await interaction.deferUpdate().catch(function () {});
+    return await answerPanel(interaction, await pingReply(ctx));
+  }
+  /* Server buttons open a fresh RCON connection, so acknowledge before doing network work. */
+  if (id.indexOf('server:') === 0) {
+    await interaction.deferUpdate().catch(function () {});
+    return await answerPanel(interaction, await serverSnapshot(ctx, id.slice('server:'.length)));
+  }
   /* The link panel is a member action, so its buttons work for everyone in the server and
      are handled before the staff check. */
   if (id === 'link:start') return await interaction.showModal(linkModal());
@@ -782,6 +798,7 @@ async function runSelect(interaction) {
   const first = String((interaction.values || [])[0] || '');
   if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first));
   if (id.indexOf('setup:channel:') === 0) {
+    await interaction.deferUpdate().catch(function () {});
     const typeKey = id.slice('setup:channel:'.length);
     const found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
     settings.logChannels[typeKey] = first;
@@ -821,6 +838,7 @@ async function runSelect(interaction) {
   }
   if (id === 'user:transfer:pick') return await interaction.showModal(transferModal(first));
   if (id === 'user:panel:channel') {
+    await interaction.deferUpdate().catch(function () {});
     const posted = await postLinkPanel(first);
     return await answerPanel(interaction, posted.ok
       ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + first + '> now. Members press **Link account** there.'
@@ -840,6 +858,14 @@ async function runModal(interaction) {
   const fields = modalFields(interaction);
   const ctx = botCtx();
   ctx.actorId = String((interaction.user && interaction.user.id) || '');
+  /* A saved-server probe opens RCON; giveaway and owner-setting writes can also wait
+     on the website. Acknowledge these modal submissions before their slow work. */
+  const slowModal = id === 'modal:server' || id.indexOf('modal:server:') === 0
+    || id === 'modal:kitgive'
+    || id === 'modal:roles' || id === 'modal:linked'
+    || id.indexOf('modal:forcelink:') === 0
+    || id.indexOf('modal:transfer:') === 0;
+  if (slowModal) await interaction.deferReply({ flags: 64 }).catch(function () {});
   /* A member linking themselves is not a staff action. */
   if (id === 'modal:link:self') {
     const answer = requestLink(interaction.user.id, fields.link_gamertag);
