@@ -9,5 +9,11 @@ export async function resolve(specifier, context, next) {
   if (specifier === "node:net" && context.parentURL && /\/bot\/server\.mjs$/.test(context.parentURL)) {
     return { url: new URL("./net-sim.mjs", import.meta.url).href, shortCircuit: true };
   }
+  /* Resolve one simulation hostname to the public documentation IP used by the
+     silent RCON stand-in. This makes the end-to-end test fail if the socket ever
+     reconnects using the original hostname instead of the vetted DNS answer. */
+  if (specifier === "node:dns/promises" && context.parentURL && /\/bot\/server\.mjs$/.test(context.parentURL)) {
+    return { url: new URL("./dns-sim.mjs", import.meta.url).href, shortCircuit: true };
+  }
   return next(specifier, context);
 }
