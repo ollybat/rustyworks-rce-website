@@ -419,14 +419,15 @@ export function setupStatus(ctx) {
     ["Log channels stored", Object.keys(channels).length + " of " + LOG_TYPES.length],
     ["Rust servers linked", String(servers.length)],
     ["Kit binds", String((kits.binds || []).length)],
-    ["Auth groups with a respawn kit", String(Object.keys(kits.authSpawn || {}).length)],
+    ["Saved Auth Group preferences", String(Object.keys(kits.authSpawn || {}).length) + " (game hook required)"],
   ];
   var next = [];
   if (!servers.length) next.push("Run **/setup run** and add your Rust server, so the RCON connection can be tested.");
   if (!Object.keys(roles).length) next.push("Step 1: save your staff roles so staff-only features know who is who.");
   if (!Object.keys(channels).length) next.push("Step 2: choose a channel for the log types you want.");
   if (!kits.listCommand) next.push("Set your kit plugin list command, then **/kits grab** reads your real kit names.");
-  if (!kits.giveCommand) next.push("Set a give template using {player} and {kit}, then **/kits give** can hand kits out in game.");
+  if (!kits.giveCommand) next.push("Set a give template using {player} and {kit}, then **/kits give** can send manual giveaways over RCON.");
+  if (Object.keys(kits.authSpawn || {}).length || (kits.binds || []).length) next.push("Emote-bind and Auth Group entries are saved preferences only until a Rust game-event/plugin connector is connected.");
   if (!ctx.storeTokenSet()) next.push("Set BOT_SETTINGS_TOKEN to the same value on the website and the bot, otherwise saves stay in this bot memory only.");
   var built = embed(next.length ? 0xfaa81a : 0x3ba55d, "Setup status",
     next.length ? "What is saved right now is below, then what is still missing, in the order worth doing it." : "Everything the bot can check is in place.");
@@ -439,10 +440,10 @@ export function setupStatus(ctx) {
 /* /kits cooldowns ---------------------------------------------------------- */
 export function cooldownsPanel(ctx, rows) {
   var list = rows || [];
-  var built = embed(0xff7200, "Kit cooldowns",
+  var built = embed(0xff7200, "Manual kit-give cooldowns",
     list.length
-      ? "The cooldown records this bot is holding right now."
-      : "No cooldown records are being held. Cooldowns are this bot own bookkeeping, so this stays empty until the in-game hook reports a kit use back to the bot.");
+      ? "These timers apply to successful /kits give actions per gamertag + kit. They live in this bot process and reset if Railway restarts it."
+      : "No manual giveaways are cooling down right now. Emote-bind and respawn preferences do not create timers because a Rust game-event connector is not connected.");
   if (list.length) built.fields = [field("On record", list.slice(0, 20).join("\n").slice(0, 1000), false)];
   built.footer = { text: "Clearing is instant: /kits refresh, or the button below" };
   return { embeds: [built], components: [row([button("kits:config", "Back to Emote Kits", 2), button("kits:clear", "Clear all cooldowns", 2)])], flags: EPH };
@@ -637,8 +638,8 @@ export function kitRefreshModal(scope) {
 
 export function kitSpawnPanel(ctx) {
   var auth = ctx.kits().authSpawn || {};
-  return { embeds: [embed(0xff7200, "Respawn kits per auth group",
-    "Pick a group, then type the kit it should receive on every respawn. Leaving the kit blank stops that group receiving one.")],
+  return { embeds: [embed(0xfaa81a, "Auth Group respawn preferences",
+    "Save which kit should be associated with each group. This is not active in game yet: automatic respawn delivery needs a Rust game-event/plugin connector, which is not connected.")],
     components: [
       row(AUTH_GROUPS.slice(0, 3).map(function (g) { return button("kits:spawn:" + g, g + (auth[g] ? " - " + auth[g] : ""), auth[g] ? 1 : 2); })),
       row(AUTH_GROUPS.slice(3).map(function (g) { return button("kits:spawn:" + g, g + (auth[g] ? " - " + auth[g] : ""), auth[g] ? 1 : 2); })),
@@ -647,20 +648,20 @@ export function kitSpawnPanel(ctx) {
 }
 
 export function kitSpawnModal(group, currentKit) {
-  return { title: group + " respawn kit", custom_id: "modal:spawn:" + group, components: [
-    row([input("spawn_kit", "Kit for " + group + " (blank to stop)", currentKit || "", false)]),
+  return { title: group + " respawn preference", custom_id: "modal:spawn:" + group, components: [
+    row([input("spawn_kit", "Saved kit preference for " + group, currentKit || "", false)]),
   ] };
 }
 
 export function kitAddPanel() {
-  return { embeds: [embed(0x5865f2, "Install a kit",
-    "Paste a Base64 install code from Kit Studio. The bot checks it really is Base64 that decodes to text, stores it exactly as given, and never guesses what is inside.")],
+  return { embeds: [embed(0x5865f2, "Preview a kit code",
+    "Paste a Base64 code from Kit Studio. The bot validates the text, saves a short preview and recognises kit names for autocomplete. It does not execute the code or install items on your Rust server.")],
     components: [row([button("kits:add:code", "Enter a code", 1), button("kits:studio", "Open Kit Studio", 5)]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
 }
 
 export function kitAddModal() {
-  return { title: "Install a kit", custom_id: "modal:kitcode", components: [
-    row([input("install_code", "Base64 kit install code", "", true)]),
+  return { title: "Preview a kit code", custom_id: "modal:kitcode", components: [
+    row([input("install_code", "Base64 code to preview", "", true)]),
   ] };
 }
 
@@ -860,7 +861,7 @@ export function kitGivePanel(ctx) {
     components.push(row([button("user:config", "Nobody is linked yet - open links", 2)]));
   }
   return { embeds: [embed(0xff7200, "Give a kit",
-    "Two ways in: type the kit and a gamertag, or pick a player who is already linked. The kit goes out with the give template you saved, and the server answer is shown back to you as it comes.")],
+    "Manually send a kit over RCON using the saved Rust plugin give template. Choose a confirmed linked player or type a gamertag. Successful sends start a per-player + kit cooldown; staff can pause manual delivery from /kits config.")],
     components: components, flags: EPH };
 }
 
