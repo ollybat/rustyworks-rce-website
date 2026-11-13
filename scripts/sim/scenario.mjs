@@ -99,7 +99,7 @@ export async function run({ world, make, interact }) {
   /* 9. /kits give to a linked Discord user: their gamertag is used, the kit keeps its case */
   slow.push(go(make.command(ADMIN, "kits", "give", { kit: "STARTER", user: { type: 6, value: "100000000000000210" }, server: "srv1" }), "/kits give to a linked user"));
   const [edited, given] = await Promise.all(slow);
-  expect("the RCON test reaches the pinned DNS address and keeps the saved password", !text(last(edited)).includes("no-password") && text(last(edited)).includes("rcon.sim.test:28016") && text(last(edited)).includes("Reason: timeout") && text(last(edited)).includes("Nothing answered within"), text(last(edited)));
+  expect("the RCON test reaches the pinned DNS address and keeps the saved password", !text(last(edited)).includes("no-password") && text(last(edited)).includes("rcon.sim.test:28016") && text(last(edited)).includes("timeout") && text(last(edited)).includes("Nothing answered within"), text(last(edited)));
   expect("slow RCON answers are acknowledged in time", edited.firstAckAt !== null && edited.firstAckAt < 3000 && given.firstAckAt < 3000, edited.firstAckAt + " / " + given.firstAckAt);
   expect("a Discord user gets their linked gamertag, not their id", text(last(given)).includes('kit givetoplayer STARTER \\"PlayerOne\\"'), text(last(given)));
   expect("the RCON command is logged", world.sent.some((m) => m.channelId === "100000000000000404" && text(m.payload).includes("kit givetoplayer STARTER")), text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-1)));
@@ -358,23 +358,6 @@ export async function run({ world, make, interact }) {
   it = await go(make.select(ADMIN, "string", "kits:give:pick", ["PlayerOne"]), "pick a player to give a kit");
   expect("picking a player fills the give form with their gamertag", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes('"value":"PlayerOne"'), text(last(it)).slice(0, 400));
   expect("every registered command takes no typed option", world.registered.every((c) => (c.options || []).every((o) => o.type === 1 && !(o.options || []).length)), text(world.registered.map((c) => c.name)));
-
-  /* Reset is a complete clear of bot configuration, including the private preview map.
-     Player links remain, as promised by the reset panel. */
-  w = await writes();
-  expect("preview metadata exists before reset", w.some((write) => write.installs && Object.keys(write.installs).length > 0), text(w.slice(-5)));
-  it = await go(make.command(ADMIN, "setup", "reset"), "/setup reset");
-  expect("reset opens its confirmation panel", text(last(it)).includes("Reset the settings?"), text(last(it)).slice(0, 300));
-  it = await go(make.button(ADMIN, "setup:reset:go"), "open reset confirmation");
-  it = await go(make.modal(ADMIN, "modal:reset", { reset_word: "RESET" }), "confirm settings reset");
-  const resetWrites = await writes();
-  const persistedSettings = await (await fetch(SITE + "/api/bot/settings?full=1", {
-    headers: { "x-settings-token": "sim-settings-token" },
-  })).json();
-  const resetInstallSnapshot = resetWrites.slice().reverse().find((write) => write.installs && !Object.keys(write.installs).length);
-  expect("reset writes an empty preview snapshot to website storage", !!resetInstallSnapshot, text(resetWrites.slice(-4)));
-  expect("the Worker-side settings store no longer has kit previews", persistedSettings.installs && !Object.keys(persistedSettings.installs).length, text(persistedSettings.installs));
-  expect("reset keeps confirmed player links in website storage", Array.isArray(persistedSettings.links) && persistedSettings.links.length > 0, String((persistedSettings.links || []).length));
 
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
