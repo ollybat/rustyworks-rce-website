@@ -59,7 +59,7 @@ export const COMMANDS = [
         ] },
       { type: 1, name: "cooldowns", description: "See active manual kit-give cooldowns" },
       { type: 1, name: "build", description: "Kit Studio: build a kit on the website or work from an install code" },
-      { type: 1, name: "add", description: "Install a kit from a Base64 kit install code",
+      { type: 1, name: "add", description: "Preview a kit code and recognise its kit names",
         options: [{ type: 3, name: "code", description: "The Base64 install code (blank opens the panel)" }] },
     ] },
   { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
@@ -479,12 +479,12 @@ export function helpHome(ctx) {
   var built = embed(0x5865f2, "Spinback RCE commands",
     "Pick a command to see every subcommand, who may run it and what it needs set up first.\n\n" +
     "**/ping** - live bot and website health\n**/setup** - roles, logging channels and your Rust server\n" +
-    "**/kits** - emote kits, giving kits, cooldowns and installs\n**/user** - player links: confirm, move, remove, roster\n" +
+    "**/kits** - kit settings, manual giveaways and cooldowns\n**/user** - player links: confirm, move, remove, roster\n" +
     "**/help** - this page");
   built.footer = { text: "Options with suggestions (kits, gamertags, servers) fill in as you type" };
   return {
     embeds: [built],
-    components: [helpButtons(""), row([link("Status page", site + "/status.html"), link("Commands reference", site + "/commands.html")])],
+    components: [helpButtons("") , row([link("Status page", site + "/status.html")])],
     flags: EPH,
   };
 }
@@ -496,7 +496,7 @@ export function helpDetail(name, ctx) {
     setup: embed(0xff7200, "Help: /setup",
       "Your server, wired up in three steps. Roles and channels come from Discord's own pickers, and the Rust connection is tested before anything is saved, so a wrong port or password never lands in your settings."),
     kits: embed(0xff7200, "Help: /kits",
-      "Emote kits end to end: the real kit names from your server, binds with cooldowns and roles, giving kits out, clearing cooldowns, respawn kits per auth group, and installing kits built in Kit Studio."),
+      "Configure bind and Auth Group preferences, read kit names from your server, and manually give kits to linked players over RCON. Automatic emote and respawn actions require a Rust game-event/plugin connector, which is not connected yet."),
     user: embed(0x1abc9c, "Help: /user",
       "Player links: a Discord account with the Rust Console gamertag it belongs to. Players ask through the link panel; staff confirm, move or remove links, and the linked role follows the link."),
   };
@@ -519,17 +519,17 @@ export function helpDetail(name, ctx) {
     kits: [
       field("Subcommands", [
         "**grab** `server` - read the real kit names from your server (they then autocomplete)",
-        "**config** - binds, cooldowns, roles, lock kits, emote guide",
-        "**give** `kit` `gamertag` or `user` `server` - hand a kit over in game",
-        "**refresh** `scope` `target` - clear cooldowns for a player, a kit, or everything",
-        "**cooldowns** - the cooldown records the bot is holding",
-        "**auth-spawn** `group` `kit` - give a group a kit on every respawn",
-        "**build** - Kit Studio on the website",
-        "**add** `code` - install a kit from a Base64 install code (its kit names are picked up for autocomplete)",
+        "**config** - saved bind preferences, manual delivery, pause switch and guide",
+        "**give** `kit` `gamertag` or `user` `server` - manually give a kit over RCON",
+        "**refresh** `scope` `target` - clear manual giveaway cooldown records",
+        "**cooldowns** - active manual giveaway timers (held in memory; reset on bot restart)",
+        "**auth-spawn** `group` `kit` - save a respawn-kit preference; needs a Rust game-event connector to run",
+        "**build** - open Kit Studio on the website",
+        "**add** `code` - preview a Base64 code and recognise kit names; does not install the code",
       ].join("\n"), false),
-      field("Delivery settings", "In **/kits config**, press **Delivery settings** to set the list command and the give template right here in Discord. The give template needs {player} and {kit}.", false),
+      field("Delivery settings", "In **/kits config**, set the list command, give template and giveaway cooldown. Successful manual giveaways start a timer per gamertag + kit; failed RCON attempts do not. The manual pause switch blocks giveaways. Cooldown timers are in memory and reset when the bot restarts.", false),
       field("Permissions", STAFF_RULE, false),
-      field("Needs first", "Setup finished (a staff role and a tested server), then your kit plugin's list command and a give template using {player} and {kit}. The bot will not guess either.", false),
+      field("Needs first", "Finish setup, then configure your Rust plugin's list command and give template. Saved bind and respawn preferences do not trigger in-game actions until a Rust game-event/plugin connector is installed.", false),
     ],
     user: [
       field("Subcommands", [
@@ -897,13 +897,13 @@ export function kitAddPanel(ctx) {
   /* A link button (style 5) must carry a url and no custom_id, or Discord refuses the whole
      reply and the user sees "This interaction failed". */
   var studio = link("Open Kit Studio", ((ctx && ctx.siteUrl) || "https://spinback-j7ao5f.camelai.app") + "/dashboard/kitbuilder.html");
-  return { embeds: [embed(0x5865f2, "Install a kit",
-    "Paste a Base64 install code from Kit Studio. The bot checks it really is Base64 that decodes to text, stores it exactly as given, and never guesses what is inside.")],
+  return { embeds: [embed(0x5865f2, "Preview a kit code",
+    "Paste a Base64 code from Kit Studio. The bot validates the text, recognises kit names for autocomplete and saves a short preview. It does not run the code or install items on your Rust server.")],
     components: [row([button("kits:add:code", "Enter a code", 1), studio]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
 }
 
 export function kitAddModal() {
-  return { title: "Install a kit", custom_id: "modal:kitcode", components: [
+  return { title: "Preview a kit code", custom_id: "modal:kitcode", components: [
     row([input("install_code", "Base64 kit install code", "", true)]),
   ] };
 }
@@ -1055,7 +1055,7 @@ export async function grabKitsRun(ctx, wanted) {
 }
 export function kitStudioPanel(ctx) {
   return { embeds: [embed(0x5865f2, "Kit Studio",
-    "Build a kit slot by slot on the website, then bring it back here as an install code. The site and this bot share the same 299-item catalogue, so a kit made there is the same kit here.")],
+    "Build a kit slot by slot on the website, then bring its code here to preview the decoded kit names. This bot does not yet execute the code or install items on your Rust server.")],
     /* kits:add:code opens the install-code form; kits:add is "Add a bind". */
     components: [row([link("Open Kit Studio", ctx.siteUrl + "/dashboard/kitbuilder.html"), button("kits:add:code", "Install a code", 1)])], flags: EPH };
 }
