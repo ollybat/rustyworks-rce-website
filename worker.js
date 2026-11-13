@@ -473,16 +473,6 @@ const KIT_ALIASES = [
   [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/rustyworks-app-$1.png"]
 ];
 
-/* Spinback names the pages ask for that are already in public/media under another name.
-   Tried before the operator's site, so these never leave the Worker. */
-const LOCAL_ALIASES = [
-  [/^\/media\/spinback-icon\.svg$/i, "/media/rustyworks-icon.svg"],
-  [/^\/media\/spinback-icon-christmas\.svg$/i, "/media/rustyworks-icon-christmas.svg"],
-  [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/icon-$1.png"],
-  [/^\/media\/spinback-bg\.webp$/i, "/media/spinback-banner.webp"],
-  [/^\/media\/spinback-bg-poster\.jpg$/i, "/media/spinback-banner-poster.jpg"]
-];
-
 async function kitAsset(url, ctx, env) {
   const allowed = KIT_PATHS.some((shape) => shape.test(url.pathname));
   if (!allowed) return new Response("not found", { status: 404, headers: { "cache-control": "no-store" } });
@@ -707,7 +697,6 @@ function redirect(location, headers = {}) {
 const DEFAULT_STAFF_NAMES = ["astronomator"];
 const PERM_ADMINISTRATOR = 0x8n;
 const PERM_MANAGE_GUILD = 0x20n;
-
 function csv(value) {
   return String(value || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 }
@@ -1328,12 +1317,15 @@ async function botSettings(request, env) {
   }
   const given = String(request.headers.get("x-settings-token") || "");
   if (given !== expected) return json({ ok: false, reason: "bad-token" }, 403);
+  /* The bot's panels write the same sections the site's own assignment tools read. */
+  if (request.method === "POST") return botSettingsWrite(request, env);
   const servers = await storedServers(env);
   return json({
     ok: true,
     readAt: Date.now(),
     staffRoles: (await readJson(env, ROLES_KEY)) || null,
     logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
+    kits: (await readJson(env, KITS_KEY)) || null,
     staffRules: await accessRules(env),
     servers: servers.servers.map(function (row) {
       return { id: row.id, name: row.name, host: row.host, port: row.port, password: row.password };
@@ -1373,6 +1365,47 @@ async function setupStatus(request, env) {
 const ROLES_KEY = "spinback-rce/settings/roles.json";
 const LOGCHANNELS_KEY = "spinback-rce/settings/logchannels.json";
 const SERVERS_KEY = "spinback-rce/settings/servers.json";
+const KITS_KEY = "spinback-rce/settings/kits.json";
+
+/* What the bot's own panels collect. Sections it does not send are left alone, and servers
+   are merged by id rather than replaced, so a save can never quietly drop a server that was
+   already set up here. */
+async function botSettingsWrite(request, env) {
+  let body = null;
+  try { body = await request.json(); } catch (error) { return json({ ok: false, reason: "bad-json" }, 400); }
+  if (!body || typeof body !== "object") return json({ ok: false, reason: "bad-body" }, 400);
+  const wrote = [];
+  if (body.staffRoles && typeof body.staffRoles === "object") {
+    const current = (await readJson(env, ROLES_KEY)) || {};
+    if (await writeJson(env, ROLES_KEY, Object.assign({}, current, body.staffRoles))) wrote.push("staffRoles");
+  }
+  if (body.logChannels && typeof body.logChannels === "object") {
+    const current = (await readJson(env, LOGCHANNELS_KEY)) || {};
+    if (await writeJson(env, LOGCHANNELS_KEY, Object.assign({}, current, body.logChannels))) wrote.push("logChannels");
+  }
+  if (Array.isArray(body.servers)) {
+    const held = (await storedServers(env)).servers.slice();
+    body.servers.forEach(function (row) {
+      if (!row || !row.id) return;
+      const clean = {
+        id: String(row.id),
+        name: String(row.name || "server").slice(0, 60),
+        host: String(row.host || ""),
+        port: Number(row.port),
+        password: String(row.password || ""),
+      };
+      const at = held.findIndex(function (x) { return x.id === clean.id; });
+      if (at > -1) held[at] = clean; else held.push(clean);
+    });
+    if (await writeJson(env, SERVERS_KEY, { servers: held, updatedAt: Date.now() })) wrote.push("servers");
+  }
+  if (body.kits && typeof body.kits === "object") {
+    const current = (await readJson(env, KITS_KEY)) || {};
+    if (await writeJson(env, KITS_KEY, Object.assign({}, current, body.kits, { updatedAt: Date.now() }))) wrote.push("kits");
+  }
+  return json({ ok: true, wrote: wrote, at: Date.now() }, 200);
+}
+
 const ROLE_SLOTS = [
   ["owner", "Owner role", true],
   ["coOwner", "Co-Owner role", false],
@@ -1958,24 +1991,9 @@ export default {
       return kitAsset(new URL(KIT_ORIGIN + upstreamPath), ctx, env);
     }
 
-    /* Spinback artwork: our own file first (the banner, its poster and the mark live in
-       public/media), then a local file under its older name, and only then the operator's
-       site. Sending every /media/spinback-* path upstream used to 404 the local banner and
-       the header logo. */
-    if (url.pathname.startsWith("/media/spinback-")) {
-      if (request.method === "GET" || request.method === "HEAD") {
-        const own = await env.ASSETS.fetch(request);
-        if (own.status === 200) return withAssetHeaders(own, url.pathname);
-        const local = LOCAL_ALIASES.find((a) => a[0].test(url.pathname));
-        if (local) {
-          const target = url.pathname.replace(local[0], local[1]);
-          const aliased = await env.ASSETS.fetch(new Request(new URL(target, url), request));
-          if (aliased.status === 200) return withAssetHeaders(aliased, target);
-        }
-      }
-      return kitAsset(url, ctx, env);
-    }
-    if (url.pathname === "/media/entitys/entities.json" || url.pathname.startsWith("/media/kitbuilder/")) {
+    if (url.pathname === "/media/entitys/entities.json"
+      || url.pathname.startsWith("/media/kitbuilder/")
+      || url.pathname.startsWith("/media/spinback-")) {
       return kitAsset(url, ctx, env);
     }
     if (url.pathname === "/api/config-check") {
@@ -2005,11 +2023,6 @@ export default {
         envKeys: Object.keys(env).sort()
       });
     }
-    /* Sign-in was retired. Pages that still ask (the status page, theme sync) get a clear,
-       machine-readable answer instead of a bare 404 or the not-found page. */
-    if (url.pathname === "/auth" || url.pathname.startsWith("/auth/")) {
-      return json({ authenticated: false, configured: false, retired: true }, url.pathname === "/auth/me" ? 200 : 410);
-    }
     if (url.pathname === "/api/history") return statusHistory(request, env);
     if (url.pathname === "/api/setup") return authSetup(request, env);
     if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
@@ -2024,12 +2037,7 @@ export default {
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
     /* The dashboard is gone: /dashboard now sends you to the Kit Studio. */
-    /* Only /dashboard itself (with or without a trailing slash) is redirected - a second,
-       unconditional redirect used to sit on this line and sent every page, the Kit Studio
-       included, round in a loop. */
-    if (url.pathname === "/dashboard" || url.pathname === "/dashboard/") {
-      return Response.redirect(new URL("/dashboard/kitbuilder.html" + url.search, url).toString(), 302);
-    }
+    if (url.pathname === "/dashboard") return Response.redirect(new URL("/dashboard/kitbuilder.html", url).toString(), 302); return Response.redirect(new URL("/dashboard/kitbuilder.html", url).toString(), 302);
 
     const assetResponse = await env.ASSETS.fetch(request);
     if (assetResponse.status !== 404) return withAssetHeaders(assetResponse, url.pathname);
