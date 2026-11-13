@@ -105,10 +105,10 @@ export async function run({ world, make, interact }) {
   expect("slow RCON answers are acknowledged in time", edited.firstAckAt !== null && edited.firstAckAt < 3000 && given.firstAckAt < 3000, edited.firstAckAt + " / " + given.firstAckAt);
   expect("a Discord user gets their linked gamertag, not their id", text(last(given)).includes('kit givetoplayer STARTER \\"PlayerOne\\"'), text(last(given)));
   expect("the RCON command is logged", world.sent.some((m) => m.channelId === "100000000000000404" && text(m.payload).includes("kit givetoplayer STARTER")), text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-1)));
-  const rconLogsBeforeCooldown = world.sent.filter((m) => m.channelId === "100000000000000404").length;
-  it = await go(make.command(ADMIN, "kits", "give", { kit: "STARTER", gamertag: "PlayerOne", server: "srv1" }), "repeat the same kit give");
-  expect("a successful give starts a per-player, per-kit cooldown", text(last(it)).includes("Giveaway cooldown"), text(last(it)));
-  expect("a cooldown blocks the second RCON command", world.sent.filter((m) => m.channelId === "100000000000000404").length === rconLogsBeforeCooldown, text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-2)));
+  const rconLogsBeforeRetry = world.sent.filter((m) => m.channelId === "100000000000000404").length;
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "STARTER", gamertag: "PlayerOne", server: "srv1" }), "retry after a refused RCON give");
+  expect("a failed RCON command does not start a success cooldown", !text(last(it)).includes("Giveaway cooldown"), text(last(it)));
+  expect("the retry reaches RCON after the previous attempt failed", world.sent.filter((m) => m.channelId === "100000000000000404").length === rconLogsBeforeRetry + 1, text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-2)));
   it = await go(make.button(ADMIN, "kits:lock"), "pause manual kit delivery");
   it = await go(make.command(ADMIN, "kits", "give", { kit: "OTHER", gamertag: "PlayerOne", server: "srv1" }), "give while delivery is paused");
   expect("the kit delivery lock is enforced", text(last(it)).includes("Kit delivery is paused"), text(last(it)));
@@ -137,6 +137,8 @@ export async function run({ world, make, interact }) {
   /* 12. a player asks to link; staff approve it in one click; the linked role follows */
   it = await go(make.modal(NEWGUY, "modal:link:self", { link_gamertag: "NewGuy" }), "a player asks to link");
   expect("the player's request is recorded", text(last(it)).includes("Request recorded"), text(last(it)));
+  it = await go(make.modal(PLAYER, "modal:link:self", { link_gamertag: "NewGuy" }), "another player requests a pending gamertag");
+  expect("the same gamertag cannot be queued by two accounts", text(last(it)).includes("already waiting"), text(last(it)));
   it = await go(make.button(ADMIN, "user:pending"), "open the waiting list");
   expect("the waiting list offers approve and reject menus", text(last(it)).includes("user:pending:approve") && text(last(it)).includes("user:pending:reject"), text(last(it)));
   it = await go(make.select(ADMIN, "string", "user:pending:approve", ["100000000000000205"]), "approve the request");
@@ -188,6 +190,8 @@ export async function run({ world, make, interact }) {
   expect("the delivery form opens", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes("kit_give"), text(it.calls));
   it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: "kit give" }), "save delivery without placeholders");
   expect("a give command without {player} and {kit} is refused", text(last(it)).includes("Not saved"), text(last(it)));
+  it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"', kit_give_cooldown: "86401" }), "refuse an excessive giveaway cooldown");
+  expect("an excessive giveaway cooldown is rejected", text(last(it)).includes("Not saved") && text(last(it)).includes("86400"), text(last(it)));
   it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"' }), "save delivery");
   w = await writes();
   expect("delivery settings and cooldown are saved to the website", ((latest(w).kits || {}).listCommand === "kit list") && String((latest(w).kits || {}).giveCommand || "").includes("{player}") && latest(w).kits.giveCooldownSeconds === 30, text(latest(w).kits));
