@@ -24,6 +24,9 @@ const addresses = [
   ["2001:db8::1", false],
   ["2001:0::1", false],
   ["2002:c000:0204::1", false],
+  ["2001:10::1", false],
+  ["2001:20::1", false],
+  ["3fff::1", false],
   ["::ffff:127.0.0.1", false],
 ];
 
