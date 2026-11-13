@@ -1189,9 +1189,11 @@ async function botExchange(env, code, redirectUri) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+    const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+    if (!settingsToken) return { error: "bot_not_configured" };
     const response = await fetch(base + "/api/oauth/exchange", {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json", "x-settings-token": settingsToken },
       body: JSON.stringify({ code: code, redirectUri: redirectUri }),
       signal: controller.signal,
     });
