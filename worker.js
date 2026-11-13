@@ -1374,6 +1374,7 @@ async function botSettings(request, env) {
     staffRoles: (await readJson(env, ROLES_KEY)) || null,
     logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
     kits: (await readJson(env, KITS_KEY)) || null,
+    installs: (await readJson(env, INSTALLS_KEY)) || {},
     /* Flat lists, because this is the shape the bot loads and writes back. */
     links: Array.isArray(storedLinks.links) ? storedLinks.links : [],
     pending: Array.isArray(storedLinks.pending) ? storedLinks.pending : [],
@@ -1425,6 +1426,7 @@ const ROLES_KEY = "spinback-rce/settings/roles.json";
 const LOGCHANNELS_KEY = "spinback-rce/settings/logchannels.json";
 const SERVERS_KEY = "spinback-rce/settings/servers.json";
 const KITS_KEY = "spinback-rce/settings/kits.json";
+const INSTALLS_KEY = "spinback-rce/settings/installs.json";
 const LINKS_KEY = "spinback-rce/settings/links.json";
 
 /* What the bot's own panels collect. Sections it does not send are left alone, and servers
@@ -1485,6 +1487,9 @@ async function botSettingsWrite(request, env) {
   if (body.kits && typeof body.kits === "object") {
     const current = (await readJson(env, KITS_KEY)) || {};
     if (await writeJson(env, KITS_KEY, Object.assign({}, current, body.kits, { updatedAt: Date.now() }))) wrote.push("kits");
+  }
+  if (body.installs && typeof body.installs === "object") {
+    if (await writeJson(env, INSTALLS_KEY, Object.assign({}, body.installs, { updatedAt: Date.now() }))) wrote.push("installs");
   }
   /* The saved servers are handed back (without passwords) so a form can pick up the ids
      the site just issued instead of guessing them. */
