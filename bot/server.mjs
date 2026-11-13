@@ -107,6 +107,28 @@ let persistQueue = Promise.resolve();
 
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
 
+/* Internal bot routes are for the trusted website Worker only. This credential is
+   stored in server-side environment variables and never sent to browser code. */
+function settingsAuthFailure(req) {
+  const expected = settingsToken();
+  if (!expected) return { status: 503, body: { ok: false, reason: 'no-settings-token' } };
+  const supplied = String(req.headers['x-settings-token'] || '');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { status: 403, body: { ok: false, reason: 'forbidden' } };
+  }
+  return null;
+}
+
+function requireSettingsAuth(req, res) {
+  const failure = settingsAuthFailure(req);
+  if (!failure) return false;
+  res.writeHead(failure.status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify(failure.body));
+  return true;
+}
+
 function panelEmbed(color, title, description) { return { color: color, title: title, description: description }; }
 function panelRow(components) { return { type: 1, components: components }; }
 function panelButton(id, label, style) { return { type: 2, custom_id: id, label: label, style: style || 2 }; }
@@ -1209,12 +1231,14 @@ function rconConnect(options) {
 
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
-  const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  const statusPaths = ['/', '/status', '/api/status'];
+  const healthPaths = new Set(['/health', '/healthz', '/api/health']);
   /* Every server the bot is in right now. The website asks this before it will set anything
      up: a server Spinback is not in cannot be configured, so the page says so plainly and
      offers the invite instead of pretending otherwise. */
   if (req.method === 'GET' && url === '/api/guilds') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     const guilds = [...client.guilds.cache.values()].map((g) => ({
       id: g.id,
       name: g.name,
@@ -1227,7 +1251,8 @@ createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url === '/api/guild') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
     res.writeHead(200, cors);
     res.end(JSON.stringify({ ready: true, guild: state.guildInfo }));
@@ -1250,7 +1275,8 @@ createServer(async (req, res) => {
   /* Ask a Rust server, over RCON, whether it is really there. The website never sends a
      password to a browser: it calls this with the connection it has stored. */
   if (req.method === 'POST' && url === '/api/rcon/test') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!rconAllowed()) {
       res.writeHead(429, cors);
       res.end(JSON.stringify({ ok: false, reason: 'rate-limited', detail: 'Six checks a minute is the limit. Try again shortly.' }));
@@ -1306,7 +1332,8 @@ createServer(async (req, res) => {
       return;
     }
     const given = String(req.headers['x-settings-token'] || '');
-    if (given !== expected) {
+    const a = Buffer.from(given), b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       res.writeHead(403, cors);
       res.end(JSON.stringify({ ok: false, reason: 'bad-token' }));
       return;
@@ -1325,13 +1352,17 @@ createServer(async (req, res) => {
   }
 
   if (url === '/api/reconnect') {
-    const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
-    req.resume();
-    if (!TOKEN) { res.writeHead(503, cors); res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
-    if (state.gateway === 'online') { res.writeHead(200, cors); res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
-    await relogin('asked by a request');
-    res.writeHead(200, cors);
-    res.end(JSON.stringify({ ok: true, gateway: state.gateway, forcedLogins: forcedLogins }));
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'application/json', 'cache-control': 'no-store', allow: 'POST' });
+      res.end(JSON.stringify({ ok: false, reason: 'method-not-allowed' }));
+      return;
+    }
+    if (requireSettingsAuth(req, res)) return;
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    if (!TOKEN) { res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
+    if (state.gateway === 'online') { res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
+    await relogin('asked by an authenticated request');
+    res.end(JSON.stringify({ ok: true, gateway: state.gateway }));
     return;
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
@@ -1381,41 +1412,26 @@ createServer(async (req, res) => {
     });
     return;
   }
+  if (req.method === 'GET' && healthPaths.has(url)) {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, service: 'spinback-rce-bot' }));
+    return;
+  }
   if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
-      /* online is the field the status page reads. Without it the page assumed the bot
-         was up whenever it got an answer at all, which is how a tokenless process could
-         be announced as online. */
       online: state.gateway === 'online',
       ok: state.gateway === 'online',
       gateway: state.gateway,
       tag: state.tag,
       guilds: state.guilds,
       command: state.command,
-      port: PORT,
-      host: HOST,
-      tokenPresent: !!TOKEN,
-      tokenSource: TOKEN_INFO.source,
-      oauthExchange: !!CLIENT_SECRET,
-      clientIdPresent: !!CLIENT_ID,
-      tokenShape: tokenShape,
-      tokenLength: TOKEN.length,
-      loginAttempts: loginAttempts,
-      lookedFor: TOKEN_NAMES,
-      siteUrl: SITE_URL,
-      interactions: !!PUBLIC_KEY,
-      guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerSource: OWNER_ID ? 'DISCORD_GUILD_OWNER_ID' : (state.guildInfo && state.guildInfo.ownerId ? 'the guild owner record' : null),
-      forcedLogins: forcedLogins,
-      gatewayDownSeconds: gatewayDownSince ? Math.round((Date.now() - gatewayDownSince) / 1000) : 0,
-      error: state.error,
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
-      /* Only what this process really knows, so the site never shows invented numbers. */
+      guildConfigured: !!GUILD_ID,
+      /* Public status data only; token metadata, owner ids, deployment details and
+         internal errors are deliberately not returned to anonymous visitors. */
       stats: { guilds: state.guilds, gateway: state.gateway },
-      guildInfo: state.guildInfo || null,
     }));
     return;
   }
