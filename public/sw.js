@@ -1,9 +1,9 @@
 /* Spinback service worker - makes the site installable and shows a friendly page when
  * the phone is offline. It never caches pages, logins or API answers, so everyone always
  * sees the live site. Change VERSION to force every phone to refresh its saved files. */
-const VERSION = 'spinback-app-v1';
+const VERSION = 'spinback-app-v2';
 const OFFLINE = '/offline.html';
-const KEEP = [OFFLINE, '/media/rustyworks-icon.svg', '/media/icon-192.png', '/media/icon-512.png'];
+const KEEP = [OFFLINE, '/media/spinback-icon.svg', '/media/icon-192.png', '/media/icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(KEEP)).then(() => self.skipWaiting()));

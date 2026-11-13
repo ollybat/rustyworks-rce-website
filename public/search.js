@@ -21,9 +21,10 @@
     ['/kits', '/commands.html#kits', 'Emote kits: binds, cooldowns, giving and installing'],
     ['/user', '/commands.html#user', 'Player links: force link, force unlink, transfer, link panel and the roster'],
     ['Link a player', '/commands.html#user', 'Connect a Discord account to a Rust Console gamertag'],
-    ['Settings', '/settings.html', 'Appearance, what this browser stores, and the owner console for the bot settings'],
+    ['Settings', '/settings.html', 'Theme, motion and what this browser stores. Server settings live in Discord'],
     ['Appearance', '/settings.html#appearance', 'Theme, reduced motion and seasonal touches, saved on this device only'],
-    ['Server settings', '/settings.html#owner', 'Staff roles, logging channels, Rust servers, kit settings and player links'],
+    ['Clear saved data', '/settings.html#storage', 'Everything this browser keeps, with a button to clear each one'],
+    ['Where to get help', '/settings.html#help', 'Which command to use, the status page and the support server'],
 
     ['Kit Studio', '/dashboard/kitbuilder.html', 'Build a kit and read the item catalogue'],
     ['Colour Studio', '/dashboard/colortext.html', 'Rust colour codes and text formatting'],
@@ -57,8 +58,7 @@
         items.forEach(function (item) {
           if (!item || !item.name) return;
           var sub = [item.short, item.group, item.stack ? 'stack ' + item.stack : ''].filter(Boolean).join(' \u00b7 ');
-          /* Opens the Kit Studio with this item found and selected. */
-          index.push({ title: item.name, sub: sub, kind: 'Item', url: '/dashboard/kitbuilder.html' + (item.short ? '#item=' + encodeURIComponent(item.short) : ''), hay: (item.name + ' ' + (item.short || '') + ' ' + (item.group || '')).toLowerCase() });
+          index.push({ title: item.name, sub: sub, kind: 'Item', url: '/dashboard/kitbuilder.html', hay: (item.name + ' ' + (item.short || '') + ' ' + (item.group || '')).toLowerCase() });
         });
       }
       var skins = parts[1];
@@ -66,13 +66,13 @@
         (skins.skins || []).forEach(function (skin) {
           if (!skin || !skin.name) return;
           var sub = [skin.category, skin.released ? 'released ' + skin.released : 'release date not published'].filter(Boolean).join(' \u00b7 ');
-          index.push({ title: skin.name, sub: sub, kind: 'Skin', url: skin.link || '/dashboard/kitbuilder.html', hay: (skin.name + ' ' + (skin.category || '') + ' ' + (skin.pack || '')).toLowerCase() });
+          index.push({ title: skin.name, sub: sub, kind: 'Skin', url: skin.link || '/rustskins.html', hay: (skin.name + ' ' + (skin.category || '') + ' ' + (skin.pack || '')).toLowerCase() });
         });
         (skins.products || []).forEach(function (product) {
           if (!product || !product.name) return;
           var isPack = product.type === 'pack' || (product.contents && product.contents.length);
           var sub = [product.category, product.released ? 'released ' + product.released : 'release date not published'].filter(Boolean).join(' \u00b7 ');
-          index.push({ title: product.name, sub: sub, kind: isPack ? 'Pack' : 'Product', url: product.link || '/dashboard/kitbuilder.html', hay: (product.name + ' ' + (product.category || '')).toLowerCase() });
+          index.push({ title: product.name, sub: sub, kind: isPack ? 'Pack' : 'Product', url: product.link || '/rustskins.html', hay: (product.name + ' ' + (product.category || '')).toLowerCase() });
         });
       }
       loading = false;
@@ -85,9 +85,6 @@
     if (!q) {
       return index.filter(function (row) { return row.kind === 'Page'; }).slice(0, 8);
     }
-    /* Several words match in any order ("ammo rifle", "ak rifle"), after exact and phrase
-       matches, which still rank first. */
-    var words = q.split(/\s+/).filter(Boolean);
     var scored = [];
     for (var i = 0; i < index.length; i++) {
       var row = index[i];
@@ -97,7 +94,6 @@
       else if (title.indexOf(q) === 0) score = 1;
       else if (title.indexOf(q) > -1) score = 2;
       else if (row.hay.indexOf(q) > -1) score = 3;
-      else if (words.length > 1 && words.every(function (w) { return row.hay.indexOf(w) > -1; })) score = 4;
       if (score > -1) scored.push({ row: row, score: score, len: row.title.length });
     }
     scored.sort(function (a, b) { return a.score - b.score || a.len - b.len; });
@@ -184,10 +180,8 @@
     paint();
   }
 
-  var returnFocus = null;
   function open() {
     if (panel.className.indexOf('on') > -1) { input.focus(); return; }
-    returnFocus = document.activeElement;
     veil.className = 'qs-veil on';
     panel.className = 'qs-panel on';
     input.value = '';
@@ -199,14 +193,8 @@
   }
 
   function close() {
-    var wasOpen = panel.className.indexOf('on') > -1;
     veil.className = 'qs-veil';
     panel.className = 'qs-panel';
-    /* Put keyboard focus back where it was before the palette opened. */
-    if (wasOpen && returnFocus && returnFocus.focus && document.contains(returnFocus)) {
-      try { returnFocus.focus(); } catch (error) {}
-    }
-    returnFocus = null;
   }
 
   input.addEventListener('input', run);
@@ -217,11 +205,6 @@
     else if (event.key === 'ArrowUp') { event.preventDefault(); cursor = Math.max(cursor - 1, 0); highlight(); }
     else if (event.key === 'Enter' && results[cursor]) { event.preventDefault(); go(results[cursor]); }
     else if (event.key === 'Escape') { close(); }
-    /* The palette is modal: Tab moves between its two controls instead of leaving it. */
-    else if (event.key === 'Tab') { event.preventDefault(); esc.focus(); }
-  });
-  esc.addEventListener('keydown', function (event) {
-    if (event.key === 'Tab') { event.preventDefault(); input.focus(); }
   });
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && panel.className.indexOf('on') > -1) { close(); return; }
