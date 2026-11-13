@@ -223,6 +223,7 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
         const lastCall = ctx.rconCalls[ctx.rconCalls.length - 1];
         if (!lastCall || lastCall.host !== available[1].host) problems.push("giveKit: selected server autocomplete value did not select that server");
       }
+      return result;
     }],
     ["giveKit(unlinked user)", async () => {
       const before = ctx.rconCalls.length;
