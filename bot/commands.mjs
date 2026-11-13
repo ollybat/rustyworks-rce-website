@@ -151,7 +151,7 @@ export async function pingReply(ctx) {
   var pingRoles = ctx.settings.staffRoles || {};
   var pingChannels = ctx.settings.logChannels || {};
   var pingServers = ctx.servers();
-  var savedSlots = ROLE_SLOTS.filter(function (s) { return pingRoles[s[0]]; });
+  var savedSlots = ROLE_SLOTS.filter(function (s) { return s[0] !== "linked" && pingRoles[s[0]]; });
   var goneSlots = guild ? savedSlots.filter(function (s) {
     return !(guild.roles || []).filter(function (r) { return String(r.id) === String(pingRoles[s[0]]); }).length;
   }) : [];
@@ -162,6 +162,7 @@ export async function pingReply(ctx) {
   }) : [];
   var pingGate = setupState(ctx);
   var built = embed(0x5865f2, "Spinback RCE", "Every line was measured just now, at " + when() + ".");
+  var lastCheck = ctx.lastServerCheck && ctx.lastServerCheck();
   built.fields = [
     field("Gateway", code(Number.isFinite(gw) && gw >= 0 ? gw + " ms" : "not measured") + " heartbeat\n" +
       (ctx.gateway === "online" ? "connected" : ctx.gateway || "unknown"), true),
@@ -170,6 +171,10 @@ export async function pingReply(ctx) {
     field("Memory", code(formatBytes(proc.rss)) + " resident\n" + code(formatBytes(proc.heapUsed)) + " heap", true),
     field("Guild", guild ? code(guild.name) + "\n" + guild.memberCount + " members, " + ((guild.roles && guild.roles.length) || 0) + " roles" : "not reported yet", true),
     field("Commands", code(String(ctx.commandCount())) + " registered here", true),
+    field("Last server check", lastCheck
+      ? (lastCheck.ok ? "answered" : "did not answer") + " " + code(String(lastCheck.host || "unknown") + ":" + String(lastCheck.port || 0))
+        + (lastCheck.ms == null ? "" : " in " + ms(lastCheck.ms)) + " • " + String(lastCheck.at || "").slice(0, 19).replace("T", " ")
+      : "not checked since the bot started", false),
     field("Website", site.ok ? "answering, " + ms(site.ms) + (site.body && site.body.app ? "\napp: " + code(site.body.app) : "") : "no answer after " + ms(site.ms) + (site.error ? "\n" + site.error.slice(0, 90) : ""), true),
     field("Settings store", ctx.storeTokenSet() ? "the website accepts saves from this bot" : "not configured yet (BOT_SETTINGS_TOKEN)", true),
     field("Servers linked", code(String(pingServers.length)) + (pingServers.length ? "\n" + pingServers.map(function (s) { return s.host + ":" + s.port; }).join(", ").slice(0, 120) : "\nnone yet"), true),
@@ -196,7 +201,10 @@ export function setupPanel(ctx) {
   var servers = ctx.servers();
   var built = embed(0xfaa81a, "Spinback RCE setup",
     "Three steps: roles, logging channels, then your Rust server. The RCON connection is tested before anything is saved, so a wrong port or password never lands in your settings.");
+  var progress = (ROLE_SLOTS.filter(function (slot) { return slot[0] !== "linked" && roles[slot[0]]; }).length ? 1 : 0)
+    + (setChannels.length ? 1 : 0) + (servers.length ? 1 : 0);
   built.fields = [
+    field("Setup progress", progress + " of 3 steps complete", true),
     field("Step 1 - Staff roles", setRoles.length ? setRoles.map(function (s) { return s[1] + ": <@&" + roles[s[0]] + ">"; }).join("\n") : "none saved yet", false),
     field("Step 2 - Logging channels", setChannels.length ? setChannels.length + " of " + LOG_TYPES.length + " log types have a channel" : "none saved yet", false),
     field("Step 3 - Rust servers", servers.length ? servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port); }).join("\n") : "none linked yet", false),
@@ -1131,10 +1139,13 @@ export function setupStatus(ctx) {
   if (!kits.listCommand) next.push("Set your kit plugin list command, then **/kits grab** reads your real kit names.");
   if (!kits.giveCommand) next.push("Set a give template using {player} and {kit}, then **/kits give** can hand kits out in game.");
   if (!ctx.storeTokenSet()) next.push("Set BOT_SETTINGS_TOKEN to the same value on the website and the bot, otherwise saves stay in this bot memory only.");
-  var built = embed(next.length ? 0xfaa81a : 0x3ba55d, "Setup status",
+  var diagnostics = ctx.diagnostics && ctx.diagnostics();
+  var problems = diagnostics && Array.isArray(diagnostics.problems) ? diagnostics.problems : [];
+  var built = embed(next.length || problems.length ? 0xfaa81a : 0x3ba55d, "Setup status",
     next.length ? "What is saved right now is below, then what is still missing, in the order worth doing it." : "Everything the bot can check is in place.");
   built.fields = checks.map(function (c) { return field(c[0], c[1], true); });
   if (next.length) built.fields.push(field("What is missing", next.slice(0, 6).map(function (n) { return "- " + n; }).join("\n"), false));
+  if (problems.length) built.fields.push(field("Problems found just now", problems.slice(0, 8).map(function (p) { return "- " + p; }).join("\n").slice(0, 1000), false));
   built.footer = { text: "Read-only: nothing on this panel changes your settings" };
   return { embeds: [built], components: [row([button("setup:roles", "Roles", 1), button("setup:channels", "Log channels", 1), button("setup:server", "Rust server", 1)])], flags: EPH };
 }
@@ -1158,7 +1169,7 @@ export function cooldownsPanel(ctx, rows) {
    /setup is the one exception, because it is how you get there. */
 export function setupState(ctx) {
   var roles = ctx.settings.staffRoles || {};
-  var saved = ROLE_SLOTS.map(function (s) { return s[0]; }).filter(function (key) { return roles[key]; });
+  var saved = ROLE_SLOTS.map(function (s) { return s[0]; }).filter(function (key) { return key !== "linked" && roles[key]; });
   return {
     rolesSaved: saved.length,
     serverLinked: ctx.servers().length > 0,
@@ -1187,7 +1198,7 @@ export function gatePayload(ctx, wanted) {
    are the people who may run anything that configures or edits. */
 export function staffRoleList(ctx) {
   var roles = ctx.settings.staffRoles || {};
-  return ROLE_SLOTS.map(function (s) { return { slot: s[0], label: s[1], id: roles[s[0]] || null }; }).filter(function (r) { return r.id; });
+  return ROLE_SLOTS.filter(function (s) { return s[0] !== "linked"; }).map(function (s) { return { slot: s[0], label: s[1], id: roles[s[0]] || null }; }).filter(function (r) { return r.id; });
 }
 
 export function staffRoleNames(ctx) {
