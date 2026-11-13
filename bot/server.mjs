@@ -273,7 +273,7 @@ function applySettings(body) {
   if (body.logChannels && typeof body.logChannels === 'object') settings.logChannels = body.logChannels;
   if (Array.isArray(body.servers)) settings.servers = body.servers;
   if (body.kits && typeof body.kits === 'object') settings.kits = Object.assign(settings.kits, body.kits);
-  if (body.installs && typeof body.installs === 'object') settings.installs = Object.assign({}, settings.installs, body.installs);
+  if (body.installs && typeof body.installs === 'object') settings.installs = Object.assign({}, body.installs);
   if (Array.isArray(body.links)) settings.links = body.links;
   if (Array.isArray(body.pending)) settings.pending = body.pending;
   if (body.linkPanel && typeof body.linkPanel === 'object') settings.linkPanel = body.linkPanel;
@@ -1549,15 +1549,15 @@ async function runModal(interaction) {
     }
     return await answerModal(interaction, (async function () {
       const cleared = clearAllSettings();
-      const wrote = await persistSettings(['staffRoles', 'logChannels', 'servers', 'kits']);
+      const wrote = await persistSettings(['staffRoles', 'logChannels', 'servers', 'kits', 'installs']);
       logLater('admin', 'Settings reset', who(ctx.actor) + ' reset the saved settings (' + cleared + ' entries). Player links were kept.');
       return setupResetDone(ctx, cleared, wrote);
     })());
   }
   if (id === 'modal:kitcode') {
     const payload = installKit(ctx, fields.install_code);
-    if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Kit code stored') {
-      logLater('emoteKits', 'Kit code stored', who(ctx.actor) + ' stored a kit code (' + String(fields.install_code || '').length + ' characters).');
+    if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Code preview saved - not installed') {
+      logLater('emoteKits', 'Kit code preview saved', who(ctx.actor) + ' saved preview metadata for a kit code (' + String(fields.install_code || '').length + ' characters). The original code is not retained.');
     }
     return await answerModal(interaction, payload);
   }
