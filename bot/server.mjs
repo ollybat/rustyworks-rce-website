@@ -1242,6 +1242,16 @@ client.once(Events.ClientReady, async (c) => {
       return;
     }
     await loadSettings();
+    const settingsReloadMs = Math.max(2500, Math.min(60000, Number(process.env.SETTINGS_RELOAD_MS) || 15000));
+    let settingsReloadBusy = false;
+    const settingsReloadTimer = setInterval(() => {
+      if (settingsReloadBusy || state.gateway !== 'online') return;
+      settingsReloadBusy = true;
+      void reloadSettingsInOrder().catch((error) => log('settings refresh failed:', String((error && error.message) || error).slice(0, 180)))
+        .finally(() => { settingsReloadBusy = false; });
+    }, settingsReloadMs);
+    if (typeof settingsReloadTimer.unref === 'function') settingsReloadTimer.unref();
+    c.user.setPresence({ status: 'online', activities: [{ name: 'Rust servers linked: ' + settings.servers.length + ' • /help', type: 0 }] });
     /* set() replaces the whole list, so a command removed from the module really does
        disappear from the picker instead of lingering forever. */
     /* Deliberately no default_member_permissions here. The roles saved in step 1 are the
