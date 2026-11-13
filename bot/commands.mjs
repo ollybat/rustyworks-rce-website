@@ -1039,7 +1039,7 @@ export function setupResetPanel(ctx) {
   var built = embed(0xdc4c4c, "Reset the settings?",
     "This clears the configuration and nothing else. It is the switch for starting over, and it asks you to type a word first because there is no undo.");
   built.fields = [
-    field("What goes", [roles + " role slot(s)", channels + " log channel(s)", servers + " server(s)", (kits.binds || []).length + " bind(s)", Object.keys(kits.authSpawn || {}).length + " respawn kit(s)", "the kit commands", "the stored install codes"].join("\n"), false),
+    field("What goes", [roles + " role slot(s)", channels + " log channel(s)", servers + " server(s)", (kits.binds || []).length + " bind(s)", Object.keys(kits.authSpawn || {}).length + " respawn kit(s)", "the kit commands", "the stored kit-code preview records"].join("\n"), false),
     field("What stays", [ctx.links().length + " player link(s)", ctx.pendingLinks().length + " waiting request(s)", "the link panel message id", "the log types already set in this server (the channels themselves are never deleted)"].join("\n"), false),
   ];
   built.footer = { text: "No channel, role, kit or player is ever deleted by this" };
@@ -1111,7 +1111,7 @@ export function kitsDoctor(ctx) {
     }).join("\n").slice(0, 1000) : "none yet", false),
     field("Respawn kits", Object.keys(auth).length ? Object.keys(auth).map(function (g) { return g + " -> " + code(auth[g]); }).join("\n") : "none set", false),
     field("Kit delivery", kits.locked ? "paused: /kits give refuses until it is resumed" : "on", true),
-    field("Kit codes stored", String(Object.keys(ctx.settings.installs || {}).length), true),
+    field("Kit-code previews stored", String(Object.keys(ctx.settings.installs || {}).length), true),
   ];
   if (todo.length) built.fields.push(field("Do this next", todo.slice(0, 5).map(function (t) { return "- " + t; }).join("\n").slice(0, 1000), false));
   built.footer = { text: "Read-only: this panel changed nothing" };
