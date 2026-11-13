@@ -46,6 +46,8 @@ export async function run({ world, make, interact }) {
   expect("help detail page opens (it used to wipe the buttons)", text(last(it)).includes("Help: /user") && ((last(it) || {}).components || []).length > 0, text(last(it)));
   it = await go(make.command(PLAYER, "help"), "/help by a non-staff member");
   expect("/help is available to ordinary server members", text(last(it)).includes("/kits") && text(last(it)).includes("/user"), text(last(it)));
+  it = await go(make.button(PLAYER, "help:cmd:user"), "help: /user page by a non-staff member");
+  expect("ordinary members can open the detailed help pages too", text(last(it)).includes("Help: /user"), text(last(it)));
 
   /* 3. before any staff role exists, only Administrator / Manage Server / owner may configure */
   it = await go(make.command(LINKED_ONLY, "setup", "run"), "/setup run by a linked player, before setup");
