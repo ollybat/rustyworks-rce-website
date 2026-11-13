@@ -69,13 +69,17 @@
         (skins.skins || []).forEach(function (skin) {
           if (!skin || !skin.name) return;
           var sub = [skin.category, skin.released ? 'released ' + skin.released : 'release date not published'].filter(Boolean).join(' \u00b7 ');
-          index.push({ title: skin.name, sub: sub, kind: 'Skin', url: skin.link || '/rustskins.html', hay: (skin.name + ' ' + (skin.category || '') + ' ' + (skin.pack || '')).toLowerCase() });
+          /* The store page for the pack the skin ships in. The skin list has no page of its
+             own on this site, so a result without a store address simply carries none. */
+          var skinUrl = skin.link || (skin.packId ? 'https://rust.double11.com/store/' + skin.packId : '');
+          index.push({ title: skin.name, sub: sub, kind: 'Skin', url: skinUrl, hay: (skin.name + ' ' + (skin.category || '') + ' ' + (skin.pack || '')).toLowerCase() });
         });
         (skins.products || []).forEach(function (product) {
           if (!product || !product.name) return;
           var isPack = product.type === 'pack' || (product.contents && product.contents.length);
           var sub = [product.category, product.released ? 'released ' + product.released : 'release date not published'].filter(Boolean).join(' \u00b7 ');
-          index.push({ title: product.name, sub: sub, kind: isPack ? 'Pack' : 'Product', url: product.link || '/rustskins.html', hay: (product.name + ' ' + (product.category || '')).toLowerCase() });
+          var productUrl = product.link || (product.id ? 'https://rust.double11.com/store/' + product.id : '');
+          index.push({ title: product.name, sub: sub, kind: isPack ? 'Pack' : 'Product', url: productUrl, hay: (product.name + ' ' + (product.category || '')).toLowerCase() });
         });
       }
       loading = false;

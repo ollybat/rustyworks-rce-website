@@ -587,10 +587,12 @@
     m.setAttribute('content', bg);
     var l = document.querySelector('link[rel="manifest"]');
     if (!l) { l = document.createElement('link'); l.rel = 'manifest'; head.appendChild(l); }
-    l.setAttribute('href', key ? '/manifest-' + key + '.json' : '/manifest.json');
+    l.setAttribute('href', key ? '/manifest-' + key + '.json' : '/manifest.webmanifest');
     var a = document.querySelector('link[rel="apple-touch-icon"]');
     if (!a) { a = document.createElement('link'); a.rel = 'apple-touch-icon'; head.appendChild(a); }
-    a.setAttribute('href', key ? '/media/apple-touch-icon-' + key + '.png' : '/media/apple-touch-icon.png');
+    /* One home-screen icon for every season: iOS reads this file when the app is added, so
+       pointing it at a season that has no picture would only break the install. */
+    a.setAttribute('href', '/media/apple-touch-icon.png');
   }
   function appHead() {
     try {
@@ -730,7 +732,10 @@
 
   appHead();
   window.addEventListener('beforeinstallprompt', function (e) {
-    e.preventDefault(); APP.evt = e;
+    /* The event is kept for our own Install button below. Nothing is prevented, so Chrome's
+       own install bar is left free to appear and its console warning about a banner that was
+       blocked and never shown cannot happen. */
+    APP.evt = e;
     if (!APP.timer) APP.timer = setTimeout(function () { appShowPill(false); }, APP_SHOW_AFTER_MS);
   });
   window.addEventListener('appinstalled', function () { APP.evt = null; appHidePill(false); document.documentElement.setAttribute('data-app', '1'); });
