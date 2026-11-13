@@ -86,6 +86,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 
 const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null };
+let lastServerCheck = null;
 const log = (...a) => console.log('[spinback]', ...a);
 
 /* -------------------------------------------------------------- settings ---- */
@@ -200,6 +201,13 @@ async function loadSettings() {
   } catch (error) {
     log('settings read failed:', String((error && error.message) || error));
   }
+}
+
+function reloadSettingsInOrder() {
+  const run = () => loadSettings();
+  const pending = persistQueue.then(run, run);
+  persistQueue = pending.then(() => undefined, () => undefined);
+  return pending;
 }
 
 async function saveServer(s) {
@@ -519,6 +527,7 @@ async function writeCommandAudit(actorId, commandName, subcommand) {
   const name = '/' + String(commandName || 'unknown') + (subcommand ? ' ' + String(subcommand) : '');
   const embed = panelEmbed(0x5865f2, 'Command used',
     name + '\nRequested by: ' + (actorId ? '<@' + actorId + '>' : 'unknown'));
+  embed.footer = { text: 'Command log' };
   try {
     const channel = await client.channels.fetch(channelId);
     if (channel && typeof channel.send === 'function') await channel.send({ embeds: [embed] });
@@ -541,6 +550,7 @@ async function writeRconAudit(actorId, options, result) {
     '\nCommand: ' + command +
     '\nResult: ' + (ok ? 'success' : String((result && result.reason) || 'no answer')) +
     (Number.isFinite(Number(result && result.ms)) ? '\nTime: ' + Math.round(Number(result.ms)) + ' ms' : ''));
+  embed.footer = { text: 'RCON log' };
   try {
     const channel = await client.channels.fetch(channelId);
     if (channel && typeof channel.send === 'function') await channel.send({ embeds: [embed] });
@@ -559,6 +569,23 @@ function botCtx() {
     uptime: function () { return (Date.now() - state.since) / 1000; },
     commandCount: function () { return state.commandNames ? state.commandNames.length : 0; },
     storeTokenSet: function () { return !!settingsToken(); },
+    lastServerCheck: function () { return lastServerCheck; },
+    diagnostics: function () {
+      const guild = client.guilds.cache.get(GUILD_ID);
+      const problems = [];
+      if (!guild) return { problems: ['The configured Discord server is not available to the bot.'] };
+      Object.keys(settings.logChannels || {}).forEach(function (key) {
+        const id = settings.logChannels[key];
+        if (!id) return;
+        const channel = guild.channels && guild.channels.cache && guild.channels.cache.get(String(id));
+        if (!channel) { problems.push('Log channel ' + key + ' no longer exists (' + id + ').'); return; }
+        try {
+          const permissions = channel.permissionsFor(client.user);
+          if (!permissions || !permissions.has('SendMessages')) problems.push('The bot cannot send messages to log channel ' + key + ' (' + id + ').');
+        } catch (error) { problems.push('Permissions for log channel ' + key + ' could not be checked (' + id + ').'); }
+      });
+      return { problems: problems };
+    },
     servers: function () { return settings.servers; },
     kits: function () { return settings.kits; },
     links: function () { return settings.links; },
@@ -600,6 +627,9 @@ function botCtx() {
       const result = SIMULATION_MODE
         ? simulatedRconResult(o)
         : await rconRun(Object.assign({}, o, { allowAny: false }));
+      if (String(o && o.command || '').trim().toLowerCase() === 'serverinfo') {
+        lastServerCheck = { host: String(o.host || ''), port: Number(o.port) || 0, ok: !!result.ok, reason: result.reason || null, ms: Number(result.ms) || null, at: new Date().toISOString() };
+      }
       await writeRconAudit(this.actorId, o, result);
       return result;
     },
@@ -627,8 +657,41 @@ function mayConfigure(interaction) {
   } catch (error) { return false; }
 }
 
-async function answerModal(interaction, payload) {
+function decorateDiscordPayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
   const body = Object.assign({}, payload);
+  if (Array.isArray(payload.embeds)) {
+    body.embeds = payload.embeds.map(function (source) {
+      const embed = Object.assign({}, source || {});
+      embed.author = embed.author || { name: 'Spinback RCE' };
+      embed.timestamp = embed.timestamp || new Date().toISOString();
+      const footer = String((embed.footer && embed.footer.text) || '').trim();
+      embed.footer = Object.assign({}, embed.footer || {}, {
+        text: footer ? footer + ' • Spinback RCE' : 'Spinback RCE',
+      });
+      return embed;
+    });
+  }
+  if (Array.isArray(payload.components)) {
+    const icons = [
+      [/^(setup:)/, '⚙️'], [/^(kits:)/, '🎁'], [/^(user:)/, '👥'],
+      [/^(link:)/, '🔗'], [/^(help:)/, '📘'], [/^(server:)/, '🖥️'],
+      [/^(ping:)/, '🔄'],
+    ];
+    body.components = payload.components.map(function (row) {
+      return Object.assign({}, row, { components: (row.components || []).map(function (item) {
+        if (!item || item.type !== 2 || item.emoji) return item;
+        const id = String(item.custom_id || '');
+        const match = icons.filter(function (entry) { return entry[0].test(id); })[0];
+        return match ? Object.assign({}, item, { emoji: { name: match[1] } }) : item;
+      }) });
+    });
+  }
+  return body;
+}
+
+async function answerModal(interaction, payload) {
+  const body = decorateDiscordPayload(payload);
   try {
     if (interaction.deferred) {
       delete body.flags;
@@ -641,7 +704,7 @@ async function answerModal(interaction, payload) {
 }
 
 async function answerPanel(interaction, payload) {
-  const body = Object.assign({}, payload);
+  const body = decorateDiscordPayload(payload);
   delete body.flags;
   if (body.components === undefined) body.components = [];
   try {
@@ -730,18 +793,18 @@ async function runCommand(interaction) {
       ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; staff can always confirm one by hand with /user forcelink.'
         + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
       : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
-    if (slow) { await interaction.editReply(body).catch(function () {}); return; }
-    await interaction.reply(body).catch(function () {});
+    if (slow) { await interaction.editReply(decorateDiscordPayload(body)).catch(function () {}); return; }
+    await interaction.reply(decorateDiscordPayload(body)).catch(function () {});
     return;
   }
   if (slow) {
     const body = Object.assign({}, payload);
     /* flags belong on the first reply only; the deferral already made it ephemeral. */
     delete body.flags;
-    await interaction.editReply(body).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
+    await interaction.editReply(decorateDiscordPayload(body)).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
     return;
   }
-  await interaction.reply(payload).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
+  await interaction.reply(decorateDiscordPayload(payload)).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
 }
 
 async function runButton(interaction) {
@@ -1068,6 +1131,16 @@ client.once(Events.ClientReady, async (c) => {
       return;
     }
     await loadSettings();
+    const settingsReloadMs = Math.max(2500, Math.min(60000, Number(process.env.SETTINGS_RELOAD_MS) || 15000));
+    let settingsReloadBusy = false;
+    const settingsReloadTimer = setInterval(() => {
+      if (settingsReloadBusy || state.gateway !== 'online') return;
+      settingsReloadBusy = true;
+      void reloadSettingsInOrder().catch((error) => log('settings refresh failed:', String((error && error.message) || error).slice(0, 180)))
+        .finally(() => { settingsReloadBusy = false; });
+    }, settingsReloadMs);
+    if (typeof settingsReloadTimer.unref === 'function') settingsReloadTimer.unref();
+    c.user.setPresence({ status: 'online', activities: [{ name: 'Rust servers linked: ' + settings.servers.length + ' • /help', type: 0 }] });
     /* set() replaces the whole list, so a command removed from the module really does
        disappear from the picker instead of lingering forever. */
     /* Deliberately no default_member_permissions here. The roles saved in step 1 are the
