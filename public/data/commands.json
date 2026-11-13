@@ -45,29 +45,13 @@
       "who": "Anyone in the server",
       "needsSetup": false,
       "readOnly": true,
-      "panel": "Buttons that open each command's own page, plus the command option",
-      "summary": "What every command does, who may run it and what each one needs set up first. Name a command to jump straight to its page.",
+      "panel": "One button per command, a Start setup button while setup is unfinished, and links to the website",
+      "summary": "Every command, what it does, who may run it and what it needs set up first — as buttons rather than something to type.",
       "why": "Nothing. It only reports and links.",
       "subcommands": [
         {
-          "name": "command",
-          "summary": "Name a command to open its own help page straight away. Run it bare for the home panel: one button per command, a Start setup button while setup is unfinished, and the website links.",
-          "options": [
-            {
-              "name": "command",
-              "type": "choice",
-              "required": false,
-              "description": "Which command to explain.",
-              "choices": [
-                "ping",
-                "help",
-                "setup",
-                "kits",
-                "user",
-                "server"
-              ]
-            }
-          ],
+          "name": "pages",
+          "summary": "Press any command button to open its own page: subcommands, permissions, what it needs first, and the honest limits.",
           "notes": [
             "The setup note on the home panel is read from what is saved, so it cannot be out of date."
           ]
@@ -81,13 +65,12 @@
       "needsSetup": false,
       "readOnly": false,
       "panel": "Click-to-pick panels: role lists, channel lists, health checks and pasteable server lines",
-      "summary": "Configure Spinback for your server without copying a single id. Staff roles come from a list, log channels from a list or made for you, and the Rust connection is tested before anything is saved — so a wrong port or password never lands in your settings.",
+      "summary": "Configure Spinback for your server without typing a single value into a command. Staff roles come from a list, log channels from a list or made for you, and the Rust connection is tested before anything is saved — so a wrong port or password never lands in your settings.",
       "why": "The RCON port and password from server.cfg, with rcon.web set to 0.",
       "subcommands": [
         {
           "name": "run",
           "summary": "The main panel: roles, log channels, the Rust server, plus Find them for me, Health check, Import, Export and Reset.",
-          "options": [],
           "notes": [
             "Every step is a picker or a button. Nothing is inferred from a name unless the panel says it was."
           ]
@@ -95,7 +78,6 @@
         {
           "name": "roles",
           "summary": "Pick each staff role straight from this server's role list, one slot at a time. Choose nothing in the list to clear a slot.",
-          "options": [],
           "notes": [
             "The roles saved here are the staff roles: they, Administrator, Manage Server and the server owner may run every staff command."
           ]
@@ -103,28 +85,24 @@
         {
           "name": "channels",
           "summary": "Logging channels two ways: pick a log type then its channel, or have the bot create a Spinback category and one channel per type you tick.",
-          "options": [],
           "notes": [
             "A type with no channel is simply switched off. Creating channels is the only step that makes anything in your server, and it shows the exact list first."
           ]
         },
         {
           "name": "server",
-          "summary": "Add or change the Rust server, either by typing the details or by pasting the RCON lines from server.cfg.",
-          "options": []
+          "summary": "Add or change the Rust server, by typing the details or by pasting the RCON lines from server.cfg."
         },
         {
           "name": "suggest",
           "summary": "Read the role and channel names in this server and propose a match for each slot and log type, with the matching reason shown for every line, then apply the whole list in one press.",
-          "options": [],
           "notes": [
             "A name match is a suggestion, never a decision: Apply writes exactly the list that was on screen."
           ]
         },
         {
           "name": "doctor",
-          "summary": "The health check: saved role ids are checked against this server, every log channel is checked for reachability, each saved Rust server is asked a real RCON command and timed, the kit commands are checked for their {player} and {kit} placeholders, storage is checked, and then it lists what to fix first.",
-          "options": [],
+          "summary": "The health check: saved role ids are checked against this server, every log channel for reachability, each saved Rust server is asked a real RCON command and timed, the kit commands are checked for their {player} and {kit} placeholders, storage is checked, then it lists what to fix first.",
           "notes": [
             "It opens up to three fresh RCON connections and changes nothing."
           ]
@@ -132,7 +110,6 @@
         {
           "name": "import",
           "summary": "Paste the RCON lines from server.cfg (or host port password on one line). The bot reads them, says which pieces it found and which are missing, warns when rcon.web is 1, then tests the connection and only saves if the server answers.",
-          "options": [],
           "notes": [
             "Nothing is filled in: a field it did not find is reported as missing."
           ]
@@ -140,7 +117,6 @@
         {
           "name": "export",
           "summary": "Everything saved, as text you can copy: role slots with role names, log channels with channel names, the kit commands, the servers and the player link counts.",
-          "options": [],
           "notes": [
             "No RCON password is in the export at all — it never leaves the service that talks to your server."
           ]
@@ -148,32 +124,21 @@
         {
           "name": "reset",
           "summary": "Clear the saved configuration again after typing RESET in capitals.",
-          "options": [],
           "notes": [
             "Player links, waiting requests and the link panel message are kept. No channel, role or player is deleted."
           ]
         },
         {
           "name": "status",
-          "summary": "A checklist of what is saved and what is still missing, with counts for roles, channels, servers, kit binds and respawn kits.",
-          "options": []
+          "summary": "A checklist of what is saved and what is still missing, with buttons straight into each step, the health check and the name suggestions."
         },
         {
           "name": "edit",
-          "summary": "Change a saved server's address, RCON port or password. New details are tested before anything is saved.",
-          "options": []
+          "summary": "Change a saved server's address, RCON port or password from the picker. New details are tested before anything is saved."
         },
         {
           "name": "refresh",
-          "summary": "Open a fresh RCON connection and report exactly what the server answers, in its own words.",
-          "options": [
-            {
-              "name": "server",
-              "type": "text",
-              "required": false,
-              "description": "Server name to test. Leave it blank to test the first saved one."
-            }
-          ]
+          "summary": "Open a fresh RCON connection right now and report exactly what the server answers, in its own words. One saved server is tested straight away; several give you a list."
         }
       ]
     },
@@ -184,13 +149,12 @@
       "needsSetup": true,
       "readOnly": false,
       "panel": "A wizard panel per subcommand",
-      "summary": "Emote kits end to end: the real kit names from your server, binds with cooldowns and roles, handing kits out, clearing cooldowns, respawn kits per auth group, and installing kits built in Kit Studio.",
+      "summary": "Emote kits end to end: the real kit names from your server, binds with cooldowns and roles, handing kits out, clearing cooldowns, respawn kits per auth group, and installing kits built in Kit Studio. Every step opens a panel, a picker or a box — nothing to type into the command itself.",
       "why": "Your kit plugin's own command names, and a give template using {player} and {kit}. The bot will not guess either one.",
       "subcommands": [
         {
           "name": "commands",
           "summary": "Set your kit plugin's own list command, give template and install command — the settings nothing else could set from Discord.",
-          "options": [],
           "notes": [
             "The give template is filled with {player} and {kit}; the install command with {code}. Leave a field blank when saving to clear that command."
           ]
@@ -198,7 +162,6 @@
         {
           "name": "doctor",
           "summary": "Check the kit setup: which commands are set, whether the give template really has both placeholders, every bind, the respawn kits for each group, the lock state and the install codes held.",
-          "options": [],
           "notes": [
             "Read-only, and it sends nothing to your server: a kit name is only ever checked against what the plugin itself reports."
           ]
@@ -206,113 +169,46 @@
         {
           "name": "grab",
           "summary": "Read the real kit names from your Rust server instead of taking a typed list.",
-          "options": [],
           "notes": [
             "Needs your list command set first: the bot will not invent the name of one."
           ]
         },
         {
           "name": "config",
-          "summary": "The emote kit wizard: binds, cooldowns, roles, lock kits and the emote guide.",
-          "options": []
+          "summary": "The emote kit wizard: binds, cooldowns, roles, lock kits, the emote guide, the kit commands and the kit check."
         },
         {
           "name": "give",
-          "summary": "Hand a kit to a gamertag or to a linked Discord user.",
-          "options": [
-            {
-              "name": "kit",
-              "type": "text",
-              "required": false,
-              "description": "Kit name. Leave it blank to open the panel instead."
-            },
-            {
-              "name": "gamertag",
-              "type": "text",
-              "required": false,
-              "description": "In-game name to give it to."
-            },
-            {
-              "name": "user",
-              "type": "user",
-              "required": false,
-              "description": "Discord user whose linked gamertag receives it."
-            }
-          ],
+          "summary": "Give a kit: opens a box for the kit name and the player, by gamertag or by linked Discord user.",
           "notes": [
-            "Blank options open the panel rather than guessing a target."
+            "It sends exactly your give template with the player and kit filled in, and shows the command it sent."
           ]
         },
         {
           "name": "refresh",
-          "summary": "Clear kit cooldowns for one user, one kit, everyone, or every kit.",
-          "options": [
-            {
-              "name": "scope",
-              "type": "choice",
-              "required": false,
-              "description": "What to clear. Leave blank to open the panel.",
-              "choices": [
-                "One user",
-                "One kit",
-                "All linked users",
-                "All kits"
-              ]
-            },
-            {
-              "name": "target",
-              "type": "text",
-              "required": false,
-              "description": "Gamertag or kit name, when the scope needs one."
-            }
+          "summary": "Clear cooldowns: choose one player, one kit, every linked player or every kit, then type the name if that scope needs one.",
+          "notes": [
+            "The bot reports the exact number of records it cleared, and clears nothing it does not hold."
           ]
         },
         {
           "name": "auth-spawn",
-          "summary": "Give a kit to an auth group on every respawn.",
-          "options": [
-            {
-              "name": "group",
-              "type": "choice",
-              "required": false,
-              "description": "Auth group. Leave blank to open the panel.",
-              "choices": [
-                "User",
-                "VIP",
-                "Moderator",
-                "Admin",
-                "Owner"
-              ]
-            },
-            {
-              "name": "kit",
-              "type": "text",
-              "required": false,
-              "description": "Kit to hand out. Blank stops giving one."
-            }
-          ]
+          "summary": "Give an auth group a kit on every respawn: pick the group, then type the kit. Blank stops giving one."
         },
         {
           "name": "cooldowns",
-          "summary": "See the kit cooldown records the bot is holding right now.",
-          "options": []
+          "summary": "See the kit cooldown records the bot is holding right now."
         },
         {
           "name": "build",
           "summary": "Open Kit Studio on this website, or work from an install code.",
-          "options": [],
           "link": "dashboard/kitbuilder.html"
         },
         {
           "name": "add",
-          "summary": "Install a kit from a Base64 kit install code.",
-          "options": [
-            {
-              "name": "code",
-              "type": "text",
-              "required": false,
-              "description": "The Base64 install code. Leave blank to open the panel."
-            }
+          "summary": "Install a kit from a Base64 kit install code, pasted into a box.",
+          "notes": [
+            "It checks the value really is Base64 that decodes to readable text, stores it exactly as given, and never guesses what is inside."
           ]
         }
       ]
@@ -329,15 +225,7 @@
       "subcommands": [
         {
           "name": "whois",
-          "summary": "Look up which Discord account is behind a gamertag, or part of one. It prints ids as text, so looking somebody up cannot notify or ping them.",
-          "options": [
-            {
-              "name": "gamertag",
-              "type": "text",
-              "required": false,
-              "description": "Gamertag, or part of one."
-            }
-          ],
+          "summary": "Look up which Discord account is behind a gamertag: press the button, type the name. The ids come back as text, so a lookup cannot notify or ping them.",
           "notes": [
             "Requests that are still waiting are shown too, labelled as waiting rather than linked."
           ]
@@ -345,45 +233,32 @@
         {
           "name": "pending",
           "summary": "Every request waiting for confirmation, with an Approve and a Reject button per person. Approving writes the link as you, so the record shows who confirmed it.",
-          "options": [],
           "notes": [
             "A request is a claim, not proof — this is where a person turns it into a link, or throws it out."
           ]
         },
         {
           "name": "forcelink",
-          "summary": "Link a Discord user to a gamertag yourself. This is how a genuine request gets approved.",
-          "options": []
+          "summary": "Link a Discord user to a gamertag yourself. This is how a genuine request gets approved."
         },
         {
           "name": "forceunlink",
-          "summary": "Remove a player link, after a confirmation panel.",
-          "options": []
+          "summary": "Remove a player link, after a confirmation panel."
         },
         {
           "name": "transfer",
-          "summary": "Move a link to a new Discord account or a new gamertag.",
-          "options": []
+          "summary": "Move a link to a new Discord account or a new gamertag."
         },
         {
           "name": "linkpanel",
-          "summary": "Post a member-facing panel with Link account and Unlink buttons in a channel.",
-          "options": [
-            {
-              "name": "channel",
-              "type": "channel",
-              "required": false,
-              "description": "Channel to post it in. Leave blank to pick from a list."
-            }
-          ],
+          "summary": "Post the member-facing panel with Link account and Unlink buttons. The channel is picked from a list next.",
           "notes": [
             "Members press the buttons themselves; the bot checks who is asking before it changes a link."
           ]
         },
         {
           "name": "roster",
-          "summary": "Everyone who is linked, with their gamertag and Discord account.",
-          "options": []
+          "summary": "Everyone who is linked, with their gamertag and Discord account, and a button to look somebody up."
         }
       ]
     },
@@ -393,34 +268,29 @@
       "who": "Staff roles, Administrator, Manage Server or the owner",
       "needsSetup": true,
       "readOnly": true,
-      "panel": "A reply with Ask again and a jump to setup",
+      "panel": "A reply with Ask again, a jump to setup and the other questions",
       "summary": "Ask your Rust server over RCON without changing anything. Only the commands on the bot's fixed allowed list are ever sent: serverinfo, playerlist, gettime and status. Whatever the server answers is shown exactly as it arrived, with the round-trip time.",
       "why": "Setup finished — one staff role and one tested Rust server, because a connection is what answers these.",
       "subcommands": [
         {
           "name": "info",
-          "summary": "Name, players online, map and uptime, as the server reports them.",
-          "options": []
+          "summary": "Name, players online, map and uptime, as the server reports them."
         },
         {
           "name": "players",
-          "summary": "The names and ping the server reports for everyone online.",
-          "options": []
+          "summary": "The names and ping the server reports for everyone online."
         },
         {
           "name": "time",
-          "summary": "The in-game clock.",
-          "options": []
+          "summary": "The in-game clock."
         },
         {
           "name": "status",
-          "summary": "The server's own status answer, exactly as it arrives.",
-          "options": []
+          "summary": "The server's own status answer, exactly as it arrives."
         },
         {
           "name": "check",
           "summary": "Open a fresh RCON connection right now and time it.",
-          "options": [],
           "notes": [
             "Useful after a fix: it is the same test that decides whether a server can be saved."
           ]
