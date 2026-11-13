@@ -714,7 +714,7 @@ export function kitSpawnModal(group, currentKit) {
 export function kitAddPanel() {
   return { embeds: [embed(0x5865f2, "Preview a kit code",
     "Paste a Base64 code from Kit Studio. The bot validates the text, saves a short preview and recognises kit names for autocomplete. It does not execute the code or install items on your Rust server.")],
-    components: [row([button("kits:add:code", "Enter a code", 1), button("kits:studio", "Open Kit Studio", 5)]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
+    components: [row([button("kits:add:code", "Enter a code", 1), button("kits:studio", "Open Kit Studio", 2)]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
 }
 
 export function kitAddModal() {
@@ -741,7 +741,7 @@ export function kitsPanel(ctx) {
     row([button("kits:add", "Add a bind", 1), button("kits:edit", "Edit a bind", 2), button("kits:remove", "Remove a bind", 2)]),
     row([button("kits:lock", ctx.kits().locked ? "Resume kit delivery" : "Pause kit delivery", 2), button("kits:guide", "Emote guide", 2), button("kits:refresh", "Cooldowns", 2)]),
     row([button("kits:delivery", "Delivery settings", 1), button("kits:grab", "Read kit names", 2), button("kits:give", "Give a kit", 1)]),
-    row([button("kits:studio", "Open Kit Studio", 5), button("kits:add:code", "Preview a code", 2)]),
+    row([button("kits:studio", "Open Kit Studio", 2), button("kits:add:code", "Preview a code", 2)]),
   ], flags: EPH };
 }
 export function deliveryModal(kits) {
