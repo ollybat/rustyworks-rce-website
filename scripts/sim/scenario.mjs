@@ -195,10 +195,15 @@ export async function run({ world, make, interact }) {
   expect("malformed Base64 is rejected without storing a preview", text(last(invalidCode)).includes("not valid") && Object.keys(store.installs || {}).length === 0, text(last(invalidCode)));
   const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
   it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "preview a kit code");
-  expect("the kit names in an install code are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  expect("the kit names in a code preview are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  expect("the result says the original code is not retained", text(last(it)).includes("original Base64 code is not retained") && text(last(it)).includes("not installed"), text(last(it)));
   await new Promise((resolve) => setTimeout(resolve, 80));
   w = await writes();
-  expect("kit-code preview metadata is written to the website installs section", (latest(w).installs || {}) && Object.keys(latest(w).installs || {}).length === 1, text(latest(w)));
+  expect("preview metadata is written to the website installs section", w.some((write) => write.installs && Object.keys(write.installs).length === 1), text(w.slice(-3)));
+  const previewRecord = Object.values(store.installs || {})[0];
+  expect("only a short excerpt is persisted, never the full Base64 code", !!previewRecord && previewRecord.head.length <= 400
+    && previewRecord.chars === Buffer.from(code64, "base64").toString("utf8").length
+    && !JSON.stringify(previewRecord).includes(code64), text(previewRecord));
   it = await go(make.command(ADMIN, "kits", "give", { kit: "rai" }, "kit"), "autocomplete an installed kit");
   expect("an installed kit is suggested straight away", [].concat(last(it) || []).some((c) => c.value === "RAIDER"), text(last(it)));
 
