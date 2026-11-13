@@ -31,7 +31,8 @@ import {
   forcelinkPicker, forcelinkModal, adviceOnGamertag, unlinkPicker, unlinkConfirm,
   transferPicker, transferModal, rosterPanel, pendingPanel, channelPickerForPanel,
   kitGivePanel, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
-  kitAddPanel, kitAddModal, giveKit, authSpawnNote,
+  kitAddPanel, kitAddModal, kitStudioPanel, deliveryModal, saveDelivery,
+  grabKits, grabKitsRun, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
 } from './commands.mjs';
 
@@ -753,6 +754,14 @@ async function runButton(interaction) {
       components: [panelRow([panelButton('user:config', 'Back to links', 2)])] });
   }
   if (id === 'kits:give') return await interaction.showModal(kitGiveModal());
+  if (id === 'kits:delivery') return await interaction.showModal(deliveryModal(ctx.kits()));
+  if (id === 'kits:grab') {
+    const quick = grabKits(ctx);
+    if (quick) return await answerPanel(interaction, quick);
+    await interaction.deferUpdate().catch(function () {});
+    return await answerPanel(interaction, await grabKitsRun(ctx));
+  }
+  if (id === 'kits:studio') return await answerPanel(interaction, kitStudioPanel(ctx));
   if (id === 'kits:add:code') return await interaction.showModal(kitAddModal());
   if (id.indexOf('kits:refresh:') === 0) {
     const scope = id.slice('kits:refresh:'.length);
@@ -861,6 +870,7 @@ async function runModal(interaction) {
   /* A saved-server probe opens RCON; giveaway and owner-setting writes can also wait
      on the website. Acknowledge these modal submissions before their slow work. */
   const slowModal = id === 'modal:server' || id.indexOf('modal:server:') === 0
+    || id === 'modal:kitdelivery'
     || id === 'modal:kitgive'
     || id === 'modal:roles' || id === 'modal:linked'
     || id.indexOf('modal:forcelink:') === 0
@@ -900,6 +910,7 @@ async function runModal(interaction) {
     const existingId = id.indexOf('modal:server:') === 0 ? id.slice('modal:server:'.length) : null;
     return await answerModal(interaction, await testAndSaveServer(ctx, fields, existingId));
   }
+  if (id === 'modal:kitdelivery') return await answerModal(interaction, await saveDelivery(ctx, fields));
   if (id === 'modal:bind' || id.indexOf('modal:bind:') === 0) {
     const entry = saveBind({
       emote: fields.bind_emote,
