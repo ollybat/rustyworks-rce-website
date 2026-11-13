@@ -138,7 +138,9 @@ async function loadSettings() {
   const token = settingsToken();
   if (!token) { log('BOT_SETTINGS_TOKEN is not set, so saved settings cannot be read from the website'); return; }
   try {
-    const res = await fetch(SITE_URL + '/api/bot/settings', {
+    /* full=1 asks for the RCON passwords: only this service talks to RCON, and the website
+       hides them from anything running in a browser. */
+    const res = await fetch(SITE_URL + '/api/bot/settings?full=1', {
       headers: { 'x-settings-token': token, accept: 'application/json' },
       signal: AbortSignal.timeout(8000),
     });

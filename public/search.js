@@ -21,6 +21,9 @@
     ['/kits', '/commands.html#kits', 'Emote kits: binds, cooldowns, giving and installing'],
     ['/user', '/commands.html#user', 'Player links: force link, force unlink, transfer, link panel and the roster'],
     ['Link a player', '/commands.html#user', 'Connect a Discord account to a Rust Console gamertag'],
+    ['Settings', '/settings.html', 'Appearance, what this browser stores, and the owner console for the bot settings'],
+    ['Appearance', '/settings.html#appearance', 'Theme, reduced motion and seasonal touches, saved on this device only'],
+    ['Server settings', '/settings.html#owner', 'Staff roles, logging channels, Rust servers, kit settings and player links'],
 
     ['Kit Studio', '/dashboard/kitbuilder.html', 'Build a kit and read the item catalogue'],
     ['Colour Studio', '/dashboard/colortext.html', 'Rust colour codes and text formatting'],
