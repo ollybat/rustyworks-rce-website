@@ -77,6 +77,7 @@ export async function run({ make, interact }) {
   await new Promise((r) => setTimeout(r, 800));
   const wiped = fileNow();
   expect("reset clears roles, channels and servers in the file", wiped && !(wiped.servers || []).length && !Object.values(wiped.staffRoles || {}).some(Boolean), text(wiped && { roles: wiped.staffRoles, servers: wiped.servers }));
+  expect("reset also clears kit-code preview metadata from the file", wiped && !Object.keys(wiped.installs || {}).length, text(wiped && wiped.installs));
   expect("reset keeps player links", wiped && (wiped.links || []).length > 10, text(wiped && (wiped.links || []).length));
 
   for (const { it: one, label } of all) {
