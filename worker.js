@@ -1327,6 +1327,7 @@ async function botSettings(request, env) {
     staffRoles: (await readJson(env, ROLES_KEY)) || null,
     logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
     kits: (await readJson(env, KITS_KEY)) || null,
+    links: (await readJson(env, LINKS_KEY)) || null,
     staffRules: await accessRules(env),
     servers: servers.servers.map(function (row) {
       return { id: row.id, name: row.name, host: row.host, port: row.port, password: row.password };
@@ -1367,6 +1368,7 @@ const ROLES_KEY = "spinback-rce/settings/roles.json";
 const LOGCHANNELS_KEY = "spinback-rce/settings/logchannels.json";
 const SERVERS_KEY = "spinback-rce/settings/servers.json";
 const KITS_KEY = "spinback-rce/settings/kits.json";
+const LINKS_KEY = "spinback-rce/settings/links.json";
 
 /* What the bot's own panels collect. Sections it does not send are left alone, and servers
    are merged by id rather than replaced, so a save can never quietly drop a server that was
@@ -1399,6 +1401,16 @@ async function botSettingsWrite(request, env) {
       if (at > -1) held[at] = clean; else held.push(clean);
     });
     if (await writeJson(env, SERVERS_KEY, { servers: held, updatedAt: Date.now() })) wrote.push("servers");
+  }
+  /* Player links: the Discord account to gamertag pairs everything player-facing uses. */
+  if (Array.isArray(body.links) || Array.isArray(body.pending) || body.linkPanel) {
+    const current = (await readJson(env, LINKS_KEY)) || {};
+    const next = Object.assign({}, current);
+    if (Array.isArray(body.links)) next.links = body.links;
+    if (Array.isArray(body.pending)) next.pending = body.pending;
+    if (body.linkPanel && typeof body.linkPanel === "object") next.linkPanel = body.linkPanel;
+    next.updatedAt = Date.now();
+    if (await writeJson(env, LINKS_KEY, next)) wrote.push("links");
   }
   if (body.kits && typeof body.kits === "object") {
     const current = (await readJson(env, KITS_KEY)) || {};
