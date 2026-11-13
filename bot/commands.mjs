@@ -44,23 +44,23 @@ export const COMMANDS = [
           { type: 6, name: "user", description: "Discord user whose linked gamertag receives it" },
           { type: 3, name: "server", description: "Saved server to send it on (blank uses the first)", autocomplete: true },
         ] },
-      { type: 1, name: "refresh", description: "Clear kit cooldowns",
+      { type: 1, name: "refresh", description: "Clear kit-give cooldowns",
         options: [
           { type: 3, name: "scope", description: "What to clear (leave blank to open the panel)",
             choices: [{ name: "One user", value: "user" }, { name: "One kit", value: "kit" },
               { name: "All linked users", value: "all-users" }, { name: "All kits", value: "all-kits" }] },
           { type: 3, name: "target", description: "Gamertag or kit name, when the scope needs one", autocomplete: true },
         ] },
-      { type: 1, name: "auth-spawn", description: "Give a kit to an Auth Group on every respawn",
+      { type: 1, name: "auth-spawn", description: "Save an Auth Group respawn kit (runs once a game hook is connected)",
         options: [
           { type: 3, name: "group", description: "Auth group (leave blank to open the panel)",
             choices: AUTH_GROUPS.map(function (g) { return { name: g, value: g }; }) },
           { type: 3, name: "kit", description: "Kit to hand out (blank stops giving one)", autocomplete: true },
         ] },
-      { type: 1, name: "cooldowns", description: "See the kit cooldown records the bot is holding" },
-      { type: 1, name: "build", description: "Kit Studio: build a kit on the website or work from an install code" },
-      { type: 1, name: "add", description: "Install a kit from a Base64 kit install code",
-        options: [{ type: 3, name: "code", description: "The Base64 install code (blank opens the panel)" }] },
+      { type: 1, name: "cooldowns", description: "See the kit-give cooldowns running right now" },
+      { type: 1, name: "build", description: "Kit Studio: build a kit on the website, then store its code here" },
+      { type: 1, name: "add", description: "Store a Kit Studio code and learn its kit names",
+        options: [{ type: 3, name: "code", description: "The Base64 code from Kit Studio (blank opens the panel)" }] },
     ] },
   { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
     options: [
@@ -81,7 +81,21 @@ export const COMMANDS = [
         options: [{ type: 7, name: "channel", description: "Channel to post it in", channel_types: [0] }] },
       { type: 1, name: "roster", description: "See every linked player, or search for one",
         options: [{ type: 3, name: "search", description: "Gamertag or Discord id to look for (blank lists everyone)", autocomplete: true }] },
+      { type: 1, name: "whois", description: "Look up which Discord account is behind a gamertag",
+        options: [{ type: 3, name: "gamertag", description: "Gamertag, or part of one", autocomplete: true }] },
     ] },
+  { name: "server", description: "Ask your Rust server over RCON without changing anything", dm_permission: false,
+    options: ["info", "players", "time", "status", "check"].map(function (sub) {
+      var what = {
+        info: "Name, players online, map and uptime, as the server reports them",
+        players: "The names and ping the server reports for everyone online",
+        time: "The in-game clock",
+        status: "The server's own status answer, exactly as it arrives",
+        check: "Open a fresh RCON connection now and time it",
+      }[sub];
+      return { type: 1, name: sub, description: what,
+        options: [{ type: 3, name: "server", description: "Saved server to ask (blank asks the first one)", autocomplete: true }] };
+    }) },
 ];
 
 /* The slots that make someone staff. "linked" is the role given to linked players, so it must
@@ -210,7 +224,7 @@ function lastCheckLine(ctx, server) {
 /* Anything typed by a person that is put into an RCON command line: no quotes, backslashes or
    control characters, one space at a time, and a sane length. */
 export function cleanArg(value) {
-  return String(value == null ? "" : value).replace(/[\u0000-\u001F\u007F"\\]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+  return String(value == null ? "" : value).replace(/[\u0000-\u001F\u007F"'\\;]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
 }
 /* A saved server by id or name (case-insensitive). No name means the first one; a name that
    matches nothing means none, so a typo never sends a command to the wrong server. */
@@ -470,17 +484,124 @@ export async function testServers(ctx, wanted) {
 }
 export function testServerByName(ctx, name) { return testServers(ctx, name); }
 
+/* /server ------------------------------------------------------------------ */
+/* Read-only questions, answered by your Rust server itself. The bot only ever sends the
+   commands on its fixed allowed list (serverinfo, playerlist, gettime, status), so nothing here
+   can change a game. Whatever comes back is printed as it arrived, with the round trip next to
+   it: if a host answers with something unexpected, you see that rather than a tidy summary. */
+const SERVER_QUESTIONS = [
+  ["info", "serverinfo", "What the server says about itself"],
+  ["players", "playerlist", "Everyone online, with ping"],
+  ["time", "gettime", "The in-game clock"],
+  ["status", "status", "The server's own status answer"],
+  ["check", "serverinfo", "A fresh connection, timed"],
+];
+function serverQuestion(which) {
+  var wanted = String(which || "info").toLowerCase();
+  for (var i = 0; i < SERVER_QUESTIONS.length; i++) if (SERVER_QUESTIONS[i][0] === wanted) return SERVER_QUESTIONS[i];
+  return SERVER_QUESTIONS[0];
+}
+export async function serverSnapshot(ctx, which, serverWanted) {
+  var question = serverQuestion(which);
+  var servers = ctx.servers() || [];
+  if (!servers.length) {
+    return {
+      embeds: [embed(0xdc4c4c, "No Rust server linked yet",
+        "Link one with **/setup run**: the address, the RCON port and the password are tested before anything is saved.")],
+      components: [row([button("setup:server", "Add a server", 1), link("Commands reference", ctx.siteUrl + "/commands.html#server")])],
+      flags: EPH,
+    };
+  }
+  var server = findServer(ctx, serverWanted);
+  if (!server) return noServerPayload(ctx, serverWanted);
+  var answer = await ctx.rconTest({ host: server.host, port: server.port, password: server.password, command: question[1] });
+  if (ctx.recordCheck) ctx.recordCheck(server.id, answer);
+  var ok = answer && answer.ok === true;
+  var built = embed(ok ? 0x5865f2 : 0xdc4c4c,
+    "/server " + question[0] + (ok ? "" : " - no answer"),
+    (ok ? "🟢 " : "🔴 ") + "**" + server.name + "** (" + server.host + ":" + server.port + ")\nAsked " + code(question[1]) +
+    (ok ? " and it answered in " + ms(answer.ms) + "." : " and it did not answer."));
+  built.fields = [];
+  if (ok && answer.answer) {
+    var text = String(answer.answer).replace(new RegExp(BT, "g"), "'").trim();
+    built.fields.push(field("What the server answered",
+      block(text.slice(0, 900) + (text.length > 900 ? "\n... and " + (text.length - 900) + " more characters" : "")), false));
+  } else if (ok) {
+    built.fields.push(field("What the server answered", "an empty answer", false));
+  }
+  if (!ok) {
+    built.fields.push(field("Reason", code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 400), false));
+    built.fields.push(field("What usually causes this", [
+      "- The RCON port is not the game or query port",
+      "- rcon.web is set to 1 on the server (this speaks the other kind)",
+      "- The host refuses connections from the wider internet, or an IP allowlist is on",
+    ].join("\n"), false));
+  }
+  built.footer = { text: question[2] + " | read-only" };
+  /* the server id rides along in the button, so "Ask again" asks the same server */
+  var sid = String(server.id).slice(0, 40);
+  return {
+    embeds: [built],
+    components: [row([button("server:" + question[0] + ":" + sid, "Ask again", 1), button("server:players:" + sid, "Who is online", 2), button("server:time:" + sid, "Game time", 2)])],
+    flags: EPH,
+  };
+}
+
+/* /user whois -------------------------------------------------------------- */
+/* Reads the saved link list. It never guesses and never pings: the account is shown as a
+   mention inside an ephemeral reply, which notifies nobody. */
+export function whoisReply(ctx, gamertag) {
+  var wanted = String(gamertag || "").trim().slice(0, 60);
+  var links = ctx.links() || [];
+  var pending = ctx.pendingLinks() || [];
+  if (!wanted) {
+    return {
+      embeds: [embed(0x1abc9c, "/user whois",
+        "Give it a gamertag, or part of one, to see which Discord account is behind it.\n" +
+        code("/user whois gamertag: YourName") + "\n\n" + links.length + " link(s) on record, " + pending.length + " request(s) waiting.")],
+      components: [row([button("user:roster", "See the whole roster", 2)])],
+      flags: EPH,
+    };
+  }
+  var lower = wanted.toLowerCase();
+  var exact = links.filter(function (l) { return String(l.gamertag).toLowerCase() === lower; });
+  var found = exact.length ? exact : links.filter(function (l) { return String(l.gamertag).toLowerCase().indexOf(lower) > -1 || String(l.userId) === wanted; });
+  var waiting = pending.filter(function (p) { return String(p.gamertag).toLowerCase().indexOf(lower) > -1; });
+  if (!found.length) {
+    var missing = embed(0xfaa81a, "No link for " + wanted,
+      "Nobody on record is linked to a gamertag like that."
+      + (waiting.length
+        ? "\n\n" + (waiting.length === 1 ? "One request is waiting" : waiting.length + " requests are waiting") + " with a matching name. A request is a claim, not proof: approve it from the **Waiting list** only if it is genuine."
+        : "\n\nA player can ask to be linked from the panel posted by " + code("/user linkpanel") + "."));
+    return { embeds: [missing], components: [row([button(waiting.length ? "user:pending" : "user:roster", waiting.length ? "Open the waiting list" : "See the whole roster", 2)])], flags: EPH };
+  }
+  var lines = found.slice(0, 12).map(function (l) {
+    return "**" + l.gamertag + "** - <@" + l.userId + "> " + code(String(l.userId)) + "\nlinked " + (ago(l.at) || "at an unknown time") + (l.by ? " by <@" + String(l.by).slice(0, 20) + ">" : "");
+  });
+  var built = embed(0x1abc9c, found.length === 1 ? "1 link found" : found.length + " links found", lines.join("\n\n"));
+  if (found.length > 12) built.footer = { text: "Showing the first 12 of " + found.length };
+  if (waiting.length) {
+    built.fields = [field("Also waiting on staff", waiting.slice(0, 8).map(function (p) {
+      return "**" + p.gamertag + "** - <@" + p.userId + ">";
+    }).join("\n").slice(0, 900), false)];
+  }
+  var nav = [button("user:roster", "See the whole roster", 2)];
+  if (found.length === 1) nav.unshift(button("user:unlink:ask:" + String(found[0].gamertag).slice(0, 60), "Remove this link", 4));
+  return { embeds: [built], components: [row(nav)], flags: EPH };
+}
+
 /* /help -------------------------------------------------------------------- */
 var STAFF_RULE = "Staff: the roles saved in step 1 of /setup, plus Administrator, Manage Server and the server owner. Before any staff role is saved, only those last three.";
 function helpButtons(current) {
-  return row(["ping", "setup", "kits", "user"].map(function (n) { return button("help:cmd:" + n, "/" + n, n === current ? 1 : 2); }));
+  return row(["ping", "setup", "kits", "user", "server"].map(function (n) { return button("help:cmd:" + n, "/" + n, n === current ? 1 : 2); }));
 }
 export function helpHome(ctx) {
   var site = (ctx && ctx.siteUrl) || "https://spinback-j7ao5f.camelai.app";
   var built = embed(0x5865f2, "Spinback RCE commands",
     "Pick a command to see every subcommand, who may run it and what it needs set up first.\n\n" +
     "**/ping** - live bot and website health\n**/setup** - roles, logging channels and your Rust server\n" +
-    "**/kits** - emote kits, giving kits, cooldowns and installs\n**/user** - player links: confirm, move, remove, roster\n" +
+    "**/kits** - emote kits, giving kits, cooldowns and installs\n**/user** - player links: whois, confirm, move, remove, roster\n" +
+    "**/server** - read-only questions to your Rust server: info, players, time, status\n" +
     "**/help** - this page");
   built.footer = { text: "Options with suggestions (kits, gamertags, servers) fill in as you type" };
   return {
@@ -497,7 +618,9 @@ export function helpDetail(name, ctx) {
     setup: embed(0xff7200, "Help: /setup",
       "Your server, wired up in three steps. Roles and channels come from Discord's own pickers, and the Rust connection is tested before anything is saved, so a wrong port or password never lands in your settings."),
     kits: embed(0xff7200, "Help: /kits",
-      "Emote kits end to end: the real kit names from your server, binds with cooldowns and roles, giving kits out, clearing cooldowns, respawn kits per auth group, and installing kits built in Kit Studio."),
+      "Kits end to end: the real kit names from your server, giving kits over RCON with a cooldown per player + kit, and Kit Studio codes. Emote binds and respawn kits are saved settings: they run in game only once a Rust plugin sends emote and respawn events to the bot, which is not connected yet."),
+    server: embed(0x5865f2, "Help: /server",
+      "Read-only questions put to your Rust server over RCON: info, players, time and status, plus a fresh-connection check. Whatever the server answers is shown as it arrived."),
     user: embed(0x1abc9c, "Help: /user",
       "Player links: a Discord account with the Rust Console gamertag it belongs to. Players ask through the link panel; staff confirm, move or remove links, and the linked role follows the link."),
   };
@@ -520,15 +643,15 @@ export function helpDetail(name, ctx) {
     kits: [
       field("Subcommands", [
         "**grab** `server` - read the real kit names from your server (they then autocomplete)",
-        "**config** - binds, cooldowns, roles, lock kits, emote guide",
-        "**give** `kit` `gamertag` or `user` `server` - hand a kit over in game",
-        "**refresh** `scope` `target` - clear cooldowns for a player, a kit, or everything",
-        "**cooldowns** - the cooldown records the bot is holding",
-        "**auth-spawn** `group` `kit` - give a group a kit on every respawn",
+        "**config** - binds, delivery settings, pause switch, emote guide",
+        "**give** `kit` `gamertag` or `user` `server` - give a kit now, over RCON",
+        "**refresh** `scope` `target` - clear give cooldowns for a player, a kit, or everything",
+        "**cooldowns** - give cooldowns running now (held in memory; a restart clears them)",
+        "**auth-spawn** `group` `kit` - save a respawn kit for a group (needs the game hook to run)",
         "**build** - Kit Studio on the website",
-        "**add** `code` - install a kit from a Base64 install code (its kit names are picked up for autocomplete)",
+        "**add** `code` - store a Kit Studio code and learn its kit names; it does not install anything on the server",
       ].join("\n"), false),
-      field("Delivery settings", "In **/kits config**, press **Delivery settings** to set the list command and the give template right here in Discord. The give template needs {player} and {kit}.", false),
+      field("Delivery settings", "In **/kits config**, press **Delivery settings** to set the list command, the give template ({player} and {kit}) and the cooldown per player + kit. Only gives the server accepts start a cooldown. **Pause kit delivery** stops all gives until resumed.", false),
       field("Permissions", STAFF_RULE, false),
       field("Needs first", "Setup finished (a staff role and a tested server), then your kit plugin's list command and a give template using {player} and {kit}. The bot will not guess either.", false),
     ],
@@ -539,10 +662,23 @@ export function helpDetail(name, ctx) {
         "**transfer** `gamertag` `to_user` `to_gamertag` - move a link to a new account or gamertag",
         "**linkpanel** `channel` - post the Link account / Unlink panel for players",
         "**roster** `search` - every linked player, page by page, or only those matching a gamertag or Discord id",
+        "**whois** `gamertag` - which Discord account is behind a gamertag (and any waiting requests)",
       ].join("\n"), false),
       field("Waiting list", "Players who asked through the panel wait on the **Waiting list** in /user until staff approve or reject them, in one click each. The player is told by direct message either way (unless their DMs are closed; the reply says which). Posting a new link panel offers to remove the old one.", false),
       field("Permissions", STAFF_RULE + " The link panel's own buttons work for everyone.", false),
       field("Needs first", "Setup finished. Set a Linked role in /setup to have it given and taken away automatically (the bot needs Manage Roles, above that role).", false),
+    ],
+    server: [
+      field("Subcommands", [
+        "**info** `server` - what the server says about itself",
+        "**players** `server` - the live player list with ping",
+        "**time** `server` - the in-game clock",
+        "**status** `server` - the server's own status answer",
+        "**check** `server` - a fresh connection, timed",
+      ].join("\n"), false),
+      field("Read-only", "Only the commands on the bot's allowed list are ever sent: serverinfo, playerlist, gettime and status. Nothing can be changed from here.", false),
+      field("Permissions", STAFF_RULE, false),
+      field("Needs first", "One tested Rust server from /setup. With several, pick one in the server option (it fills in as you type).", false),
     ],
   };
   var out = pages[name] || pages.ping;
@@ -609,7 +745,7 @@ export function cooldownsPanel(ctx, rows) {
   var built = embed(0xff7200, "Kit cooldowns",
     list.length
       ? "The cooldown records this bot is holding right now."
-      : "No cooldown records are being held. Cooldowns are this bot own bookkeeping, so this stays empty until the in-game hook reports a kit use back to the bot.");
+      : "No kit is cooling down. Each **/kits give** that the server accepts starts one for that player + kit (set the length in Delivery settings). They live in the bot's memory, so a restart clears them.");
   if (list.length) built.fields = [field("On record", list.slice(0, 20).join("\n").slice(0, 1000), false)];
   built.footer = { text: "Clearing is instant: /kits refresh, or the button below" };
   return { embeds: [built], components: [row([button("kits:config", "Back to Emote Kits", 2), button("kits:clear", "Clear all cooldowns", 2)])], flags: EPH };
@@ -898,14 +1034,14 @@ export function kitAddPanel(ctx) {
   /* A link button (style 5) must carry a url and no custom_id, or Discord refuses the whole
      reply and the user sees "This interaction failed". */
   var studio = link("Open Kit Studio", ((ctx && ctx.siteUrl) || "https://spinback-j7ao5f.camelai.app") + "/dashboard/kitbuilder.html");
-  return { embeds: [embed(0x5865f2, "Install a kit",
-    "Paste a Base64 install code from Kit Studio. The bot checks it really is Base64 that decodes to text, stores it exactly as given, and never guesses what is inside.")],
+  return { embeds: [embed(0x5865f2, "Store a kit code",
+    "Paste a Base64 code from Kit Studio. The bot checks it really is Base64 that decodes to text, keeps it, and learns the kit names inside for autocomplete. It does not run the code or install anything on your Rust server.")],
     components: [row([button("kits:add:code", "Enter a code", 1), studio]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
 }
 
 export function kitAddModal() {
-  return { title: "Install a kit", custom_id: "modal:kitcode", components: [
-    row([input("install_code", "Base64 kit install code", "", true)]),
+  return { title: "Store a kit code", custom_id: "modal:kitcode", components: [
+    row([input("install_code", "Base64 kit code from Kit Studio", "", true)]),
   ] };
 }
 
@@ -913,21 +1049,22 @@ export function kitsPanel(ctx) {
   var binds = ctx.kits().binds || [];
   var auth = ctx.kits().authSpawn || {};
   var built = embed(0xff7200, "Emote Kits",
-    "A bind ties an emote to up to three kits, with a cooldown and an optional role. Cooldown bookkeeping is the bot own; emote names are your server own wording.");
+    "A bind ties an emote to up to three kits, with a cooldown and an optional role. **Binds and respawn kits are saved settings:** they run in game only once a Rust plugin feeds emote and respawn events to the bot, which is not connected yet. **/kits give** works today, over RCON.");
   var bindLines = binds.map(function (b) {
     return code(b.emote) + " -> " + (b.kits || []).join(", ") + (b.cooldown ? " (" + b.cooldown + "s)" : "") + (b.roleId ? " <@&" + b.roleId + ">" : "");
   });
   built.fields = [
     field("Binds (" + binds.length + ")", binds.length ? fitLines(bindLines, 1000) : "none yet", false),
-    field("Lock kits", ctx.kits().locked ? "locked" : "unlocked", true),
+    field("Kit delivery", ctx.kits().locked ? "\u23f8\ufe0f paused" : "\ud83d\udfe2 on", true),
     field("Auth groups with a kit", String(Object.keys(auth).length), true),
     field("Cooldowns on record", String(ctx.cooldownCount()), true),
-    field("Delivery", "List command: " + (ctx.kits().listCommand ? code(ctx.kits().listCommand) : "not set") + "\nGive template: " + (ctx.kits().giveCommand ? code(ctx.kits().giveCommand) : "not set"), false),
+    field("Delivery", "List command: " + (ctx.kits().listCommand ? code(ctx.kits().listCommand) : "not set") + "\nGive template: " + (ctx.kits().giveCommand ? code(ctx.kits().giveCommand) : "not set") +
+      "\nCooldown per player + kit: " + (ctx.kits().giveCooldownSeconds == null ? 30 : ctx.kits().giveCooldownSeconds) + " s", false),
   ];
   built.footer = { text: "Emote and kit names come from your own server" };
   return { embeds: [built], components: [
     row([button("kits:add", "Add a bind", 1), button("kits:edit", "Edit a bind", 2), button("kits:remove", "Remove a bind", 2)]),
-    row([button("kits:lock", ctx.kits().locked ? "Unlock kits" : "Lock kits", 2), button("kits:guide", "Emote guide", 2), button("kits:refresh", "Cooldowns", 2)]),
+    row([button("kits:lock", ctx.kits().locked ? "Resume kit delivery" : "Pause kit delivery", 2), button("kits:guide", "Emote guide", 2), button("kits:refresh", "Cooldowns", 2)]),
     row([button("kits:delivery", "Delivery settings", ctx.kits().giveCommand && ctx.kits().listCommand ? 2 : 1), button("kits:grab", "Read kit names", 2), button("kits:give", "Give a kit", 2)]),
   ], flags: EPH };
 }
@@ -974,6 +1111,7 @@ export function deliveryModal(kits) {
   return { title: "Kit delivery", custom_id: "modal:kitdelivery", components: [
     row([Object.assign(input("kit_list", "List command (lists your kits)", String(k.listCommand || ""), false), { placeholder: "for example: kit list" })]),
     row([Object.assign(input("kit_give", "Give template, with {player} and {kit}", String(k.giveCommand || ""), false), { placeholder: 'for example: kit givetoplayer {kit} "{player}"' })]),
+    row([Object.assign(input("kit_give_cooldown", "Cooldown per player + kit, seconds (0 = none)", String(k.giveCooldownSeconds == null ? 30 : k.giveCooldownSeconds), false), { max_length: 5 })]),
   ] };
 }
 export function saveDelivery(ctx, data) {
@@ -983,10 +1121,13 @@ export function saveDelivery(ctx, data) {
   if (list.length > 120) problems.push("The list command is longer than 120 characters.");
   if (give.length > 200) problems.push("The give template is longer than 200 characters.");
   if (give && (give.indexOf("{player}") < 0 || give.indexOf("{kit}") < 0)) problems.push("The give template needs both {player} and {kit}, so the bot knows where the gamertag and the kit name go.");
+  var coolText = String(data.kit_give_cooldown == null ? "" : data.kit_give_cooldown).trim();
+  var cooldown = coolText === "" ? 30 : Number(coolText);
+  if (!Number.isInteger(cooldown) || cooldown < 0 || cooldown > 86400) problems.push("The cooldown must be a whole number of seconds from 0 to 86400.");
   if (problems.length) {
     return { embeds: [embed(0xdc4c4c, "Not saved", problems.join("\n"))], components: [row([button("kits:delivery", "Try again", 1), button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
   }
-  var result = ctx.setDelivery({ listCommand: list, giveCommand: give });
+  var result = ctx.setDelivery({ listCommand: list, giveCommand: give, giveCooldownSeconds: Number.isInteger(cooldown) ? cooldown : 30 });
   if (result && typeof result.then === "function") return result.then(function (wrote) { return deliverySaved(list, give, wrote); });
   return deliverySaved(list, give, result);
 }
@@ -1051,13 +1192,13 @@ export async function grabKitsRun(ctx, wanted) {
 }
 export function kitStudioPanel(ctx) {
   return { embeds: [embed(0x5865f2, "Kit Studio",
-    "Build a kit slot by slot on the website, then bring it back here as an install code. The site and this bot share the same 299-item catalogue, so a kit made there is the same kit here.")],
+    "Build a kit slot by slot on the website, then bring its code back here so the bot learns the kit names. The site and this bot share the same 299-item catalogue, so a kit made there is the same kit here.")],
     /* kits:add:code opens the install-code form; kits:add is "Add a bind". */
-    components: [row([link("Open Kit Studio", ctx.siteUrl + "/dashboard/kitbuilder.html"), button("kits:add:code", "Install a code", 1)])], flags: EPH };
+    components: [row([link("Open Kit Studio", ctx.siteUrl + "/dashboard/kitbuilder.html"), button("kits:add:code", "Store a code", 1)])], flags: EPH };
 }
 export function installKit(ctx, rawCode) {
   var raw = String(rawCode || "").trim();
-  if (!raw) return { embeds: [embed(0xdc4c4c, "No code given", "Paste the Base64 install code from Kit Studio.")], flags: EPH };
+  if (!raw) return { embeds: [embed(0xdc4c4c, "No code given", "Paste the Base64 code from Kit Studio.")], flags: EPH };
   var text = null;
   try { text = Buffer.from(raw, "base64").toString("utf8"); } catch (error) { text = null; }
   var ok = !!text && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
@@ -1067,8 +1208,8 @@ export function installKit(ctx, rawCode) {
   var names = [];
   text.replace(/^\s*kit\s+add\s+"([^"]{1,60})"/gim, function (all, name) { if (names.indexOf(name) < 0) names.push(name); return all; });
   if (names.length && ctx.setKnownKits) ctx.setKnownKits(knownKitNames(ctx).concat(names.filter(function (n) { return knownKitNames(ctx).indexOf(n) < 0; })));
-  var built = embed(0x3ba55d, "Install code accepted",
-    "Stored exactly as given, keyed by a hash of the code so two different codes cannot overwrite each other. Sending it to your server needs your own install command, set in the kit settings.");
+  var built = embed(0x3ba55d, "Kit code stored",
+    "Kept as given, keyed by a hash of the code so two different codes cannot overwrite each other. Nothing was sent to your Rust server: create the kit there with your kit plugin, then give it with **/kits give**.");
   built.fields = [
     field("Decoded length", text.length + " characters", true),
     field("Codes stored", String(count), true),
@@ -1079,8 +1220,8 @@ export function installKit(ctx, rawCode) {
 }
 export function authSpawnNote(ctx, group, kit) {
   ctx.setAuthSpawn(group, kit);
-  return { embeds: [embed(kit ? 0x3ba55d : 0xfaa81a, kit ? "Respawn kit set" : "Respawn kit cleared",
-    kit ? "**" + group + "** will be given " + code(kit) + " on respawn." : "**" + group + "** no longer receives a kit on respawn.")], flags: EPH };
+  return { embeds: [embed(kit ? 0x3ba55d : 0xfaa81a, kit ? "Respawn kit saved" : "Respawn kit cleared",
+    kit ? "**" + group + "** is set to " + code(kit) + " on respawn. This runs in game only once a Rust plugin sends respawn events to the bot, which is not connected yet." : "**" + group + "** no longer has a respawn kit saved.")], flags: EPH };
 }
 export function refreshCooldowns(ctx, scope, target) {
   var cleared = ctx.clearCooldowns(scope, target);
@@ -1114,8 +1255,29 @@ export async function giveKit(ctx, opts) {
   if (!target) return { embeds: [embed(0xdc4c4c, "Who should get it?", "Name a gamertag, or a Discord user whose gamertag is linked.")], flags: EPH };
   var server = findServer(ctx, opts.server);
   if (!server) return noServerPayload(ctx, opts.server);
+  if (ctx.kits().locked) {
+    return { embeds: [embed(0xfaa81a, "Kit delivery is paused",
+      "Staff paused kit delivery in **/kits config**. Resume it there before sending another kit.")],
+      components: [row([button("kits:config", "Open Emote Kits", 1)])], flags: EPH };
+  }
   var final = command.split("{player}").join(target).split("{kit}").join(kit);
-  var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: final });
+  /* One give per player + kit per cooldown (Delivery settings; 30 s unless changed), and
+     never two at once: a double press or two staff at the same moment send it once. */
+  var seconds = ctx.kits().giveCooldownSeconds == null ? 30 : Number(ctx.kits().giveCooldownSeconds);
+  var reservation = ctx.reserveKitGive ? ctx.reserveKitGive(target, kit, seconds) : null;
+  if (reservation && !reservation.ok) {
+    return { embeds: [embed(0xfaa81a, reservation.inProgress ? "Already being sent" : "On cooldown",
+      reservation.inProgress
+        ? code(kit) + " to " + code(target) + " is being sent right now."
+        : code(kit) + " was given to " + code(target) + " moments ago. It can go again in " + reservation.remainingSeconds + " s.")],
+      components: [row([button("kits:refresh", "Cooldowns", 2)])], flags: EPH };
+  }
+  var answer;
+  try {
+    answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: final });
+  } finally {
+    if (ctx.finishKitGive) ctx.finishKitGive(reservation, !!(answer && answer.ok));
+  }
   var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c, answer && answer.ok ? "Sent" : "The server refused it",
     code(kit) + " to " + code(target) + via + " on **" + server.name + "**.\nCommand: " + code(final));
   built.fields = [field("Server answer", answer && answer.answer
@@ -1234,7 +1396,9 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "transfer") return options.gamertag ? transferNow(ctx, options.gamertag, options.to_user, options.to_gamertag) : transferPicker(ctx);
     if (sub === "linkpanel") return options.channel ? { postPanelTo: options.channel } : channelPickerForPanel();
     if (sub === "roster") return rosterPanel(ctx, 1, options.search);
+    if (sub === "whois") return whoisReply(ctx, options.gamertag);
     return userPanel(ctx);
   }
+  if (name === "server") return serverSnapshot(ctx, sub || "info", options.server);
   return { content: "That command is not wired up here yet.", flags: EPH };
 }

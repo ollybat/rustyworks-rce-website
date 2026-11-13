@@ -1,7 +1,7 @@
 /* Spinback service worker - makes the site installable and shows a friendly page when
  * the phone is offline. It never caches pages, logins or API answers, so everyone always
  * sees the live site. Change VERSION to force every phone to refresh its saved files. */
-const VERSION = 'spinback-app-v2';
+const VERSION = 'spinback-app-v3';
 const OFFLINE = '/offline.html';
 const KEEP = [OFFLINE, '/media/spinback-icon.svg', '/media/icon-192.png', '/media/icon-512.png'];
 

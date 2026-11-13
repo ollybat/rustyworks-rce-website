@@ -133,8 +133,51 @@ function report(name, run) {
   return run.result;
 }
 
+/* The bot's own HTTP API, checked while run 1 is up: Railway's health check says only "alive",
+   public status leaks nothing internal, and the routes meant for the website's server side
+   refuse anyone without BOT_SETTINGS_TOKEN. */
+const portProbe = createServer();
+await new Promise((r) => portProbe.listen(0, "127.0.0.1", r));
+const botPort = portProbe.address().port;
+await new Promise((r) => portProbe.close(r));
+async function apiChecks() {
+  const base = "http://127.0.0.1:" + botPort;
+  const out = [];
+  const request = (path, options) => fetch(base + path, Object.assign({ signal: AbortSignal.timeout(4000) }, options || {}));
+  let health = null;
+  for (let i = 0; i < 100 && !health; i++) {
+    try { const r = await request("/healthz"); if (r.ok) health = await r.json(); } catch (e) { /* not up yet */ }
+    if (!health) await new Promise((r) => setTimeout(r, 100));
+  }
+  out.push(["/healthz answers with liveness only", !!health && Object.keys(health).sort().join(",") === "ok,service"]);
+  const pub = await (await request("/api/status")).json().catch(() => ({}));
+  const secret = ["host", "port", "tokenPresent", "tokenSource", "tokenShape", "tokenLength", "lookedFor", "loginAttempts", "siteUrl", "ownerSource", "error", "guildInfo"];
+  out.push(["public /api/status shows no internals", pub.online !== undefined && secret.every((k) => !(k in pub))]);
+  const full = await (await request("/api/status", { headers: { "x-settings-token": TOKEN } })).json().catch(() => ({}));
+  out.push(["the website (with the token) still gets full diagnostics", "tokenShape" in full && "guildInfo" in full]);
+  for (const [path, method] of [["/api/guilds", "GET"], ["/api/guild", "GET"], ["/api/rcon/test", "POST"], ["/api/reconnect", "POST"]]) {
+    const r = await request(path, Object.assign({ method }, method === "POST" ? { body: "{}", headers: { "content-type": "application/json" } } : {}));
+    out.push([path + " refuses a request without the token", r.status === 403]);
+  }
+  const wrongToken = await request("/api/guilds", { headers: { "x-settings-token": TOKEN + "x" } });
+  out.push(["a wrong token is refused too", wrongToken.status === 403]);
+  const guilds = await request("/api/guilds", { headers: { "x-settings-token": TOKEN } });
+  out.push(["the right token reads guild metadata", guilds.status === 200]);
+  const getReconnect = await request("/api/reconnect", { headers: { "x-settings-token": TOKEN } });
+  out.push(["reconnect needs POST", getReconnect.status === 405]);
+  const privateRcon = await (await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify({ host: "192.168.1.10", port: 28016, password: "x" }) })).json().catch(() => ({}));
+  out.push(["RCON to a private address is refused", privateRcon.reason === "refused-host"]);
+  const docRcon = await (await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify({ host: "192.0.2.10", port: 28016, password: "x" }) })).json().catch(() => ({}));
+  out.push(["RCON to a documentation range is refused", docRcon.reason === "refused-host"]);
+  return out;
+}
+
 /* Run 1: the full tour, with the website keeping settings. */
-const first = await runBot({}, "scenario.mjs");
+const apiPromise = apiChecks();
+const first = await runBot({ PORT: String(botPort) }, "scenario.mjs");
+const api = await apiPromise;
 if (first.result) console.log("Bot registered: /" + first.result.commands.join(", /"));
 const one = report("Run 1 (website storage)", first);
 
@@ -158,8 +201,9 @@ between.push(["the shutdown waits for the press still running", /1 interaction\(
 site.close();
 rmSync(settingsDir, { recursive: true, force: true });
 
+for (const a of api) between.push(["HTTP API: " + a[0], a[1]]);
 const betweenFailed = between.filter((b) => !b[1]);
-console.log("Storage and shutdown: " + between.length + " checks, " + betweenFailed.length + " failed.");
+console.log("HTTP API, storage and shutdown: " + between.length + " checks, " + betweenFailed.length + " failed.");
 for (const b of betweenFailed) console.log("  FAIL " + b[0]);
 const failed = one.failed + two.failed + betweenFailed.length;
 console.log((one.interactions + two.interactions) + " interactions, " + (one.total + two.total + between.length) + " checks, " + failed + " failed.");

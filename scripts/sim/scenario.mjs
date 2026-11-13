@@ -120,8 +120,13 @@ export async function run({ world, make, interact }) {
   it = await go(make.modal(ADMIN, "modal:bind", { bind_emote: "wave", bind_kit1: "PVP", bind_kit2: "", bind_kit3: "", bind_cooldown: "100000000000000300" }), "save a bind");
   expect("the bind form asks for a role next", text(last(it)).includes("Who may use it?"), text(last(it)));
   it = await go(make.select(ADMIN, "role", "kits:role:wave", ["100000000000000303"]), "pick the bind role");
-  w = await writes();
-  const wave = ((latest(w).kits || {}).binds || []).find((b) => b.emote === "wave");
+  /* saves go out one at a time, in order, so this one may still be behind the bind itself */
+  let wave = null;
+  for (let i = 0; i < 40 && !(wave && wave.roleId); i++) {
+    w = await writes();
+    wave = ((latest(w).kits || {}).binds || []).find((b) => b.emote === "wave");
+    if (!(wave && wave.roleId)) await new Promise((r) => setTimeout(r, 150));
+  }
   expect("the bind's role is saved", wave && wave.roleId === "100000000000000303", text(wave));
 
   /* 12. a player asks to link; staff approve it in one click; the linked role follows */
@@ -246,6 +251,54 @@ export async function run({ world, make, interact }) {
   expect("log posts say which log they are", logged && text(logged.payload).includes("Command log"), text(logged && logged.payload).slice(0, 300));
   expect("the DM to a player is a proper embed", world.dms.some((d) => (d.payload.embeds || []).length && text(d.payload).includes("You are linked")), text(world.dms.slice(-1)));
   expect("the bot's status line says what it looks after", world.presence && /server.*linked/.test(text(world.presence)), text(world.presence));
+
+  /* 27. /server asks read-only questions of a chosen server; its buttons keep that server */
+  it = await go(make.command(ADMIN, "server", "players", { server: "srv1" }), "/server players");
+  expect("/server answers in time even when RCON is slow", it.firstAckAt !== null && it.firstAckAt < 3000, it.firstAckAt);
+  expect("/server names the server and the command it asked", text(last(it)).includes("Main") && text(last(it)).includes("playerlist"), text(last(it)).slice(0, 400));
+  expect("/server's Ask again keeps the server", text(last(it)).includes("server:players:srv1"), text((last(it) || {}).components));
+  it = await go(make.button(ADMIN, "server:time:srv1"), "/server game time button");
+  expect("a /server button asks the right question", text(last(it)).includes("gettime"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "server", "info", { server: "nope" }), "/server with an unknown server");
+  expect("an unknown server is named, not silently swapped", text(last(it)).includes("No saved server called nope"), text(last(it)).slice(0, 300));
+  it = await go(make.command(PLAYER, "server", "info"), "/server by a non-staff member");
+  expect("/server is staff only", text(last(it)).includes("Not allowed"), text(last(it)).slice(0, 200));
+
+  /* 28. /user whois finds the account behind a gamertag */
+  it = await go(make.command(ADMIN, "user", "whois", { gamertag: "playerone" }), "/user whois");
+  expect("whois finds the linked account", text(last(it)).includes("PlayerOne") && text(last(it)).includes("100000000000000210"), text(last(it)).slice(0, 400));
+  expect("whois offers to remove that link", text(last(it)).includes("user:unlink:ask:PlayerOne"), text((last(it) || {}).components));
+  it = await go(make.button(ADMIN, "user:unlink:ask:PlayerOne"), "whois: remove this link");
+  expect("the remove button asks for confirmation first", text(last(it)).includes("Remove this link?"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "user", "whois", { gamertag: "nobodyatall" }), "/user whois with no match");
+  expect("whois says plainly when nobody matches", text(last(it)).includes("No link for nobodyatall"), text(last(it)).slice(0, 300));
+
+  /* 29. kit giving is safe to hammer: one at a time per player + kit, pause works, names are clean */
+  const [, giveB] = await Promise.all([
+    go(make.command(ADMIN, "kits", "give", { kit: "RAIDER", gamertag: "PlayerOne", server: "srv1" }), "/kits give (first of two at once)"),
+    go(make.command(OWNER_ROLE, "kits", "give", { kit: "raider", gamertag: "playerone", server: "srv1" }), "/kits give (second, same player + kit)"),
+  ]);
+  expect("the same kit to the same player is never sent twice at once", text(last(giveB)).includes("Already being sent"), text(last(giveB)).slice(0, 300));
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "RAIDER;kick PlayerOne", gamertag: "PlayerOne", server: "srv1" }), "/kits give with a separator in the kit");
+  expect("a ; cannot smuggle a second command into the give", text(last(it)).includes("Command:") && !/Command: `[^`]*;/.test(text(last(it))), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "kits:lock"), "pause kit delivery");
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "RAIDER", gamertag: "Player2", server: "srv1" }), "/kits give while paused");
+  expect("a paused delivery refuses to give", text(last(it)).includes("Kit delivery is paused"), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "kits:lock"), "resume kit delivery");
+  expect("the panel says delivery is on again", text(last(it)).includes("Pause kit delivery"), text(last(it)).slice(0, 300));
+  it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"', kit_give_cooldown: "soon" }), "delivery with a bad cooldown");
+  expect("a cooldown that is not a whole number is refused", text(last(it)).includes("whole number"), text(last(it)).slice(0, 300));
+
+  /* 30. one gamertag waits for one account */
+  await go(make.modal({ id: "100000000000000221" }, "modal:link:self", { link_gamertag: "Rival1" }), "first claim on a gamertag");
+  it = await go(make.modal({ id: "100000000000000222" }, "modal:link:self", { link_gamertag: "rival1" }), "second account claims the same gamertag");
+  expect("a rival claim on a waiting gamertag is refused", text(last(it)).includes("already waiting"), text(last(it)).slice(0, 300));
+
+  /* 31. help is for everyone */
+  it = await go(make.command(PLAYER, "help"), "/help by a member");
+  expect("members can open /help", text(last(it)).includes("/server") && !text(last(it)).includes("Not allowed"), text(last(it)).slice(0, 200));
+  it = await go(make.button(PLAYER, "help:cmd:server"), "help page for /server, by a member");
+  expect("members can open a help page", text(last(it)).includes("Help: /server"), text(last(it)).slice(0, 200));
 
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {

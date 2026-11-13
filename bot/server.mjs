@@ -21,6 +21,7 @@ import handler from './interactions-worker.js';
 import net from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import { isPublicAddress, rconHostAllowed as hostAllowedByGuard } from './network-guard.mjs';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -35,7 +36,7 @@ import {
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
   STAFF_SLOTS, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
-  deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit, dress, BRAND,
+  deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit, dress, BRAND, serverSnapshot,
 } from './commands.mjs';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
@@ -52,7 +53,7 @@ function readToken(envVars) {
     const value = cleanEnvValue(envVars[name]);
     if (value) return { token: value, source: name };
   }
-  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC/i.test(k));
+  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC|SETTINGS/i.test(k));
   if (loose) return { token: cleanEnvValue(envVars[loose]), source: loose + ' (matched by name)' };
   return { token: '', source: null };
 }
@@ -122,6 +123,25 @@ const RELOAD_MS = Math.max(1000, Number(process.env.SETTINGS_RELOAD_MS) || 12000
 
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
 
+/* The bot's internal HTTP routes (guild metadata, RCON tests, reconnect) are for the website's
+   server side only. It proves itself with BOT_SETTINGS_TOKEN in x-settings-token, compared in
+   constant time; without the token set here those routes stay shut. */
+function settingsAuthOk(req) {
+  const expected = settingsToken();
+  if (!expected) return false;
+  const a = Buffer.from(String(req.headers['x-settings-token'] || ''));
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+function requireSettingsAuth(req, res) {
+  if (settingsAuthOk(req)) return false;
+  const status = settingsToken() ? 403 : 503;
+  res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify({ ok: false, reason: status === 403 ? 'forbidden' : 'no-settings-token' }));
+  try { req.resume(); } catch (error) { /* already gone */ }
+  return true;
+}
+
 /* ------------------------------------------------------------ settings file ---- */
 /* A second home for settings, on this machine. With a Railway volume attached
    (RAILWAY_VOLUME_MOUNT_PATH), or SETTINGS_FILE pointing somewhere that lasts, settings survive
@@ -180,8 +200,17 @@ function panelButton(id, label, style) { return { type: 2, custom_id: id, label:
    holds, and its Settings page edits the same sections, so sending everything would put this
    bot's older copy of a section back over a newer edit made on the website. */
 let lastPersistAt = 0;
-async function persistSettings(sections) {
+/* Saves go out one at a time, in the order they were made, so a quick second change can never
+   reach the website before the first and be overwritten by it. */
+let persistQueue = Promise.resolve();
+function persistSettings(sections) {
   writeSettingsFileSoon();
+  const run = function () { return persistSettingsNow(sections); };
+  const next = persistQueue.then(run, run);
+  persistQueue = next.then(function () {}, function () {});
+  return next;
+}
+async function persistSettingsNow(sections) {
   const token = settingsToken();
   if (!token) {
     return FILE_IS_DURABLE
@@ -283,16 +312,46 @@ function setAuthSpawn(group, kit) {
   persistSettings(['kits']).catch(function () {});
 }
 
-function cooldownCount() { return cooldowns.size; }
+/* Manual /kits give cooldowns: one record per gamertag + kit ("player::kit", lower case),
+   holding when it may be given again. Expired records are dropped whenever they are read. */
+function pruneCooldowns() {
+  const now = Date.now();
+  cooldowns.forEach(function (until, key) { if (!(Number(until) > now)) cooldowns.delete(key); });
+}
+function cooldownCount() { pruneCooldowns(); return cooldowns.size; }
+const activeKitGives = new Set();
+/* Reserve a give before RCON is asked, so two staff giving the same kit to the same player at
+   the same moment cannot both get through; the cooldown starts only if the server took it. */
+function reserveKitGive(gamertag, kit, seconds) {
+  pruneCooldowns();
+  const key = String(gamertag || '').trim().toLowerCase() + '::' + String(kit || '').trim().toLowerCase();
+  const until = Number(cooldowns.get(key) || 0);
+  if (until > Date.now()) return { ok: false, key: key, remainingSeconds: Math.max(1, Math.ceil((until - Date.now()) / 1000)) };
+  if (activeKitGives.has(key)) return { ok: false, key: key, inProgress: true, remainingSeconds: 1 };
+  activeKitGives.add(key);
+  return { ok: true, key: key, seconds: Math.max(0, Math.min(86400, Math.floor(Number(seconds) || 0))) };
+}
+function finishKitGive(reservation, succeeded) {
+  if (!reservation || !reservation.key) return;
+  activeKitGives.delete(reservation.key);
+  if (succeeded && reservation.seconds > 0) {
+    cooldowns.set(reservation.key, Date.now() + reservation.seconds * 1000);
+    if (cooldowns.size > 5000) {
+      [...cooldowns.entries()].sort(function (a, b) { return a[1] - b[1]; }).slice(0, cooldowns.size - 5000)
+        .forEach(function (entry) { cooldowns.delete(entry[0]); });
+    }
+  }
+}
 
 function cooldownList() {
+  pruneCooldowns();
   const rows = [];
   cooldowns.forEach(function (value, key) {
     const parts = String(key).split('::');
     const user = parts[0] || 'unknown';
     const kit = parts[1] || 'unknown';
     const left = Math.max(0, Math.round(((Number(value) || 0) - Date.now()) / 1000));
-    rows.push(user + ' -> ' + kit + (left ? ' (' + left + 's left)' : ''));
+    rows.push(user + ' -> ' + kit + ' (' + left + 's left)');
   });
   return rows;
 }
@@ -343,7 +402,13 @@ function removeBind(emote) {
 /* A link is a Discord account with the gamertag it belongs to. Everything player-facing
    hangs off it: kits by role, auth groups, the roster. Storage is honest about limits: an
    unconfirmed request is a request, not proof, and the panels say so. */
-function normaliseGamertag(value) { return String(value || '').trim().slice(0, 40); }
+/* Gamertags end up in RCON command lines and in the roster, so control characters are
+   dropped and runs of spaces collapse to one before anything is stored. */
+function normaliseGamertag(value) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
+/* A Discord account id is a snowflake: digits only, 15 to 25 of them. */
+function validUserId(id) { return /^[0-9]{15,25}$/.test(String(id || '')); }
 
 function findLinkByGamertag(gamertag) {
   const wanted = normaliseGamertag(gamertag).toLowerCase();
@@ -356,6 +421,7 @@ function addLink(userId, gamertag, by) {
   const tag = normaliseGamertag(gamertag);
   const id = String(userId || '').trim();
   if (!tag || !id) return { ok: false, reason: 'empty' };
+  if (!validUserId(id)) return { ok: false, reason: 'bad-user-id', detail: 'That Discord account id does not look valid.' };
   settings.links = settings.links.filter(function (l) {
     return l.gamertag.toLowerCase() !== tag.toLowerCase() && l.userId !== id;
   });
@@ -407,8 +473,17 @@ function requestLink(userId, gamertag) {
       ? 'That gamertag is already linked to your account.'
       : 'That gamertag is already linked. If it is yours, ask staff to move it with /user transfer.' };
   }
-  settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
-  settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
+  const id = String(userId || '').trim();
+  if (!validUserId(id)) return { ok: false, reason: 'bad-user-id', detail: 'Discord did not provide a valid account id.' };
+  /* One gamertag waits for one account: a second account claiming the same name is told so
+     instead of quietly queueing a rival claim for staff to untangle. */
+  const rival = settings.pending.filter(function (p) {
+    return String(p.userId) !== id && String(p.gamertag || '').toLowerCase() === tag.toLowerCase();
+  })[0];
+  if (rival) return { ok: false, reason: 'pending-taken', detail: 'That gamertag is already waiting for staff to confirm it for another Discord account. If it is yours, ask staff.' };
+  settings.pending = settings.pending.filter(function (p) { return String(p.userId) !== id; });
+  if (settings.pending.length >= 500) return { ok: false, reason: 'queue-full', detail: 'The waiting list is full. Ask staff to clear old requests, then try again.' };
+  settings.pending.push({ userId: id, gamertag: tag, at: new Date().toISOString() });
   persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag };
 }
@@ -485,6 +560,23 @@ async function postLinkPanel(channelId) {
 /* When a kit is given by picking a player first, the picked gamertag is remembered here for
    the next screen. Held in memory only: a restart just means picking again. */
 const pendingGive = new Map();
+const PENDING_GIVE_TTL_MS = 10 * 60 * 1000;
+/* Remembered for ten minutes at most, and never more than 500 at once, so abandoned forms
+   cannot pile up in memory. */
+function rememberPendingGive(userId, gamertag) {
+  const now = Date.now();
+  pendingGive.forEach(function (entry, key) { if (!entry || entry.expiresAt <= now) pendingGive.delete(key); });
+  if (pendingGive.size >= 500 && !pendingGive.has(String(userId))) {
+    const oldest = pendingGive.keys().next().value;
+    if (oldest !== undefined) pendingGive.delete(oldest);
+  }
+  pendingGive.set(String(userId), { gamertag: String(gamertag || ''), expiresAt: now + PENDING_GIVE_TTL_MS });
+}
+function takePendingGive(userId) {
+  const entry = pendingGive.get(String(userId));
+  pendingGive.delete(String(userId));
+  return entry && entry.expiresAt > Date.now() ? entry.gamertag : '';
+}
 
 function botCtx(interaction) {
   const actor = interaction && interaction.user ? { id: interaction.user.id, tag: interaction.user.tag || interaction.user.username || interaction.user.id } : null;
@@ -521,12 +613,15 @@ function botCtx(interaction) {
     setDelivery: function (d) {
       settings.kits.listCommand = d.listCommand;
       settings.kits.giveCommand = d.giveCommand;
+      if (Number.isInteger(d.giveCooldownSeconds)) settings.kits.giveCooldownSeconds = d.giveCooldownSeconds;
       logLater('admin', 'Kit delivery changed', who(actor) + ' set the list command to `' + (d.listCommand || 'none') + '` and the give template to `' + (d.giveCommand || 'none') + '`.');
       return persistSettings(['kits']).then(function (wrote) {
         return wrote && wrote.ok ? { ok: true } : { ok: false, detail: (wrote && wrote.detail) || 'the website did not accept the save' };
       }, function (error) { return { ok: false, detail: String((error && error.message) || error).slice(0, 160) }; });
     },
     diagnostics: diagnostics,
+    reserveKitGive: reserveKitGive,
+    finishKitGive: finishKitGive,
     serverChecks: function () { return serverChecks; },
     recordCheck: function (id, answer) {
       serverChecks[id] = { ok: !!(answer && answer.ok), ms: answer && answer.ms, reason: answer && !answer.ok ? (answer.reason || 'unknown') : null, at: new Date().toISOString() };
@@ -745,10 +840,13 @@ async function respond(interaction, work, kind) {
   try {
     payload = await Promise.resolve(typeof work === 'function' ? work() : work);
   } catch (error) {
-    const message = String((error && error.message) || error);
-    log('handler failed:', message);
-    logLater('errors', 'A command failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error.', [{ name: 'Error', value: message.slice(0, 900) }]);
-    payload = { embeds: [panelEmbed(0xdc4c4c, 'That did not work', message.slice(0, 400))] };
+    /* The person sees a short reference; the details (which can name hosts, files or
+       internals) go to the bot's log and the staff error channel under the same reference. */
+    const ref = Date.now().toString(36).slice(-6);
+    const message = String((error && (error.stack || error.message)) || error);
+    log('handler failed [' + ref + ']:', message.slice(0, 1200));
+    logLater('errors', 'A command failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error (reference ' + ref + ').', [{ name: 'Error', value: message.slice(0, 900) }]);
+    payload = { embeds: [panelEmbed(0xdc4c4c, 'That did not work', 'Something went wrong on the bot side. Try again; if it keeps happening, give staff this reference: `' + ref + '`.')] };
   } finally {
     clearTimeout(timer);
   }
@@ -844,11 +942,12 @@ async function routeOne(interaction) {
     if (typeof interaction.isUserSelectMenu === 'function' && interaction.isUserSelectMenu()) return await runSelect(interaction);
     return;
   } catch (error) {
-    const message = String((error && error.message) || error);
-    log('interaction failed:', message);
-    logLater('errors', 'An interaction failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error.', [{ name: 'Error', value: message.slice(0, 900) }]);
+    const ref = Date.now().toString(36).slice(-6);
+    const message = String((error && (error.stack || error.message)) || error);
+    log('interaction failed [' + ref + ']:', message.slice(0, 1200));
+    logLater('errors', 'An interaction failed', who(interaction.user ? { id: interaction.user.id } : null) + ' hit an error (reference ' + ref + ').', [{ name: 'Error', value: message.slice(0, 900) }]);
     /* After a deferral a second reply is refused, so the error is edited in instead of lost. */
-    const body = { embeds: [panelEmbed(0xdc4c4c, 'That failed', message.slice(0, 300))] };
+    const body = { embeds: [panelEmbed(0xdc4c4c, 'That failed', 'Something went wrong on the bot side. Try again; if it keeps happening, give staff this reference: `' + ref + '`.')] };
     try {
       if (interaction.deferred || interaction.replied) await interaction.editReply(body);
       else await interaction.reply(Object.assign({ flags: 64 }, body));
@@ -876,11 +975,11 @@ function describeOptions(opts) {
 
 async function runCommand(interaction) {
   const name = interaction.commandName;
-  if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user') {
+  if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user' && name !== 'server') {
     return await interaction.reply({ content: 'That command is no longer used here.', flags: 64 }).catch(function () {});
   }
   const ctx = botCtx(interaction);
-  if (name !== 'ping' && !permitted(interaction, ctx)) {
+  if (name !== 'ping' && name !== 'help' && !permitted(interaction, ctx)) {
     await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
   }
@@ -929,6 +1028,9 @@ async function runButton(interaction) {
         components: [panelRow([panelButton('link:start', 'Link account', 1)])] };
     })());
   }
+  /* Help is for everyone: members can read what each command does, even if they cannot run it. */
+  if (id.indexOf('help:cmd:') === 0) return await answerPanel(interaction, helpDetail(id.slice('help:cmd:'.length), ctx));
+  if (id === 'help:home') return await answerPanel(interaction, helpHome(ctx));
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'user:config') return await answerPanel(interaction, userPanel(ctx));
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
@@ -949,6 +1051,17 @@ async function runButton(interaction) {
   }
   if (id === 'user:pending') return await answerPanel(interaction, pendingPanel(ctx));
   if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
+  /* /server buttons re-ask a read-only question of the same server: "server:<question>:<id>". */
+  if (id.indexOf('server:') === 0) {
+    const parts = id.slice('server:'.length).split(':');
+    return await answerPanel(interaction, serverSnapshot(ctx, parts[0], parts.slice(1).join(':')));
+  }
+  if (id.indexOf('user:unlink:ask:') === 0) {
+    const tag = id.slice('user:unlink:ask:'.length);
+    const link = (ctx.links() || []).filter(function (l) { return String(l.gamertag).toLowerCase() === tag.toLowerCase(); })[0];
+    return await answerModal(interaction, link ? unlinkConfirm(link.gamertag, link.userId)
+      : { embeds: [panelEmbed(0xfaa81a, 'Already gone', 'Nobody is linked to ' + tag + ' any more.')] });
+  }
   if (id.indexOf('user:unlink:go:') === 0) {
     const tag = id.slice('user:unlink:go:'.length);
     return await answerPanel(interaction, (async function () {
@@ -1001,12 +1114,10 @@ async function runButton(interaction) {
     logLater('emoteKits', 'Cooldowns cleared', who(ctx.actor) + ' cleared every kit cooldown.');
     return await answerPanel(interaction, refreshCooldowns(ctx, 'all-kits', ''));
   }
-  if (id.indexOf('help:cmd:') === 0) return await answerPanel(interaction, helpDetail(id.slice('help:cmd:'.length), ctx));
-  if (id === 'help:home') return await answerPanel(interaction, helpHome(ctx));
   if (id === 'kits:lock') {
     settings.kits.locked = !settings.kits.locked;
     persistSettings(['kits']).catch(function () {});
-    logLater('emoteKits', settings.kits.locked ? 'Kits locked' : 'Kits unlocked', who(ctx.actor) + (settings.kits.locked ? ' locked' : ' unlocked') + ' emote kits.');
+    logLater('emoteKits', settings.kits.locked ? 'Kit delivery paused' : 'Kit delivery resumed', who(ctx.actor) + (settings.kits.locked ? ' paused' : ' resumed') + ' kit delivery.');
     return await answerPanel(interaction, kitsPanel(ctx));
   }
   /* "Skip" leaves the bind open to everyone; it was saved when the form was sent. */
@@ -1126,7 +1237,7 @@ async function runSelect(interaction) {
     })());
   }
   if (id === 'kits:give:pick') {
-    pendingGive.set(interaction.user.id, first);
+    rememberPendingGive(interaction.user.id, first);
     return await interaction.showModal(kitGiveModal());
   }
   log('unhandled select:', id);
@@ -1215,8 +1326,7 @@ async function runModal(interaction) {
     })());
   }
   if (id === 'modal:kitgive') {
-    const remembered = pendingGive.get(interaction.user.id) || '';
-    pendingGive.delete(interaction.user.id);
+    const remembered = takePendingGive(interaction.user.id);
     return await answerModal(interaction, (async function () {
       const payload = await giveKit(ctx, { kit: fields.give_kit, gamertag: fields.give_target || remembered, user: fields.give_user || null });
       if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Sent') {
@@ -1238,8 +1348,8 @@ async function runModal(interaction) {
   if (id === 'modal:kitdelivery') return await answerModal(interaction, saveDelivery(ctx, fields));
   if (id === 'modal:kitcode') {
     const payload = installKit(ctx, fields.install_code);
-    if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Install code accepted') {
-      logLater('emoteKits', 'Install code stored', who(ctx.actor) + ' stored a kit install code (' + String(fields.install_code || '').length + ' characters).');
+    if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Kit code stored') {
+      logLater('emoteKits', 'Kit code stored', who(ctx.actor) + ' stored a kit code (' + String(fields.install_code || '').length + ' characters).');
     }
     return await answerModal(interaction, payload);
   }
@@ -1505,7 +1615,7 @@ function rconParse(buffer) {
   let rest = buffer;
   while (rest.length >= 12) {
     const size = rest.readInt32LE(0);
-    if (size < 10 || size > 8192) break;
+    if (size < 10 || size > 8192) return { packets: packets, rest: rest, error: 'invalid-packet-size' };
     if (rest.length < size + 4) break;
     packets.push({
       id: rest.readInt32LE(4),
@@ -1514,65 +1624,56 @@ function rconParse(buffer) {
     });
     rest = rest.slice(size + 4);
   }
-  return { packets: packets, rest: rest };
+  return { packets: packets, rest: rest, error: null };
 }
 
-/* Is this literal address somewhere public? Covers the private, loopback, link-local,
-   carrier-grade NAT and multicast ranges for IPv4, and the IPv6 equivalents. */
-function publicAddress(ip) {
-  const a = String(ip || '').toLowerCase();
-  if (net.isIPv4(a)) {
-    const p = a.split('.').map(Number);
-    if (p[0] === 0 || p[0] === 10 || p[0] === 127 || p[0] >= 224) return false;
-    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return false;
-    if (p[0] === 169 && p[1] === 254) return false;
-    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return false;
-    if (p[0] === 192 && p[1] === 168) return false;
-    if (p[0] === 192 && p[1] === 0 && p[2] === 0) return false;
-    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return false;
-    return true;
-  }
-  if (net.isIPv6(a)) {
-    if (a === '::' || a === '::1') return false;
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
-    if (mapped) return publicAddress(mapped[1]);
-    if (/^(fc|fd|fe8|fe9|fea|feb|ff)/.test(a)) return false;
-    return true;
-  }
-  return false;
-}
-
-/* A name is resolved here and the connection goes to the address checked, so a public
-   looking name that points at a private address (or changes between check and connect)
-   cannot reach anything internal. */
+/* Where RCON may go: public unicast internet addresses only (bot/network-guard.mjs, with its
+   own self-test). A name is resolved here, with a deadline; every address it resolves to must
+   be public, and the connection goes to the exact address checked, so a name that points at
+   something private (or changes between check and connect) cannot reach anything internal. */
+const RCON_DNS_TIMEOUT_MS = 3500;
+function rconHostAllowed(host) { return hostAllowedByGuard(host); }
 async function rconResolve(host) {
-  const h = String(host || '').trim().toLowerCase();
-  if (net.isIP(h)) return publicAddress(h) ? h : null;
-  try {
-    const all = await lookup(h, { all: true });
-    if (!all.length || all.some((r) => !publicAddress(r.address))) return null;
-    return all[0].address;
-  } catch (error) {
-    return null;
-  }
+  const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+  if (net.isIP(h)) return isPublicAddress(h) ? h : null;
+  const records = await Promise.race([
+    lookup(h, { all: true }).catch(function () { return null; }),
+    new Promise(function (r) { setTimeout(function () { r(null); }, RCON_DNS_TIMEOUT_MS).unref(); }),
+  ]);
+  if (!Array.isArray(records) || !records.length || records.some(function (r) { return !isPublicAddress(r.address); })) return null;
+  return records[0].address;
 }
 
-/* Nothing on the private internet: that keeps this from being pointed at a local service. */
-function rconHostAllowed(host) {
-  const h = String(host || '').trim().toLowerCase();
-  if (!h || h.length > 200) return false;
-  if (h === 'localhost' || /\.local$/.test(h) || /\.internal$/.test(h)) return false;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-    const parts = h.split('.').map(Number);
-    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return false;
-    const a = parts[0], b = parts[1];
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    return true;
-  }
-  return /^[a-z0-9][a-z0-9.-]*$/.test(h);
+/* At most three RCON connections at once and twenty waiting: a burst of presses (or a
+   misbehaving server that never answers) cannot open sockets without limit. */
+const RCON_MAX_ACTIVE = 3;
+const RCON_MAX_QUEUED = 20;
+const RCON_QUEUE_WAIT_MS = 12000;
+const RCON_MAX_BUFFER_BYTES = 64 * 1024;
+let rconActive = 0;
+const rconWaiting = [];
+function acquireRconSlot() {
+  return new Promise(function (resolve, reject) {
+    function grant() {
+      rconActive += 1;
+      let released = false;
+      resolve(function release() {
+        if (released) return;
+        released = true;
+        rconActive = Math.max(0, rconActive - 1);
+        const next = rconWaiting.shift();
+        if (next) { clearTimeout(next.timer); next.grant(); }
+      });
+    }
+    if (rconActive < RCON_MAX_ACTIVE) return grant();
+    if (rconWaiting.length >= RCON_MAX_QUEUED) return reject(new Error('The RCON queue is full. Try again in a few seconds.'));
+    const entry = { grant: grant, timer: setTimeout(function () {
+      const at = rconWaiting.indexOf(entry);
+      if (at > -1) rconWaiting.splice(at, 1);
+      reject(new Error('The RCON queue is busy. Try again shortly.'));
+    }, RCON_QUEUE_WAIT_MS) };
+    rconWaiting.push(entry);
+  });
 }
 
 /* Discord has moved channel types from numbers to strings over the years and this bot
@@ -1589,11 +1690,19 @@ function channelKind(channel) {
 }
 
 async function rconRun(options) {
-  const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
-  if (!target) {
-    return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or does not resolve), so the bot will not connect to it.' };
+  let release;
+  try { release = await acquireRconSlot(); } catch (error) {
+    return { ok: false, reason: 'busy', detail: String((error && error.message) || error) };
   }
-  return rconConnect(Object.assign({}, options, { address: target }));
+  try {
+    const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
+    if (!target) {
+      return { ok: false, reason: 'refused-host', detail: 'That address is not a public internet host (or did not resolve safely), so the bot will not connect to it.' };
+    }
+    return await rconConnect(Object.assign({}, options, { address: target }));
+  } finally {
+    release();
+  }
 }
 
 function rconConnect(options) {
@@ -1616,6 +1725,7 @@ function rconConnect(options) {
     }
     if (!(port >= 1 && port <= 65535)) return resolve({ ok: false, reason: 'refused-port', detail: 'That port number cannot exist.' });
     if (!password) return resolve({ ok: false, reason: 'no-password', detail: 'No RCON password was given for that server.' });
+    if (password.length > 256) return resolve({ ok: false, reason: 'bad-password-length', detail: 'The saved RCON password is unexpectedly long; check the server settings.' });
 
     let socket = null;
     let idle = null;
@@ -1656,9 +1766,14 @@ function rconConnect(options) {
     });
 
     socket.on('data', function (chunk) {
+      if (settled) return;
+      if (buffer.length + chunk.length > RCON_MAX_BUFFER_BYTES) {
+        return finish({ ok: false, reason: 'response-too-large', detail: 'The server response exceeded the bot safety limit.' });
+      }
       buffer = Buffer.concat([buffer, chunk]);
       const parsed = rconParse(buffer);
       buffer = parsed.rest;
+      if (parsed.error) return finish({ ok: false, reason: 'invalid-response', detail: 'The server sent a malformed RCON packet.' });
       parsed.packets.forEach(function (packet) {
         if (!authed) {
           if (packet.id === -1) return finish({ ok: false, reason: 'bad-password', detail: 'The server refused that RCON password.' });
@@ -1669,7 +1784,7 @@ function rconConnect(options) {
           return;
         }
         if (packet.type === 0) {
-          answer += packet.body;
+          answer = (answer + packet.body).slice(0, 4000);
           /* Rust answers in one or more packets; a short silence means it is finished. */
           clearTimeout(idle);
           idle = setTimeout(function () {
@@ -1683,12 +1798,20 @@ function rconConnect(options) {
 
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
-  const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  const statusPaths = ['/', '/status', '/api/status'];
+  const healthPaths = ['/health', '/healthz', '/api/health'];
+  /* Railway's health check: alive or not, and nothing else. */
+  if (req.method === 'GET' && healthPaths.indexOf(url) !== -1) {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, service: 'spinback-rce-bot' }));
+    return;
+  }
   /* Every server the bot is in right now. The website asks this before it will set anything
      up: a server Spinback is not in cannot be configured, so the page says so plainly and
      offers the invite instead of pretending otherwise. */
   if (req.method === 'GET' && url === '/api/guilds') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     const guilds = [...client.guilds.cache.values()].map((g) => ({
       id: g.id,
       name: g.name,
@@ -1701,7 +1824,8 @@ createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url === '/api/guild') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
     res.writeHead(200, cors);
     res.end(JSON.stringify({ ready: true, guild: state.guildInfo }));
@@ -1724,7 +1848,8 @@ createServer(async (req, res) => {
   /* Ask a Rust server, over RCON, whether it is really there. The website never sends a
      password to a browser: it calls this with the connection it has stored. */
   if (req.method === 'POST' && url === '/api/rcon/test') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!rconAllowed()) {
       res.writeHead(429, cors);
       res.end(JSON.stringify({ ok: false, reason: 'rate-limited', detail: 'Six checks a minute is the limit. Try again shortly.' }));
@@ -1800,7 +1925,13 @@ createServer(async (req, res) => {
   }
 
   if (url === '/api/reconnect') {
-    const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'application/json', 'cache-control': 'no-store', allow: 'POST' });
+      res.end(JSON.stringify({ ok: false, reason: 'method-not-allowed' }));
+      return;
+    }
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     req.resume();
     if (!TOKEN) { res.writeHead(503, cors); res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
     if (state.gateway === 'online') { res.writeHead(200, cors); res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
@@ -1863,7 +1994,10 @@ createServer(async (req, res) => {
   }
   if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
-    res.end(JSON.stringify({
+    /* Public status: what the status page shows, and nothing about tokens, owners, ports or
+       internal errors. The website's server side, proving itself with BOT_SETTINGS_TOKEN,
+       gets the full diagnostics below as well. */
+    const publicStatus = {
       service: 'spinback-rce-bot',
       version: VERSION,
       /* Left out until a heartbeat has actually been acknowledged (see the Debug listener). */
@@ -1878,21 +2012,25 @@ createServer(async (req, res) => {
       tag: state.tag,
       guilds: state.guilds,
       command: state.command,
+      oauthExchange: !!CLIENT_SECRET,
+      storage: storeKind(),
+      shuttingDown: shuttingDown || undefined,
+      uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
+      stats: { guilds: state.guilds, gateway: state.gateway },
+    };
+    if (!settingsAuthOk(req)) { res.end(JSON.stringify(publicStatus)); return; }
+    res.end(JSON.stringify(Object.assign(publicStatus, {
       port: PORT,
       host: HOST,
       tokenPresent: !!TOKEN,
       tokenSource: TOKEN_INFO.source,
-      oauthExchange: !!CLIENT_SECRET,
       clientIdPresent: !!CLIENT_ID,
       tokenShape: tokenShape,
       tokenLength: TOKEN.length,
       loginAttempts: loginAttempts,
       lookedFor: TOKEN_NAMES,
       siteUrl: SITE_URL,
-      /* where settings live: website, file (a lasting volume) or memory; never the path */
-      storage: storeKind(),
       storageFileOk: fileState.ok,
-      shuttingDown: shuttingDown || undefined,
       interactions: !!PUBLIC_KEY,
       guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
       ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
@@ -1900,11 +2038,8 @@ createServer(async (req, res) => {
       forcedLogins: forcedLogins,
       gatewayDownSeconds: gatewayDownSince ? Math.round((Date.now() - gatewayDownSince) / 1000) : 0,
       error: state.error,
-      uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
-      /* Only what this process really knows, so the site never shows invented numbers. */
-      stats: { guilds: state.guilds, gateway: state.gateway },
       guildInfo: state.guildInfo || null,
-    }));
+    })));
     return;
   }
   /* Discord's interaction payloads are a few kilobytes; anything near a megabyte is not

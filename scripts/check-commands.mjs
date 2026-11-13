@@ -11,6 +11,7 @@
       failed". Nothing is sent anywhere; RCON and the website are answered by stand-ins.
 
    Exits non-zero if anything would be refused. */
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createChecker } from "./lib/discord-limits.mjs";
@@ -212,6 +213,24 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
 }
 
 problems.push(...limits.problems);
+/* ---- 4. the website's commands reference lists exactly what the bot registers ---- */
+{
+  const ref = JSON.parse(readFileSync(join(repo, "public", "data", "commands.json"), "utf8"));
+  const names = (list) => (list || []).map((x) => x.name).sort().join(",");
+  for (const real of COMMANDS) {
+    checked += 1;
+    const page = (ref.commands || []).find((c) => c.name === real.name);
+    if (!page) { problems.push("commands.json: /" + real.name + " is missing from the commands reference"); continue; }
+    const subs = (real.options || []).filter((o) => o.type === 1);
+    if (names(subs) !== names(page.subcommands)) problems.push("commands.json: /" + real.name + " subcommands differ (bot: " + names(subs) + ", page: " + names(page.subcommands) + ")");
+    for (const sub of subs) {
+      const shown = (page.subcommands || []).find((x) => x.name === sub.name);
+      if (shown && names(sub.options) !== names(shown.options)) problems.push("commands.json: /" + real.name + " " + sub.name + " options differ (bot: " + names(sub.options) + ", page: " + names(shown.options) + ")");
+    }
+  }
+  for (const page of ref.commands || []) if (!COMMANDS.some((c) => c.name === page.name)) problems.push("commands.json: /" + page.name + " is listed but the bot does not register it");
+}
+
 console.log(COMMANDS.length + " commands, " + runs.length + " command runs x 3 setups, " + (checked + limits.checked) + " checks.");
 if (problems.length) {
   const unique = [...new Set(problems)];
