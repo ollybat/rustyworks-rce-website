@@ -83,6 +83,49 @@ export const COMMANDS = [
     ] },
 ];
 
+/**
+ * Pure autocomplete source for the server's interaction router and the command
+ * validator. Only values already saved by staff or confirmed player links are
+ * suggested; untrusted text and guessed kit names never enter the list.
+ */
+export function autocompleteChoices(ctx, commandName, subcommand, focused, options) {
+  if (!focused || !focused.name) return [];
+  var query = String(focused.value || "").trim().toLowerCase();
+  var source = [];
+  function add(name, value) {
+    var label = String(name || "").trim().slice(0, 100);
+    var item = String(value == null ? "" : value).trim().slice(0, 100);
+    if (label && item) source.push({ name: label, value: item });
+  }
+
+  if (commandName === "setup" && subcommand === "refresh" && focused.name === "server") {
+    (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
+  } else if (commandName === "kits" && subcommand === "grab" && focused.name === "server") {
+    (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
+  } else if (commandName === "kits" && (subcommand === "give" || subcommand === "auth-spawn")) {
+    if (focused.name === "kit") (ctx.kits().known || []).forEach(function (kit) { add(kit, kit); });
+    else if (focused.name === "gamertag") (ctx.links() || []).forEach(function (link) { add(link.gamertag, link.gamertag); });
+  } else if (commandName === "user" && (subcommand === "whois" || subcommand === "roster")) {
+    if (focused.name === "gamertag" || focused.name === "search") {
+      (ctx.links() || []).forEach(function (link) { add(link.gamertag, link.gamertag); });
+    }
+  }
+
+  var matches = source.filter(function (choice) { return choice.name.toLowerCase().includes(query); });
+  matches.sort(function (a, b) {
+    var ap = a.name.toLowerCase().startsWith(query) ? 0 : 1;
+    var bp = b.name.toLowerCase().startsWith(query) ? 0 : 1;
+    return ap - bp || a.name.localeCompare(b.name);
+  });
+  var seen = new Set();
+  return matches.filter(function (choice) {
+    var key = choice.value.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 25);
+}
+
 function embed(c, t, d) { return { color: c, title: t, description: d }; }
 function field(n, v, i) { return { name: n, value: v, inline: !!i }; }
 function row(c) { return { type: 1, components: c }; }
