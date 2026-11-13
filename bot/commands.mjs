@@ -29,7 +29,8 @@ export const COMMANDS = [
       { type: 1, name: "run", description: "Guided setup: roles, logging channels, then your Rust server" },
       { type: 1, name: "status", description: "Checklist of what is saved and what is still missing" },
       { type: 1, name: "edit", description: "Change a saved server IP, RCON port or password" },
-      { type: 1, name: "refresh", description: "Force a fresh RCON connection and report what the server says" },
+      { type: 1, name: "refresh", description: "Force a fresh RCON connection and report what the server says",
+        options: [{ type: 3, name: "server", description: "Saved server to check (blank checks the first)", autocomplete: true }] },
     ] },
   { name: "kits", description: "Rust kit settings, manual giveaways and kit-code previews", dm_permission: false,
     options: [
@@ -37,8 +38,8 @@ export const COMMANDS = [
       { type: 1, name: "config", description: "Emote kit wizard: binds, cooldowns, roles, lock kits, emote guide" },
       { type: 1, name: "give", description: "Give a kit to a gamertag or a linked Discord user",
         options: [
-          { type: 3, name: "kit", description: "Kit name (leave blank to open the panel)" },
-          { type: 3, name: "gamertag", description: "In-game name to give it to" },
+          { type: 3, name: "kit", description: "Kit name (leave blank to open the panel)", autocomplete: true },
+          { type: 3, name: "gamertag", description: "In-game name to give it to", autocomplete: true },
           { type: 6, name: "user", description: "Discord user whose linked gamertag receives it" },
         ] },
       { type: 1, name: "refresh", description: "Clear kit cooldowns",
@@ -52,7 +53,7 @@ export const COMMANDS = [
         options: [
           { type: 3, name: "group", description: "Auth group (leave blank to open the panel)",
             choices: AUTH_GROUPS.map(function (g) { return { name: g, value: g }; }) },
-          { type: 3, name: "kit", description: "Kit to hand out (blank stops giving one)" },
+          { type: 3, name: "kit", description: "Saved kit preference (blank clears it)", autocomplete: true },
         ] },
       { type: 1, name: "cooldowns", description: "See active manual kit-give cooldowns" },
       { type: 1, name: "build", description: "Open Kit Studio to build a Rust Console kit" },
@@ -62,13 +63,14 @@ export const COMMANDS = [
   { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
     options: [
       { type: 1, name: "whois", description: "Look up which Discord account is behind a gamertag",
-        options: [{ type: 3, name: "gamertag", description: "Gamertag, or part of one" }] },
+        options: [{ type: 3, name: "gamertag", description: "Gamertag, or part of one", autocomplete: true }] },
       { type: 1, name: "forcelink", description: "Link a Discord user to a gamertag yourself" },
       { type: 1, name: "forceunlink", description: "Remove a player link" },
       { type: 1, name: "transfer", description: "Move a link to a new Discord account or a new gamertag" },
       { type: 1, name: "linkpanel", description: "Post a panel with Link Account and Unlink buttons in a channel",
         options: [{ type: 7, name: "channel", description: "Channel to post it in", channel_types: [0] }] },
-      { type: 1, name: "roster", description: "See every linked player" },
+      { type: 1, name: "roster", description: "See every linked player",
+        options: [{ type: 3, name: "search", description: "Filter linked players by gamertag", autocomplete: true }] },
     ] },
   { name: "server", description: "Ask your Rust server over RCON without changing anything", dm_permission: false,
     options: [
@@ -753,13 +755,29 @@ export function installKit(ctx, rawCode) {
   var ok = !!text && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text)
     && Buffer.from(text, "utf8").toString("base64").replace(/=+$/, "") === raw.replace(/=+$/, "");
   if (!ok) return { embeds: [embed(0xdc4c4c, "That code does not decode", "The value must be valid Base64 that decodes to readable text. Nothing was stored.")], flags: EPH };
+  /* A kit code is treated as data, never executed. Recognise only explicit
+     `kit add "NAME"` declarations, then store those names for autocomplete. */
+  var found = [];
+  var seen = new Set();
+  var lines = text.split(/\r?\n/);
+  lines.forEach(function (line) {
+    var match = /^\s*kit\s+add\s+(?:"([^"]{1,60})"|'([^']{1,60})'|([^\s]{1,60}))/i.exec(line);
+    if (!match) return;
+    var name = String(match[1] || match[2] || match[3] || "").trim();
+    var key = name.toLowerCase();
+    if (!name || seen.has(key) || !/^[\p{L}\p{N}_ .-]+$/u.test(name)) return;
+    seen.add(key);
+    found.push(name);
+  });
+  found = found.slice(0, 100);
+  if (ctx.setKnownKits) ctx.setKnownKits(found);
   var count = ctx.installKit(raw, text);
   var built = embed(0xfaa81a, "Code preview saved - not installed",
-    "The bot saved a hash and short preview of this code so it can recognise the kit names later. It does not execute the commands or install items on your Rust server; a game-side installer is not connected.");
+    "The bot saved a hash and short preview of this code. It does not execute any pasted commands or install items on your Rust server. The names below are suggestions only.");
   built.fields = [
+    field("Kit names found", found.length ? found.slice(0, 20).map(code).join(", ") : "No kit add declarations were recognised", false),
     field("Decoded length", text.length + " characters", true),
-    field("Codes stored", String(count), true),
-    field("First line", code(text.split("\n")[0].slice(0, 150)), false),
+    field("Code previews stored", String(count), true),
   ];
   return { embeds: [built], flags: EPH };
 }
