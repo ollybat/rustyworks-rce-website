@@ -64,7 +64,7 @@ export const COMMANDS = [
               { name: "All linked users", value: "all-users" }, { name: "All kits", value: "all-kits" }] },
           { type: 3, name: "target", description: "Gamertag or kit name, when the scope needs one" },
         ] },
-      { type: 1, name: "auth-spawn", description: "Give a kit to an Auth Group on every respawn",
+      { type: 1, name: "auth-spawn", description: "Save an Auth Group respawn preference (game hook required)",
         options: [
           { type: 3, name: "group", description: "Auth group (leave blank to open the panel)",
             choices: AUTH_GROUPS.map(function (g) { return { name: g, value: g }; }) },
@@ -72,7 +72,7 @@ export const COMMANDS = [
         ] },
       { type: 1, name: "cooldowns", description: "See the kit cooldown records the bot is holding" },
       { type: 1, name: "build", description: "Kit Studio: build a kit on the website or work from an install code" },
-      { type: 1, name: "add", description: "Install a kit from a Base64 kit install code",
+      { type: 1, name: "add", description: "Preview a Base64 code and recognise kit names; it does not install the code",
         options: [{ type: 3, name: "code", description: "The Base64 install code (blank opens the panel)" }] },
     ] },
   { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
@@ -1126,8 +1126,8 @@ export function setupStatus(ctx) {
   var servers = ctx.servers();
   var kits = ctx.kits();
   var checks = [
-    ["Staff roles stored", Object.keys(roles).length + " of " + ROLE_SLOTS.length],
-    ["Log channels stored", Object.keys(channels).length + " of " + LOG_TYPES.length],
+    ["Staff roles stored", ROLE_SLOTS.filter(function (slot) { return slot[0] !== "linked" && roles[slot[0]]; }).length + " of " + (ROLE_SLOTS.length - 1)],
+    ["Log channels stored", LOG_TYPES.filter(function (type) { return channels[type[0]]; }).length + " of " + LOG_TYPES.length],
     ["Rust servers linked", String(servers.length)],
     ["Kit binds", String((kits.binds || []).length)],
     ["Auth groups with a respawn kit", String(Object.keys(kits.authSpawn || {}).length)],
@@ -1142,7 +1142,9 @@ export function setupStatus(ctx) {
   var diagnostics = ctx.diagnostics && ctx.diagnostics();
   var problems = diagnostics && Array.isArray(diagnostics.problems) ? diagnostics.problems : [];
   var built = embed(next.length || problems.length ? 0xfaa81a : 0x3ba55d, "Setup status",
-    next.length ? "What is saved right now is below, then what is still missing, in the order worth doing it." : "Everything the bot can check is in place.");
+    problems.length ? "The saved configuration is below, followed by problems the bot can see right now."
+      : next.length ? "What is saved right now is below, then what is still missing, in the order worth doing it."
+      : "Everything the bot can check is in place.");
   built.fields = checks.map(function (c) { return field(c[0], c[1], true); });
   if (next.length) built.fields.push(field("What is missing", next.slice(0, 6).map(function (n) { return "- " + n; }).join("\n"), false));
   if (problems.length) built.fields.push(field("Problems found just now", problems.slice(0, 8).map(function (p) { return "- " + p; }).join("\n").slice(0, 1000), false));
@@ -1436,7 +1438,7 @@ export function emoteGuide(ctx) {
     (binds.length ? binds.map(function (b) {
       return "- " + code(b.emote) + " -> " + (b.kits || []).join(", ") + (b.cooldown ? " | " + b.cooldown + "s cooldown" : "") + (b.roleId ? " | <@&" + b.roleId + "> only" : "");
     }).join("\n") : "No binds yet. Use Add a bind.") +
-    "\n\nAuth groups on respawn: " + (Object.keys(auth).length ? Object.keys(auth).map(function (g) { return g + " -> " + auth[g]; }).join(", ") : "none set"))],
+    "\n\nSaved Auth Group preferences (not active until a Rust game-event/plugin connector is connected): " + (Object.keys(auth).length ? Object.keys(auth).map(function (g) { return g + " -> " + auth[g]; }).join(", ") : "none set"))],
     components: [row([button("kits:config", "Back to the panel", 2)])], flags: EPH };
 }
 export function grabKits(ctx) {
