@@ -694,6 +694,9 @@ function botCtx() {
     },
     rconRun: async function (o) {
       const result = SIMULATION_MODE ? simulatedRconResult(o) : await rconRun(Object.assign({}, o, { allowAny: true }));
+      if (String(o && o.command || '').trim().toLowerCase() === 'serverinfo') {
+        lastServerCheck = { host: String(o.host || ''), port: Number(o.port) || 0, ok: !!result.ok, reason: result.reason || null, ms: Number(result.ms) || null, at: new Date().toISOString() };
+      }
       await writeRconAudit(this.actorId, o, result);
       return result;
     },
@@ -746,7 +749,11 @@ function decorateDiscordPayload(payload) {
 async function answerModal(interaction, payload) {
   const body = decorateDiscordPayload(payload);
   if (body.flags === undefined) body.flags = 64;
-  try { await interaction.reply(body); } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
+  try {
+    if (interaction.deferred) { delete body.flags; await interaction.editReply(body); }
+    else if (interaction.replied) await interaction.followUp(body);
+    else await interaction.reply(body);
+  } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
 }
 
 async function answerPanel(interaction, payload) {
@@ -790,14 +797,14 @@ async function runCommand(interaction) {
   if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user' && name !== 'server') return;
   const ctx = botCtx();
   ctx.actorId = String((interaction.user && interaction.user.id) || '');
-  if (name !== 'ping' && !permitted(interaction, ctx)) {
+  if (name !== 'ping' && name !== 'help' && !permitted(interaction, ctx)) {
     await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
   }
   const opts = optionMap(interaction);
   /* Everything that changes something carries a panel, so the first reply is deferred while
      a panel is assembled or a server is asked a question. */
-  const slow = name !== 'ping' && name !== 'help';
+  const slow = name !== 'help';
   if (slow) await interaction.deferReply({ flags: 64 }).catch(function () {});
   void writeCommandAudit(ctx.actorId, '/' + name + (opts.__sub ? ' ' + opts.__sub : ''));
   const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
@@ -832,6 +839,7 @@ async function runButton(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
   ctx.actorId = String((interaction.user && interaction.user.id) || '');
+  const publicHelp = id === 'help:home' || id.indexOf('help:cmd:') === 0;
   if (id === 'ping:again') return await answerPanel(interaction, await pingReply(ctx));
   /* /server buttons re-ask the same read-only question, so they are one line. */
   if (id.indexOf('server:') === 0) return await answerPanel(interaction, await serverSnapshot(ctx, id.slice('server:'.length)));
@@ -859,7 +867,7 @@ async function runButton(interaction) {
       gone ? 'Your link is removed and the Linked role was removed where configured. Press Link account whenever you want it back.' : 'No link was on record for your account.')],
       components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
-  if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
+  if (!publicHelp && !permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'user:config') return await answerPanel(interaction, userPanel(ctx));
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
@@ -990,7 +998,6 @@ async function runButton(interaction) {
       components: [panelRow([panelButton('user:pending', 'Back to requests', 2)])],
     });
   }
-  log('unhandled button:', id);
   if (id === 'kits:add') return await interaction.showModal(bindModal(null));
   if (id === 'kits:edit') return await answerPanel(interaction, bindList(ctx, 'edit'));
   if (id === 'kits:remove') return await answerPanel(interaction, bindList(ctx, 'remove'));
@@ -1008,8 +1015,12 @@ async function runButton(interaction) {
   }
   if (id.indexOf('kits:role:skip:') === 0) {
     saveBind({ emote: id.slice('kits:role:skip:'.length) }, null, false);
+    await persistQueue;
     return await answerPanel(interaction, kitsPanel(ctx));
   }
+  log('unhandled button:', id);
+  return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'This panel is out of date',
+    'That button belongs to an older panel. Run the command again from /help to open a fresh one.')] });
 
 }
 
@@ -1085,6 +1096,8 @@ async function runSelect(interaction) {
     return await interaction.showModal(kitGiveModal());
   }
   log('unhandled select:', id);
+  return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'This menu is out of date',
+    'That menu belongs to an older panel. Open the command again to get a fresh list.')] });
 }
 
 async function runModal(interaction) {
@@ -1092,6 +1105,11 @@ async function runModal(interaction) {
   const fields = modalFields(interaction);
   const ctx = botCtx();
   ctx.actorId = String((interaction.user && interaction.user.id) || '');
+  const slowModal = id === 'modal:server' || id.indexOf('modal:server:') === 0
+    || id === 'modal:kitcommands' || id === 'modal:kitgive' || id === 'modal:reset'
+    || id === 'modal:roles' || id === 'modal:linked'
+    || id.indexOf('modal:forcelink:') === 0 || id.indexOf('modal:transfer:') === 0;
+  if (slowModal) await interaction.deferReply({ flags: 64 }).catch(function () {});
   /* A member linking themselves is not a staff action. */
   if (id === 'modal:link:self') {
     const answer = requestLink(interaction.user.id, fields.link_gamertag);
