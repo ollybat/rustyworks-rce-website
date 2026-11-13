@@ -282,9 +282,9 @@ function clearCooldowns(scope, target) {
   const wanted = String(target || '').trim().toLowerCase();
   let cleared = 0;
   cooldowns.forEach(function (value, key) {
-    const parts = String(key).split('::');
+    const parts = String(key).split('\u0000');
     const user = parts[0] || '';
-    const kit = parts[1] || '';
+    const kit = parts.slice(1).join('\u0000') || '';
     let hit = false;
     if (scope === 'all-users' || scope === 'all-kits') hit = true;
     else if (scope === 'user') hit = !!wanted && user.toLowerCase() === wanted;
