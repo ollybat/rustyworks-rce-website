@@ -155,7 +155,7 @@ function requireSettingsAuth(req, res) {
 const VOLUME_DIR = cleanEnvValue(process.env.RAILWAY_VOLUME_MOUNT_PATH || '');
 const SETTINGS_FILE = cleanEnvValue(process.env.SETTINGS_FILE || '') || (VOLUME_DIR ? join(VOLUME_DIR, 'spinback-settings.json') : join(process.cwd(), 'data', 'spinback-settings.json'));
 const FILE_IS_DURABLE = !!(cleanEnvValue(process.env.SETTINGS_FILE || '') || VOLUME_DIR);
-const FILE_SECTIONS = ['staffRoles', 'logChannels', 'servers', 'kits', 'links', 'pending', 'linkPanel'];
+const FILE_SECTIONS = ['staffRoles', 'logChannels', 'servers', 'kits', 'installs', 'links', 'pending', 'linkPanel'];
 let fileTimer = null;
 let fileState = { ok: null, at: null, detail: '' };
 function writeSettingsFileNow() {
@@ -241,6 +241,7 @@ async function persistSettingsNow(sections) {
     logChannels: settings.logChannels,
     servers: settings.servers,
     kits: settings.kits,
+    installs: settings.installs,
     links: settings.links,
     pending: settings.pending,
     linkPanel: settings.linkPanel,
@@ -272,6 +273,7 @@ function applySettings(body) {
   if (body.logChannels && typeof body.logChannels === 'object') settings.logChannels = body.logChannels;
   if (Array.isArray(body.servers)) settings.servers = body.servers;
   if (body.kits && typeof body.kits === 'object') settings.kits = Object.assign(settings.kits, body.kits);
+  if (body.installs && typeof body.installs === 'object') settings.installs = Object.assign({}, settings.installs, body.installs);
   if (Array.isArray(body.links)) settings.links = body.links;
   if (Array.isArray(body.pending)) settings.pending = body.pending;
   if (body.linkPanel && typeof body.linkPanel === 'object') settings.linkPanel = body.linkPanel;
@@ -319,7 +321,7 @@ function installKitCode(raw, text) {
   settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
   const keys = Object.keys(settings.installs);
   if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
-  persistSettings(['kits']).catch(function () { /* reported the next time settings are saved */ });
+  persistSettings(['installs']).catch(function () { /* reported the next time settings are saved */ });
   return Object.keys(settings.installs).length;
 }
 
