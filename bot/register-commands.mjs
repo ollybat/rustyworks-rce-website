@@ -16,13 +16,10 @@ if (!guildId) {
   process.exit(1);
 }
 
-/* Administrator (8) or Manage Server (32): the two ways to be allowed to configure the bot. */
-const ADMIN_OR_MANAGE = String(8 | 32);
-const payload = COMMANDS.map(function (cmd) {
-  const copy = Object.assign({}, cmd, { dm_permission: false });
-  if (cmd.name !== 'ping') copy.default_member_permissions = ADMIN_OR_MANAGE;
-  return copy;
-});
+/* No default_member_permissions is sent on purpose: the roles saved in step 1 of setup are
+   the staff roles, and the bot enforces that itself on every use. Sending an administrator
+   requirement here would hide the staff commands from the very roles the server appointed. */
+const payload = COMMANDS.map(function (cmd) { return Object.assign({}, cmd, { dm_permission: false }); });
 
 const res = await fetch('https://discord.com/api/v10/applications/' + appId + '/guilds/' + guildId + '/commands', {
   method: 'PUT',

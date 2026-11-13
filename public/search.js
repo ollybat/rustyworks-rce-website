@@ -19,6 +19,8 @@
     ['/ping', '/commands.html#ping', 'Live bot and website health, measured when you run it'],
     ['/setup', '/commands.html#setup', 'Roles, logging channels and your Rust server RCON connection'],
     ['/kits', '/commands.html#kits', 'Emote kits: binds, cooldowns, giving and installing'],
+    ['/user', '/commands.html#user', 'Player links: force link, force unlink, transfer, link panel and the roster'],
+    ['Link a player', '/commands.html#user', 'Connect a Discord account to a Rust Console gamertag'],
 
     ['Kit Studio', '/dashboard/kitbuilder.html', 'Build a kit and read the item catalogue'],
     ['Colour Studio', '/dashboard/colortext.html', 'Rust colour codes and text formatting'],

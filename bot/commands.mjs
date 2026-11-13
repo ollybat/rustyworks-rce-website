@@ -37,27 +37,36 @@ export const COMMANDS = [
       { type: 1, name: "config", description: "Emote kit wizard: binds, cooldowns, roles, lock kits, emote guide" },
       { type: 1, name: "give", description: "Give a kit to a gamertag or a linked Discord user",
         options: [
-          { type: 3, name: "kit", description: "Kit name", required: true },
+          { type: 3, name: "kit", description: "Kit name (leave blank to open the panel)" },
           { type: 3, name: "gamertag", description: "In-game name to give it to" },
           { type: 6, name: "user", description: "Discord user whose linked gamertag receives it" },
         ] },
       { type: 1, name: "refresh", description: "Clear kit cooldowns",
         options: [
-          { type: 3, name: "scope", description: "What to clear", required: true,
+          { type: 3, name: "scope", description: "What to clear (leave blank to open the panel)",
             choices: [{ name: "One user", value: "user" }, { name: "One kit", value: "kit" },
               { name: "All linked users", value: "all-users" }, { name: "All kits", value: "all-kits" }] },
           { type: 3, name: "target", description: "Gamertag or kit name, when the scope needs one" },
         ] },
       { type: 1, name: "auth-spawn", description: "Give a kit to an Auth Group on every respawn",
         options: [
-          { type: 3, name: "group", description: "Auth group", required: true,
+          { type: 3, name: "group", description: "Auth group (leave blank to open the panel)",
             choices: AUTH_GROUPS.map(function (g) { return { name: g, value: g }; }) },
           { type: 3, name: "kit", description: "Kit to hand out (blank stops giving one)" },
         ] },
       { type: 1, name: "cooldowns", description: "See the kit cooldown records the bot is holding" },
       { type: 1, name: "build", description: "Kit Studio: build a kit on the website or work from an install code" },
       { type: 1, name: "add", description: "Install a kit from a Base64 kit install code",
-        options: [{ type: 3, name: "code", description: "The Base64 install code", required: true }] },
+        options: [{ type: 3, name: "code", description: "The Base64 install code (blank opens the panel)" }] },
+    ] },
+  { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
+    options: [
+      { type: 1, name: "forcelink", description: "Link a Discord user to a gamertag yourself" },
+      { type: 1, name: "forceunlink", description: "Remove a player link" },
+      { type: 1, name: "transfer", description: "Move a link to a new Discord account or a new gamertag" },
+      { type: 1, name: "linkpanel", description: "Post a panel with Link Account and Unlink buttons in a channel",
+        options: [{ type: 7, name: "channel", description: "Channel to post it in", channel_types: [0] }] },
+      { type: 1, name: "roster", description: "See every linked player" },
     ] },
 ];
 
@@ -302,6 +311,221 @@ export function cooldownsPanel(ctx, rows) {
 }
 
 /* /kits -------------------------------------------------------------------- */
+/* ------------------------------------------------------------ setup gate --- */
+/* Nothing that touches a Rust server or a player runs until the two things that make
+   those possible exist: at least one staff role saved, and one tested Rust server.
+   /setup is the one exception, because it is how you get there. */
+export function setupState(ctx) {
+  var roles = ctx.settings.staffRoles || {};
+  var saved = ROLE_SLOTS.map(function (s) { return s[0]; }).filter(function (key) { return roles[key]; });
+  return {
+    rolesSaved: saved.length,
+    serverLinked: ctx.servers().length > 0,
+    complete: saved.length > 0 && ctx.servers().length > 0,
+  };
+}
+
+export function gatePayload(ctx, wanted) {
+  var state = setupState(ctx);
+  var lines = [];
+  if (!state.rolesSaved) lines.push("- **Step 1 - Staff roles** have not been saved yet, so the bot cannot tell staff from anyone else.");
+  if (!state.serverLinked) lines.push("- **Step 3 - No Rust server** is linked and tested yet, so there is nothing to send commands to.");
+  var built = embed(0xfaa81a, "Finish setup first",
+    "**" + wanted + "** stays locked until setup is finished. Two things are needed, and each one is a button on the setup panel:\n\n" + lines.join("\n"));
+  built.fields = [
+    field("Step 1 - Staff roles", state.rolesSaved ? state.rolesSaved + " saved" : "not saved yet", true),
+    field("Step 2 - Logging channels", Object.keys(ctx.settings.logChannels || {}).length + " of " + LOG_TYPES.length + " set", true),
+    field("Step 3 - Rust server", state.serverLinked ? "linked and tested" : "not linked yet", true),
+  ];
+  built.footer = { text: "The roles you save here are the roles allowed to run staff commands" };
+  var panel = setupPanel(ctx);
+  return { embeds: [built, panel.embeds[0]], components: panel.components, flags: EPH };
+}
+
+/* The roles saved in step 1 are the staff roles: they, Administrator, and the guild owner
+   are the people who may run anything that configures or edits. */
+export function staffRoleList(ctx) {
+  var roles = ctx.settings.staffRoles || {};
+  return ROLE_SLOTS.map(function (s) { return { slot: s[0], label: s[1], id: roles[s[0]] || null }; }).filter(function (r) { return r.id; });
+}
+
+export function staffRoleNames(ctx) {
+  var list = staffRoleList(ctx);
+  if (!list.length) return null;
+  return list.map(function (r) { return r.label + ": <@&" + r.id + ">"; }).join("\n");
+}
+
+/* ---------------------------------------------------------------- /user ---- */
+export function linkRecords(ctx) {
+  var links = ctx.links() || [];
+  var pending = ctx.pendingLinks() || [];
+  return { links: links, pending: pending };
+}
+
+export function userPanel(ctx) {
+  var held = linkRecords(ctx);
+  var built = embed(0x3ba55d, "Player links",
+    "Who is who: a Discord account with the Rust Console gamertag it belongs to. Links are the base for kits, kits-by-role, auth groups and the roster, so they are worth keeping accurate.");
+  built.fields = [
+    field("Linked players", String(held.links.length), true),
+    field("Waiting to be confirmed", String(held.pending.length), true),
+    field("Link panel posted", ctx.linkPanel() && ctx.linkPanel().channelId ? "in <#" + ctx.linkPanel().channelId + ">" : "not yet", true),
+  ];
+  if (held.links.length) {
+    built.fields.push(field("Most recent", held.links.slice(-8).map(function (l) { return "<@" + l.userId + "> -> " + code(l.gamertag); }).join("\n"), false));
+  }
+  built.footer = { text: "Staff only. Players link themselves through the link panel" };
+  return { embeds: [built], components: [
+    row([button("user:forcelink", "Force link", 1), button("user:unlink", "Force unlink", 2), button("user:transfer", "Transfer a link", 2)]),
+    row([button("user:roster", "Roster", 2), button("user:panel", "Post the link panel", 1), button("user:pending", "Waiting list", 2)]),
+  ], flags: EPH };
+}
+
+/* The panel staff post in a channel. Its buttons work for everyone in the server, because
+   linking is a member action, not a staff one. */
+export function linkPanelPayload() {
+  var built = embed(0x3ba55d, "Link your Rust Console account",
+    "Press **Link account**, type your Rust Console gamertag exactly as it appears in game, and the bot will check it against the links already on record.");
+  built.fields = [
+    field("Already linked?", "Press **Unlink** and go through the confirmation. Staff can always do it for you.", false),
+    field("How it is verified", "This panel records your request. A request is only trusted once your server confirms it: staff confirm it with /user forcelink, or your server own in-game command does it automatically.", false),
+  ];
+  built.footer = { text: "One gamertag can only be linked to one Discord account" };
+  return { embeds: [built], components: [
+    row([button("link:start", "Link account", 1), button("link:unlink", "Unlink", 3)]),
+  ] };
+}
+
+export function linkModal() {
+  return { title: "Link your account", custom_id: "modal:link:self", components: [
+    row([input("link_gamertag", "Your Rust Console gamertag", "", true)]),
+  ] };
+}
+
+export function forcelinkPicker() {
+  return { embeds: [embed(0x3ba55d, "Force link: who?", "Choose the Discord account, then type the gamertag on the next screen.")],
+    components: [row([{ type: 5, custom_id: "user:forcelink:user", placeholder: "Discord account" }])], flags: EPH };
+}
+
+export function forcelinkModal(userId) {
+  return { title: "Force link", custom_id: "modal:forcelink:" + userId, components: [
+    row([input("link_gamertag", "Gamertag to attach", "", true)]),
+  ] };
+}
+
+export function adviceOnGamertag(ctx, gamertag, forUserId) {
+  var found = (ctx.links() || []).filter(function (l) { return l.gamertag.toLowerCase() === gamertag.toLowerCase(); })[0];
+  if (!found) return { free: true };
+  if (found.userId === forUserId) return { free: false, reason: "already-this-user", detail: "That gamertag is already linked to that same Discord account." };
+  return { free: false, reason: "taken", detail: "That gamertag is already linked to <@" + found.userId + ">. Use **Transfer a link** to move it, or unlink it first." };
+}
+
+export function unlinkPicker(ctx) {
+  var links = ctx.links() || [];
+  if (!links.length) return { embeds: [embed(0xfaa81a, "Nothing to unlink", "No links are on record yet.")], components: [row([button("user:panel", "Post the link panel", 1)])], flags: EPH };
+  return { embeds: [embed(0x3ba55d, "Force unlink: which link?", "Choose the player, then confirm. Nothing is removed until you confirm.")],
+    components: [row([{ type: 3, custom_id: "user:unlink:pick", placeholder: "Linked players",
+      options: links.slice(0, 25).map(function (l) { return { label: l.gamertag.slice(0, 90), value: l.gamertag, description: ("Discord " + l.userId).slice(0, 90) }; }) }])], flags: EPH };
+}
+
+export function unlinkConfirm(gamertag, userId) {
+  return { embeds: [embed(0xfaa81a, "Remove this link?", "Player: " + code(gamertag) + "\nDiscord: <@" + userId + ">\n\nKits, auth groups and the roster all use this link, so anything set up against it will stop matching.")],
+    components: [row([button("user:unlink:go:" + gamertag, "Yes, remove it", 4), button("user:config", "Cancel", 2)])], flags: EPH };
+}
+
+export function transferPicker(ctx) {
+  var links = ctx.links() || [];
+  if (!links.length) return { embeds: [embed(0xfaa81a, "Nothing to transfer", "No links are on record yet.")], components: [row([button("user:forcelink", "Force link instead", 1)])], flags: EPH };
+  return { embeds: [embed(0x3ba55d, "Transfer: which link?", "Pick the link to move. Then you can change the Discord account, the gamertag, or both at once.")],
+    components: [row([{ type: 3, custom_id: "user:transfer:pick", placeholder: "Linked players",
+      options: links.slice(0, 25).map(function (l) { return { label: l.gamertag.slice(0, 90), value: l.gamertag, description: ("Discord " + l.userId).slice(0, 90) }; }) }])], flags: EPH };
+}
+
+export function transferModal(gamertag) {
+  return { title: "Transfer " + gamertag.slice(0, 30), custom_id: "modal:transfer:" + gamertag, components: [
+    row([input("move_user", "New Discord user id (required)", "", true)]),
+    row([input("move_gamertag", "New gamertag (leave blank to keep " + gamertag.slice(0, 20) + ")", "", false)]),
+  ] };
+}
+
+export function rosterPanel(ctx) {
+  var held = linkRecords(ctx);
+  var lines = held.links.slice(0, 40).map(function (l) {
+    return "<@" + l.userId + "> -> " + code(l.gamertag) + (l.by ? " (by <@" + l.by + ">)" : "");
+  });
+  var built = embed(0x3ba55d, "Linked players", held.links.length
+    ? "Every link on record, newest last."
+    : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**.");
+  if (lines.length) built.fields = [field("Roster (" + held.links.length + ")", lines.join("\n").slice(0, 1000), false)];
+  if (held.links.length > 40) built.fields.push(field("Cut off", "Showing the first 40 of " + held.links.length + ".", false));
+  return { embeds: [built], components: [row([button("user:config", "Back to links", 2), button("user:panel", "Post the link panel", 1)])], flags: EPH };
+}
+
+export function pendingPanel(ctx) {
+  var pending = ctx.pendingLinks() || [];
+  var built = embed(0x3ba55d, "Waiting to be confirmed", pending.length
+    ? "These players asked to link. Confirm one with **Force link**, or let your server own in-game verification do it."
+    : "Nobody is waiting: no unconfirmed link requests are on record.");
+  if (pending.length) built.fields = [field("Requests", pending.slice(0, 20).map(function (p) { return "<@" + p.userId + "> asked for " + code(p.gamertag); }).join("\n").slice(0, 1000), false)];
+  return { embeds: [built], components: [row([button("user:config", "Back to links", 2), button("user:forcelink", "Confirm one now", 1)])], flags: EPH };
+}
+
+export function channelPickerForPanel() {
+  return { embeds: [embed(0x3ba55d, "Where should the panel go?", "Pick the channel. The panel is posted there for everyone, and the bot keeps its message id so it can point back to it later.")],
+    components: [row([{ type: 8, custom_id: "user:panel:channel", placeholder: "Channel", channel_types: [0] }])], flags: EPH };
+}
+
+/* -------------------------------------------------- kit panels for bare use --- */
+export function kitGiveModal() {
+  return { title: "Give a kit", custom_id: "modal:kitgive", components: [
+    row([input("give_kit", "Kit name", "", true)]),
+    row([input("give_target", "Gamertag (or leave blank and use the Discord option)", "", false)]),
+    row([input("give_user", "Discord user id", "", false)]),
+  ] };
+}
+
+export function kitRefreshPanel(ctx) {
+  return { embeds: [embed(0xff7200, "Clear cooldowns", "Choose the scope. The bot reports the exact number of records it cleared, and clears nothing it does not hold.")],
+    components: [
+      row([button("kits:refresh:user", "One player", 2), button("kits:refresh:kit", "One kit", 2)]),
+      row([button("kits:refresh:all-users", "All linked players", 3), button("kits:refresh:all-kits", "Every kit", 3)]),
+    ], flags: EPH };
+}
+
+export function kitRefreshModal(scope) {
+  var label = scope === "user" ? "Gamertag" : "Kit name";
+  return { title: "Clear cooldowns", custom_id: "modal:refresh:" + scope, components: [row([input("refresh_target", label, "", true)])] };
+}
+
+export function kitSpawnPanel(ctx) {
+  var auth = ctx.kits().authSpawn || {};
+  return { embeds: [embed(0xff7200, "Respawn kits per auth group",
+    "Pick a group, then type the kit it should receive on every respawn. Leaving the kit blank stops that group receiving one.")],
+    components: [
+      row(AUTH_GROUPS.slice(0, 3).map(function (g) { return button("kits:spawn:" + g, g + (auth[g] ? " - " + auth[g] : ""), auth[g] ? 1 : 2); })),
+      row(AUTH_GROUPS.slice(3).map(function (g) { return button("kits:spawn:" + g, g + (auth[g] ? " - " + auth[g] : ""), auth[g] ? 1 : 2); })),
+      row([button("kits:config", "Back to Emote Kits", 2)]),
+    ], flags: EPH };
+}
+
+export function kitSpawnModal(group, currentKit) {
+  return { title: group + " respawn kit", custom_id: "modal:spawn:" + group, components: [
+    row([input("spawn_kit", "Kit for " + group + " (blank to stop)", currentKit || "", false)]),
+  ] };
+}
+
+export function kitAddPanel() {
+  return { embeds: [embed(0x5865f2, "Install a kit",
+    "Paste a Base64 install code from Kit Studio. The bot checks it really is Base64 that decodes to text, stores it exactly as given, and never guesses what is inside.")],
+    components: [row([button("kits:add:code", "Enter a code", 1), button("kits:studio", "Open Kit Studio", 5)]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
+}
+
+export function kitAddModal() {
+  return { title: "Install a kit", custom_id: "modal:kitcode", components: [
+    row([input("install_code", "Base64 kit install code", "", true)]),
+  ] };
+}
+
 export function kitsPanel(ctx) {
   var binds = ctx.kits().binds || [];
   var auth = ctx.kits().authSpawn || {};
@@ -422,7 +646,14 @@ export async function giveKit(ctx, opts) {
     "Command: " + code(final) + "\n" + (answer && answer.answer ? "It said: " + answer.answer.slice(0, 400) : String((answer && answer.detail) || "no answer")));
   return { embeds: [built], flags: EPH };
 }
-export function permissionNote() { return embed(0xdc4c4c, "Not allowed", "This needs **Administrator** or **Manage Server** on this Discord server."); }
+export function permissionNote(ctx) {
+  var names = ctx ? staffRoleNames(ctx) : null;
+  return embed(0xdc4c4c, "Not allowed",
+    names
+      ? "Staff commands are for the roles saved in step 1 of setup:\n\n" + names + "\n\nAdministrator and the server owner always count."
+      : "No staff roles have been saved yet, so only Administrator, Manage Server and the server owner may run this. Save your staff roles in step 1 of /setup to hand this out.");
+}
+
 export function wrongGuildNote() { return embed(0xdc4c4c, "Wrong server", "Spinback RCE is configured for one Discord server, and this is not it."); }
 
 export function optionMap(interaction) {
@@ -444,9 +675,29 @@ export function modalFields(interaction) {
   });
   return out;
 }
+export function kitGivePanel(ctx) {
+  var links = (ctx.links() || []).slice(0, 25);
+  var components = [row([button("kits:give", "Type a kit and a gamertag", 1)])];
+  if (links.length) {
+    components.push(row([{ type: 3, custom_id: "kits:give:pick", placeholder: "Or pick a linked player",
+      options: links.map(function (l) { return { label: l.gamertag.slice(0, 90), value: l.gamertag }; }) }]));
+  } else {
+    components.push(row([button("user:config", "Nobody is linked yet - open links", 2)]));
+  }
+  return { embeds: [embed(0xff7200, "Give a kit",
+    "Two ways in: type the kit and a gamertag, or pick a player who is already linked. The kit goes out with the give template you saved, and the server answer is shown back to you as it comes.")],
+    components: components, flags: EPH };
+}
+
 export function dispatchCommand(ctx, name, sub, options) {
   if (name === "ping") return pingReply(ctx);
   if (name === "help") return helpHome();
+  /* /setup is how you get out of the gate, so it is the only command that runs before setup
+     is finished. Everything else answers with the checklist instead of doing nothing. */
+  if (name !== "setup") {
+    var gate = setupState(ctx);
+    if (gate.complete !== true) return gatePayload(ctx, "/" + name + (sub ? " " + sub : ""));
+  }
   if (name === "setup") {
     if (sub === "refresh") return testServerByName(ctx, options.server);
     if (sub === "status") return setupStatus(ctx);
@@ -457,12 +708,32 @@ export function dispatchCommand(ctx, name, sub, options) {
   if (name === "kits") {
     if (sub === "grab") { var quick = grabKits(ctx); return quick || grabKitsRun(ctx); }
     if (sub === "config") return kitsPanel(ctx);
-    if (sub === "give") return giveKit(ctx, { kit: options.kit, gamertag: options.gamertag, user: options.user });
-    if (sub === "refresh") return refreshCooldowns(ctx, options.scope, options.target);
-    if (sub === "auth-spawn") return authSpawnNote(ctx, options.group, options.kit);
+    if (sub === "give") {
+      if (!options.kit && !options.gamertag && !options.user) return kitGivePanel(ctx);
+      return giveKit(ctx, { kit: options.kit, gamertag: options.gamertag, user: options.user });
+    }
+    if (sub === "refresh") {
+      if (!options.scope) return kitRefreshPanel(ctx);
+      return refreshCooldowns(ctx, options.scope, options.target);
+    }
+    if (sub === "auth-spawn") {
+      if (!options.group) return kitSpawnPanel(ctx);
+      return authSpawnNote(ctx, options.group, options.kit);
+    }
     if (sub === "cooldowns") return cooldownsPanel(ctx, ctx.cooldownList());
     if (sub === "build") return kitStudioPanel(ctx);
-    if (sub === "add") return installKit(ctx, options.code);
+    if (sub === "add") {
+      if (!options.code) return kitAddPanel();
+      return installKit(ctx, options.code);
+    }
+  }
+  if (name === "user") {
+    if (sub === "forcelink") return forcelinkPicker();
+    if (sub === "forceunlink") return unlinkPicker(ctx);
+    if (sub === "transfer") return transferPicker(ctx);
+    if (sub === "linkpanel") return options.channel ? { postPanelTo: options.channel } : channelPickerForPanel();
+    if (sub === "roster") return rosterPanel(ctx);
+    return userPanel(ctx);
   }
   return { content: "That command is not wired up here yet.", flags: EPH };
 }
