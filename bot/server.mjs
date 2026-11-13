@@ -21,6 +21,7 @@ import handler from './interactions-worker.js';
 import net from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import { isPublicAddress, rconHostAllowed } from './network-guard.mjs';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
@@ -50,7 +51,7 @@ function readToken(envVars) {
     const value = cleanEnvValue(envVars[name]);
     if (value) return { token: value, source: name };
   }
-  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC/i.test(k));
+  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC|SETTINGS/i.test(k));
   if (loose) return { token: cleanEnvValue(envVars[loose]), source: loose + ' (matched by name)' };
   return { token: '', source: null };
 }
@@ -106,19 +107,41 @@ const settings = {
   staffRoles: {},
   logChannels: {},
   servers: [],
-  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '' },
-  installs: {},
+  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '', giveCooldownSeconds: 30, installCodes: {} },
   links: [],
   pending: [],
   linkPanel: null,
 };
 const cooldowns = new Map();
+const activeKitGives = new Set();
 let settingsTimer = null;
 /* How often settings edited on the website are read back (SETTINGS_RELOAD_MS, default two
    minutes; the simulator shortens it). */
 const RELOAD_MS = Math.max(1000, Number(process.env.SETTINGS_RELOAD_MS) || 120000);
 
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
+
+/* Internal bot routes are only for the website Worker. This shared credential is
+   server-side only and is never included in public HTML or browser JavaScript. */
+function settingsAuthFailure(req) {
+  const expected = settingsToken();
+  if (!expected) return { status: 503, body: { ok: false, reason: 'no-settings-token' } };
+  const supplied = String(req.headers['x-settings-token'] || '');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { status: 403, body: { ok: false, reason: 'forbidden' } };
+  }
+  return null;
+}
+
+function requireSettingsAuth(req, res) {
+  const failure = settingsAuthFailure(req);
+  if (!failure) return false;
+  res.writeHead(failure.status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify(failure.body));
+  return true;
+}
 
 function panelEmbed(color, title, description) { return { color: color, title: title, description: description }; }
 function panelRow(components) { return { type: 1, components: components }; }
@@ -128,7 +151,7 @@ function panelButton(id, label, style) { return { type: 2, custom_id: id, label:
    holds, and its Settings page edits the same sections, so sending everything would put this
    bot's older copy of a section back over a newer edit made on the website. */
 let lastPersistAt = 0;
-async function persistSettings(sections) {
+async function persistSettingsNow(sections) {
   const token = settingsToken();
   if (!token) return { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set on this service, so the website cannot be written to' };
   const everything = {
@@ -158,6 +181,16 @@ async function persistSettings(sections) {
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
   }
+}
+
+let persistQueue = Promise.resolve();
+function persistSettings(sections) {
+  /* The Worker merges by section. Serialising writes prevents two quick changes to
+     the same section from arriving out of order and restoring an older snapshot. */
+  const run = () => persistSettingsNow(sections);
+  const pending = persistQueue.then(run, run);
+  persistQueue = pending.then(() => undefined, () => undefined);
+  return pending;
 }
 
 
@@ -204,12 +237,15 @@ async function saveServer(s) {
 }
 
 function installKitCode(raw, text) {
-  const key = createHash('sha1').update(String(raw)).digest('hex').slice(0, 16);
-  settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
-  const keys = Object.keys(settings.installs);
-  if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
-  persistSettings(['kits']).catch(function () { /* reported the next time settings are saved */ });
-  return Object.keys(settings.installs).length;
+  const key = createHash('sha256').update(String(raw)).digest('hex').slice(0, 20);
+  const records = settings.kits.installCodes || (settings.kits.installCodes = {});
+  records[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
+  const keys = Object.keys(records).sort(function (a, b) {
+    return String(records[a].at).localeCompare(String(records[b].at));
+  });
+  if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete records[k]; });
+  persistSettings(['kits']).catch(function () { /* the next successful save includes this record */ });
+  return Object.keys(records).length;
 }
 
 function setAuthSpawn(group, kit) {
@@ -220,18 +256,52 @@ function setAuthSpawn(group, kit) {
   persistSettings(['kits']).catch(function () {});
 }
 
-function cooldownCount() { return cooldowns.size; }
+function pruneCooldowns() {
+  const now = Date.now();
+  cooldowns.forEach(function (expiresAt, key) {
+    if (!Number.isFinite(Number(expiresAt)) || Number(expiresAt) <= now) cooldowns.delete(key);
+  });
+}
+
+function cooldownCount() { pruneCooldowns(); return cooldowns.size; }
 
 function cooldownList() {
+  pruneCooldowns();
   const rows = [];
   cooldowns.forEach(function (value, key) {
     const parts = String(key).split('::');
     const user = parts[0] || 'unknown';
-    const kit = parts[1] || 'unknown';
-    const left = Math.max(0, Math.round(((Number(value) || 0) - Date.now()) / 1000));
-    rows.push(user + ' -> ' + kit + (left ? ' (' + left + 's left)' : ''));
+    const kit = parts.slice(1).join('::') || 'unknown';
+    const left = Math.max(0, Math.ceil((Number(value) - Date.now()) / 1000));
+    rows.push({ sort: Number(value), text: user + ' -> ' + kit + ' (' + left + 's left)' });
   });
-  return rows;
+  return rows.sort(function (a, b) { return a.sort - b.sort; }).map(function (row) { return row.text; });
+}
+
+function reserveKitGive(gamertag, kit, cooldownSeconds) {
+  pruneCooldowns();
+  const user = String(gamertag || '').trim().toLowerCase();
+  const item = String(kit || '').trim().toLowerCase();
+  const key = user + '::' + item;
+  const seconds = Math.max(0, Math.min(86400, Math.floor(Number(cooldownSeconds) || 0)));
+  const now = Date.now();
+  const expiresAt = Number(cooldowns.get(key) || 0);
+  if (expiresAt > now) {
+    return { ok: false, key: key, remainingSeconds: Math.max(1, Math.ceil((expiresAt - now) / 1000)), inProgress: false };
+  }
+  if (activeKitGives.has(key)) {
+    return { ok: false, key: key, remainingSeconds: 1, inProgress: true };
+  }
+  activeKitGives.add(key);
+  return { ok: true, key: key, cooldownSeconds: seconds };
+}
+
+function finishKitGive(reservation, succeeded) {
+  if (!reservation || !reservation.key) return;
+  activeKitGives.delete(reservation.key);
+  if (succeeded && Number(reservation.cooldownSeconds) > 0) {
+    cooldowns.set(reservation.key, Date.now() + Number(reservation.cooldownSeconds) * 1000);
+  }
 }
 
 function clearCooldowns(scope, target) {
@@ -280,11 +350,13 @@ function removeBind(emote) {
 /* A link is a Discord account with the gamertag it belongs to. Everything player-facing
    hangs off it: kits by role, auth groups, the roster. Storage is honest about limits: an
    unconfirmed request is a request, not proof, and the panels say so. */
-function normaliseGamertag(value) { return String(value || '').trim().slice(0, 40); }
+function normaliseGamertag(value) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
 
 function findLinkByGamertag(gamertag) {
   const wanted = normaliseGamertag(gamertag).toLowerCase();
-  return settings.links.filter(function (l) { return l.gamertag.toLowerCase() === wanted; })[0] || null;
+  return settings.links.filter(function (l) { return String(l && l.gamertag || '').toLowerCase() === wanted; })[0] || null;
 }
 function findLinkByUser(userId) {
   return settings.links.filter(function (l) { return l.userId === String(userId); })[0] || null;
@@ -293,6 +365,7 @@ function addLink(userId, gamertag, by) {
   const tag = normaliseGamertag(gamertag);
   const id = String(userId || '').trim();
   if (!tag || !id) return { ok: false, reason: 'empty' };
+  if (!/^[0-9]{15,25}$/.test(id)) return { ok: false, reason: 'bad-user-id', detail: 'That Discord account id does not look valid.' };
   settings.links = settings.links.filter(function (l) {
     return l.gamertag.toLowerCase() !== tag.toLowerCase() && l.userId !== id;
   });
@@ -336,7 +409,9 @@ function moveLink(gamertag, newUserId, newGamertag) {
 }
 function requestLink(userId, gamertag) {
   const tag = normaliseGamertag(gamertag);
+  const id = String(userId || '').trim();
   if (!tag) return { ok: false, reason: 'empty' };
+  if (!/^[0-9]{15,25}$/.test(id)) return { ok: false, reason: 'bad-user-id', detail: 'Discord did not provide a valid account id.' };
   const taken = findLinkByGamertag(tag);
   if (taken) {
     const mine = taken.userId === String(userId);
@@ -344,8 +419,17 @@ function requestLink(userId, gamertag) {
       ? 'That gamertag is already linked to your account.'
       : 'That gamertag is already linked. If it is yours, ask staff to move it with /user transfer.' };
   }
-  settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
-  settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
+  const otherRequest = settings.pending.filter(function (p) {
+    return String(p.userId) !== id && String(p.gamertag || '').toLowerCase() === tag.toLowerCase();
+  })[0];
+  if (otherRequest) {
+    return { ok: false, reason: 'pending-taken', detail: 'That gamertag is already waiting for confirmation from another Discord account.' };
+  }
+  settings.pending = settings.pending.filter(function (p) { return String(p.userId) !== id; });
+  if (settings.pending.length >= 500) {
+    return { ok: false, reason: 'queue-full', detail: 'The waiting list is full. Ask staff to clear old requests before trying again.' };
+  }
+  settings.pending.push({ userId: id, gamertag: tag, at: new Date().toISOString() });
   persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag };
 }
@@ -450,6 +534,8 @@ function botCtx(interaction) {
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
     cooldownList: cooldownList,
+    reserveKitGive: reserveKitGive,
+    finishKitGive: finishKitGive,
     setKnownKits: function (names) {
       settings.kits.known = names.slice(0, 100);
       persistSettings(['kits']).catch(function () {});
@@ -457,6 +543,7 @@ function botCtx(interaction) {
     setDelivery: function (d) {
       settings.kits.listCommand = d.listCommand;
       settings.kits.giveCommand = d.giveCommand;
+      settings.kits.giveCooldownSeconds = Math.max(0, Math.min(86400, Math.floor(Number(d.giveCooldownSeconds) || 0)));
       logLater('admin', 'Kit delivery changed', who(actor) + ' set the list command to `' + (d.listCommand || 'none') + '` and the give template to `' + (d.giveCommand || 'none') + '`.');
       return persistSettings(['kits']).then(function (wrote) {
         return wrote && wrote.ok ? { ok: true } : { ok: false, detail: (wrote && wrote.detail) || 'the website did not accept the save' };
@@ -1385,13 +1472,14 @@ function rconPacket(id, type, body) {
   return buf;
 }
 
-/* Pull whatever complete packets have arrived, leaving a partial one for next time. */
+/* Pull complete packets, leaving a partial packet for the next TCP chunk.
+   Invalid lengths fail closed instead of pinning unparseable bytes in memory. */
 function rconParse(buffer) {
   const packets = [];
   let rest = buffer;
   while (rest.length >= 12) {
     const size = rest.readInt32LE(0);
-    if (size < 10 || size > 8192) break;
+    if (size < 10 || size > 8192) return { packets: packets, rest: rest, error: 'invalid-packet-size' };
     if (rest.length < size + 4) break;
     packets.push({
       id: rest.readInt32LE(4),
@@ -1400,65 +1488,75 @@ function rconParse(buffer) {
     });
     rest = rest.slice(size + 4);
   }
-  return { packets: packets, rest: rest };
+  return { packets: packets, rest: rest, error: null };
 }
 
-/* Is this literal address somewhere public? Covers the private, loopback, link-local,
-   carrier-grade NAT and multicast ranges for IPv4, and the IPv6 equivalents. */
-function publicAddress(ip) {
-  const a = String(ip || '').toLowerCase();
-  if (net.isIPv4(a)) {
-    const p = a.split('.').map(Number);
-    if (p[0] === 0 || p[0] === 10 || p[0] === 127 || p[0] >= 224) return false;
-    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return false;
-    if (p[0] === 169 && p[1] === 254) return false;
-    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return false;
-    if (p[0] === 192 && p[1] === 168) return false;
-    if (p[0] === 192 && p[1] === 0 && p[2] === 0) return false;
-    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return false;
-    return true;
-  }
-  if (net.isIPv6(a)) {
-    if (a === '::' || a === '::1') return false;
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
-    if (mapped) return publicAddress(mapped[1]);
-    if (/^(fc|fd|fe8|fe9|fea|feb|ff)/.test(a)) return false;
-    return true;
-  }
-  return false;
+const RCON_DNS_TIMEOUT_MS = 3500;
+const RCON_MAX_ACTIVE = 3;
+const RCON_MAX_QUEUED = 20;
+const RCON_QUEUE_WAIT_MS = 12000;
+const RCON_MAX_BUFFER_BYTES = 64 * 1024;
+let rconActive = 0;
+const rconWaiting = [];
+
+function acquireRconSlot() {
+  return new Promise(function (resolve, reject) {
+    function grant() {
+      rconActive += 1;
+      let released = false;
+      resolve(function release() {
+        if (released) return;
+        released = true;
+        rconActive = Math.max(0, rconActive - 1);
+        const next = rconWaiting.shift();
+        if (next) {
+          clearTimeout(next.timer);
+          next.grant();
+        }
+      });
+    }
+    if (rconActive < RCON_MAX_ACTIVE) return grant();
+    if (rconWaiting.length >= RCON_MAX_QUEUED) {
+      return reject(new Error('The RCON queue is full. Try again in a few seconds.'));
+    }
+    const entry = {
+      grant: grant,
+      timer: setTimeout(function () {
+        const index = rconWaiting.indexOf(entry);
+        if (index !== -1) rconWaiting.splice(index, 1);
+        reject(new Error('The RCON queue is busy. Try again shortly.'));
+      }, RCON_QUEUE_WAIT_MS),
+    };
+    rconWaiting.push(entry);
+  });
 }
 
-/* A name is resolved here and the connection goes to the address checked, so a public
-   looking name that points at a private address (or changes between check and connect)
-   cannot reach anything internal. */
+/* Resolve all DNS answers with a deadline, reject any private/special-use answer,
+   then connect to the exact vetted IP rather than resolving the hostname twice. */
 async function rconResolve(host) {
   const h = String(host || '').trim().toLowerCase();
-  if (net.isIP(h)) return publicAddress(h) ? h : null;
-  try {
-    const all = await lookup(h, { all: true });
-    if (!all.length || all.some((r) => !publicAddress(r.address))) return null;
-    return all[0].address;
-  } catch (error) {
-    return null;
-  }
-}
-
-/* Nothing on the private internet: that keeps this from being pointed at a local service. */
-function rconHostAllowed(host) {
-  const h = String(host || '').trim().toLowerCase();
-  if (!h || h.length > 200) return false;
-  if (h === 'localhost' || /\.local$/.test(h) || /\.internal$/.test(h)) return false;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-    const parts = h.split('.').map(Number);
-    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return false;
-    const a = parts[0], b = parts[1];
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    return true;
-  }
-  return /^[a-z0-9][a-z0-9.-]*$/.test(h);
+  if (net.isIP(h)) return isPublicAddress(h) ? h : null;
+  const records = await new Promise(function (resolve) {
+    let settled = false;
+    const timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    }, RCON_DNS_TIMEOUT_MS);
+    lookup(h, { all: true }).then(function (all) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(all);
+    }, function () {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(null);
+    });
+  });
+  if (!Array.isArray(records) || !records.length || records.some((record) => !isPublicAddress(record.address))) return null;
+  return records[0].address;
 }
 
 /* Discord has moved channel types from numbers to strings over the years and this bot
@@ -1475,11 +1573,21 @@ function channelKind(channel) {
 }
 
 async function rconRun(options) {
-  const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
-  if (!target) {
-    return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or does not resolve), so the bot will not connect to it.' };
+  let release;
+  try {
+    release = await acquireRconSlot();
+  } catch (error) {
+    return { ok: false, reason: 'busy', detail: String((error && error.message) || error) };
   }
-  return rconConnect(Object.assign({}, options, { address: target }));
+  try {
+    const target = rconHostAllowed(options && options.host) ? await rconResolve(options.host) : null;
+    if (!target) {
+      return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or did not resolve safely), so the bot will not connect to it.' };
+    }
+    return await rconConnect(Object.assign({}, options, { address: target }));
+  } finally {
+    release();
+  }
 }
 
 function rconConnect(options) {
@@ -1502,6 +1610,7 @@ function rconConnect(options) {
     }
     if (!(port >= 1 && port <= 65535)) return resolve({ ok: false, reason: 'refused-port', detail: 'That port number cannot exist.' });
     if (!password) return resolve({ ok: false, reason: 'no-password', detail: 'No RCON password was given for that server.' });
+    if (password.length > 256) return resolve({ ok: false, reason: 'bad-password-length', detail: 'The saved RCON password is unexpectedly long; check the server settings.' });
 
     let socket = null;
     let idle = null;
@@ -1534,6 +1643,7 @@ function rconConnect(options) {
     });
 
     socket.on('connect', function () {
+      socket.setNoDelay(true);
       socket.write(rconPacket(1, 3, password));
     });
 
@@ -1542,8 +1652,13 @@ function rconConnect(options) {
     });
 
     socket.on('data', function (chunk) {
+      if (settled) return;
+      if (buffer.length + chunk.length > RCON_MAX_BUFFER_BYTES) {
+        return finish({ ok: false, reason: 'response-too-large', detail: 'The server response exceeded the bot safety limit.' });
+      }
       buffer = Buffer.concat([buffer, chunk]);
       const parsed = rconParse(buffer);
+      if (parsed.error) return finish({ ok: false, reason: 'invalid-response', detail: 'The server sent a malformed RCON packet.' });
       buffer = parsed.rest;
       parsed.packets.forEach(function (packet) {
         if (!authed) {
@@ -1555,7 +1670,7 @@ function rconConnect(options) {
           return;
         }
         if (packet.type === 0) {
-          answer += packet.body;
+          answer = (answer + packet.body).slice(0, 1200);
           /* Rust answers in one or more packets; a short silence means it is finished. */
           clearTimeout(idle);
           idle = setTimeout(function () {
@@ -1569,12 +1684,14 @@ function rconConnect(options) {
 
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
-  const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  const statusPaths = ['/', '/status', '/api/status'];
+  const healthPaths = new Set(['/health', '/healthz', '/api/health']);
   /* Every server the bot is in right now. The website asks this before it will set anything
      up: a server Spinback is not in cannot be configured, so the page says so plainly and
      offers the invite instead of pretending otherwise. */
   if (req.method === 'GET' && url === '/api/guilds') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     const guilds = [...client.guilds.cache.values()].map((g) => ({
       id: g.id,
       name: g.name,
@@ -1587,7 +1704,8 @@ createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url === '/api/guild') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
     res.writeHead(200, cors);
     res.end(JSON.stringify({ ready: true, guild: state.guildInfo }));
@@ -1610,7 +1728,8 @@ createServer(async (req, res) => {
   /* Ask a Rust server, over RCON, whether it is really there. The website never sends a
      password to a browser: it calls this with the connection it has stored. */
   if (req.method === 'POST' && url === '/api/rcon/test') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!rconAllowed()) {
       res.writeHead(429, cors);
       res.end(JSON.stringify({ ok: false, reason: 'rate-limited', detail: 'Six checks a minute is the limit. Try again shortly.' }));
@@ -1686,13 +1805,17 @@ createServer(async (req, res) => {
   }
 
   if (url === '/api/reconnect') {
-    const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
-    req.resume();
-    if (!TOKEN) { res.writeHead(503, cors); res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
-    if (state.gateway === 'online') { res.writeHead(200, cors); res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
-    await relogin('asked by a request');
-    res.writeHead(200, cors);
-    res.end(JSON.stringify({ ok: true, gateway: state.gateway, forcedLogins: forcedLogins }));
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'application/json', 'cache-control': 'no-store', allow: 'POST' });
+      res.end(JSON.stringify({ ok: false, reason: 'method-not-allowed' }));
+      return;
+    }
+    if (requireSettingsAuth(req, res)) return;
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    if (!TOKEN) { res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
+    if (state.gateway === 'online') { res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
+    await relogin('asked by an authenticated request');
+    res.end(JSON.stringify({ ok: true, gateway: state.gateway }));
     return;
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
@@ -1747,6 +1870,11 @@ createServer(async (req, res) => {
     });
     return;
   }
+  if (req.method === 'GET' && healthPaths.has(url)) {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, service: 'spinback-rce-bot' }));
+    return;
+  }
   if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
@@ -1764,28 +1892,13 @@ createServer(async (req, res) => {
       tag: state.tag,
       guilds: state.guilds,
       command: state.command,
-      port: PORT,
-      host: HOST,
-      tokenPresent: !!TOKEN,
-      tokenSource: TOKEN_INFO.source,
       oauthExchange: !!CLIENT_SECRET,
-      clientIdPresent: !!CLIENT_ID,
-      tokenShape: tokenShape,
-      tokenLength: TOKEN.length,
-      loginAttempts: loginAttempts,
-      lookedFor: TOKEN_NAMES,
-      siteUrl: SITE_URL,
       interactions: !!PUBLIC_KEY,
       guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerSource: OWNER_ID ? 'DISCORD_GUILD_OWNER_ID' : (state.guildInfo && state.guildInfo.ownerId ? 'the guild owner record' : null),
-      forcedLogins: forcedLogins,
-      gatewayDownSeconds: gatewayDownSince ? Math.round((Date.now() - gatewayDownSince) / 1000) : 0,
-      error: state.error,
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
-      /* Only what this process really knows, so the site never shows invented numbers. */
+      /* Public status only. Deployment details, token metadata, owner ids and exception
+         text stay private and are available only in Railway's protected service logs. */
       stats: { guilds: state.guilds, gateway: state.gateway },
-      guildInfo: state.guildInfo || null,
     }));
     return;
   }

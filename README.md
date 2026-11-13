@@ -1,8 +1,8 @@
-# Spinback RCE — website
+# Spinback RCE — website and bot
 
-Static marketing site for **Spinback RCE**, the free Discord bot for Rust Console
-Edition servers. Plain HTML, CSS and browser JavaScript — no build step beyond copying
-`public/` into the deployable bundle.
+**Spinback RCE** is a Discord bot and tool site for Rust Console Edition servers. The
+website is served by a Cloudflare Worker from `public/`; the Discord Gateway bot and its
+HTTP API run as a separate Node.js service on Railway.
 
 ## Structure
 
@@ -33,17 +33,63 @@ public/
   sitemap.xml           The two public pages, for search engines
   404.html              Styled not-found page, served by the worker with a 404
   notfound.js           Fills the year and names the path that missed
-worker.js               Serves public/, proxies the bot API, and gates /dashboard
-scripts/build.mjs       Copies public/ + worker.js into build/
+worker.js               Serves public/, proxies the bot API, and gates protected routes
+scripts/build.mjs       Builds the Worker bundle and decodes text-stored media assets
+railway.json            Railway service definition (bot/Dockerfile, /healthz)
 bot/
-  interactions-worker.js  The Discord bot: one /dashboard command, owner-only
-  register-commands.mjs   Registers that command inside the single guild
+  Dockerfile              Railway image for the bot
+  package.json            Bot-only production dependencies
+  server.mjs              Discord Gateway, HTTP API, settings sync and RCON client
+  commands.mjs            Slash commands, interactions and permission checks
+  network-guard.mjs       Public-IP validation for outbound RCON
+  interactions-worker.js  Signed Discord interactions fallback
+  register-commands.mjs   Registers the bot's slash commands
 docs/
-  DISCORD-DASHBOARD.md    Setup, secrets and how the owner-only rules are enforced
+  DISCORD-DASHBOARD.md    Historical Discord dashboard and OAuth setup notes
 ```
 
-## Local development
+## Hosting layout
 
+This repository has two separate deployables:
+
+- **Railway runs the bot/API.** `railway.json` selects `bot/Dockerfile`, which installs
+  `bot/package.json` and starts `bot/server.mjs`. The process connects to Discord's Gateway
+  and serves the bot's HTTP API.
+- **Cloudflare runs the website.** `worker.js`, `wrangler.jsonc` and `public/` are deployed
+  separately with `npm run deploy`. The Worker serves static assets and uses the
+  `STATUS_LOG` R2 bucket for monitoring and stored site settings.
+
+The Railway configuration does not deploy the website. Do not change Railway's Dockerfile
+to the repository root unless you deliberately move the Worker and its R2-backed features too.
+
+### Railway environment variables
+
+Set these on the Railway bot service:
+
+| Variable | Purpose |
+| --- | --- |
+| `DISCORD_BOT_TOKEN` | Discord bot token |
+| `DISCORD_GUILD_ID` | The Discord server the bot is configured for |
+| `BOT_SETTINGS_TOKEN` | Shared secret for website-to-bot settings and internal API requests |
+| `SITE_URL` | Public website origin used by the bot when it writes settings |
+| `SITE_ORIGIN` | Website origin used by the bot when it reads settings |
+| `DISCORD_GUILD_OWNER_ID` | Optional explicit server-owner id |
+| `DISCORD_PUBLIC_KEY` | Discord application public key for signed HTTP interactions |
+| `DISCORD_CLIENT_SECRET` | Only needed for the legacy OAuth code-exchange route |
+
+The same `BOT_SETTINGS_TOKEN` must be set as a secret on the Cloudflare Worker. Never put it
+in `public/config.js`, HTML, or browser JavaScript. The Worker attaches it only to trusted
+server-to-server calls for guild metadata and RCON checks.
+
+Railway assigns `PORT` automatically. Leave it unset and let the bot bind to `0.0.0.0`.
+The configured health check is `GET /healthz`; it returns a minimal liveness response.
+`GET /api/status` is the separate public status response.
+
+Set `BOT_API_ORIGIN` on the Worker to the Railway public API origin (for example,
+`https://your-service.up.railway.app`, without a path). Keep the site and bot origins
+separate. After a deploy, check `/healthz`, then `/api/status`, then the site's `/status` page.
+
+### Local development
 ```bash
 npm install
 npm run dev      # http://localhost:8787
@@ -147,21 +193,19 @@ them: the navigation is Status, Add to Discord and the account widget.
 - **Headers** — asset responses carry `x-content-type-options: nosniff` and a
   referrer policy; the dashboard and sign-in pages are `noindex`.
 
-## Bot and dashboard
+## Discord bot
 
-One Discord server, one owner, one command — `/dashboard`, which replies privately
-with a link to this site's dashboard.
+The Gateway bot's slash command definitions and interaction handlers live in
+`bot/commands.mjs`; the Railway process is `bot/server.mjs`. The code includes setup,
+kits, player linking, staff permissions, logging and server checks. Run
+`node scripts/check-commands.mjs` to validate command definitions and Discord response
+limits, and `node scripts/simulate-bot.mjs` to exercise interaction flows without
+connecting to a real Discord server.
 
-| Rule | Enforced by |
-| --- | --- |
-| Nobody but the owner sees the command | Registered guild-scoped with `default_member_permissions: "0"`, so Discord hides it from everyone who is not an administrator — and the owner always is one. |
-| Nobody but the owner can run it | The bot compares `interaction.member.user.id` with `DISCORD_GUILD_OWNER_ID` and answers with an empty response otherwise. |
-| One server only | The command is registered in one guild, `dm_permission: false`, `contexts: [0]`, and interactions from any other guild are ignored. |
-| Only the owner can open the page | `/dashboard` requires a signed session created by a Discord sign-in, and only for the account Discord flags `owner: true` on that guild; no account means no page. |
-
-Setup steps, required secrets and the research behind those choices are in
-[docs/DISCORD-DASHBOARD.md](docs/DISCORD-DASHBOARD.md). The dashboard fails closed:
-with no secrets set it answers 503 and the rest of the site carries on.
+Staff permissions are enforced by the bot at runtime using Discord permissions and the
+roles configured during setup. Internal HTTP routes that expose guild metadata or
+initiate RCON checks additionally require the shared `BOT_SETTINGS_TOKEN`; browser code
+must never receive that secret.
 
 ## Configuration
 
