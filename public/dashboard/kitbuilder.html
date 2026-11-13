@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Kit Studio — Spinback RCE</title>
-<meta name="robots" content="noindex">
+<meta name="description" content="Build a Rust Console Edition kit slot by slot and copy the ready-to-paste kit commands. Free, no account, saved in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Chakra+Petch:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
   <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/dashboard/kitbuilder.html">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Spinback RCE">
-  <meta property="og:title" content="Spinback RCE">
+  <meta property="og:title" content="Kit Studio — Spinback RCE">
   <meta property="og:description" content="Build a Rust Console Edition loadout slot by slot, read the generated in-game command, and save kits in your browser.">
   <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/dashboard/kitbuilder.html">
   <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
@@ -36,8 +36,8 @@
   <a href="../index.html" class="kb-black"><img src="/media/spinback-icon.svg" alt="Spinback RCE" width="30" height="30" style="vertical-align:middle"> ← Home</a>
   <div class="kb-name-wrap">
     <span class="kb-name-label">Kit:</span>
-    <input type="text" id="kitName" class="kb-name-input" placeholder="MY_KIT_NAME" maxlength="64"
-           oninput="this.value=this.value.replace(/\s+/g,'_').toUpperCase();updateOutput()">
+    <input type="text" id="kitName" aria-label="Kit name" class="kb-name-input" placeholder="MY_KIT_NAME" maxlength="64"
+           oninput="this.value=cleanKitName(this.value,true);updateOutput()">
   </div>
   <div class="kb-statsbar">
     <div class="kb-stat">
@@ -77,7 +77,7 @@
     <!-- Categories -->
     <div class="kb-cats" id="catBar"></div>
     <!-- Search -->
-    <input type="text" id="itemSearch" class="kb-search" placeholder="🔍 Search items…" oninput="filterItems()">
+    <input type="text" id="itemSearch" aria-label="Search items" class="kb-search" placeholder="🔍 Search items…" oninput="filterItems()">
     <!-- Items -->
     <div class="kb-items" id="itemsGrid"></div>
   </div>
@@ -97,7 +97,7 @@
       <div class="add-server-fields" id="presetFields">
         <div class="field" style="margin-bottom: 0;">
           <label>Server Multiplier</label>
-          <select id="presetMultiplierSelect">
+          <select id="presetMultiplierSelect" aria-label="Server multiplier">
             <option value="">-- Select server type --</option>
           </select>
           <div id="presetNote" class="field-help" style="margin-top: 6px;">Pick a server type to load a built-in loadout.</div>
@@ -158,7 +158,7 @@
     <!-- Generated commands output -->
     <div class="kb-output-wrap">
       <div class="kb-output-lbl">Generated Commands</div>
-      <textarea class="kb-output" id="cmdOutput" readonly
+      <textarea class="kb-output" id="cmdOutput" aria-label="Generated kit commands" readonly
         placeholder="Build your kit above — RCON commands appear here…"></textarea>
     </div>
 
@@ -176,7 +176,7 @@
     <div class="modal-b" style="text-align: center;">
       <div class="ss-slider-row">
         <label style="font-size: 0.8rem; color: var(--text-dim);">Size:</label>
-        <input type="range" id="ssSlider" class="ss-slider" min="30" max="200" step="5" value="100" oninput="document.getElementById('ssImg').style.width = this.value + '%'; document.getElementById('ssVal').textContent = this.value + '%';">
+        <input type="range" id="ssSlider" aria-label="Screenshot size" class="ss-slider" min="30" max="200" step="5" value="100" oninput="document.getElementById('ssImg').style.width = this.value + '%'; document.getElementById('ssVal').textContent = this.value + '%';">
         <span id="ssVal" style="font-size: 0.8rem; font-family: monospace;">100%</span>
       </div>
       <div id="ssStatus" style="color: var(--rust); margin-bottom: 10px;">Generating image...</div>
@@ -196,7 +196,7 @@
   <div class="qp-name" id="qpName">—</div>
   <div class="qp-row">
     <button class="qp-adj" onclick="qpAdj(-1)">−</button>
-    <input type="number" id="qpVal" class="qp-qty" min="1" max="999999999" value="1">
+    <input type="number" id="qpVal" aria-label="Quantity" class="qp-qty" min="1" max="999999999" value="1">
     <button class="qp-adj" onclick="qpAdj(1)">+</button>
   </div>
   <div class="qp-btns">
@@ -216,7 +216,7 @@
       <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px;">
         Paste a <strong>Base64 install code</strong> <em>or</em> raw <strong>RCON kit commands</strong>. Both formats are auto-detected.
       </p>
-      <textarea id="importTa" class="modal-ta"
+      <textarea id="importTa" aria-label="Install code or kit commands to import" class="modal-ta"
         placeholder="Paste Base64 install code or RCON commands (kit add ...)"></textarea>
     </div>
     <div class="modal-f">

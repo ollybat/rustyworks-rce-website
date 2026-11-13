@@ -726,3 +726,32 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', SP.boot);
   else SP.boot();
 })();
+
+/* --------------------------------------------------------------------------
+   Phone menu for pages that do not load home.js (the status page, the 404 page
+   and the Colour Studio). Without it the menu button did nothing there, so the
+   Status link and Add to Discord could not be reached on a phone. home.js wires
+   the same button on the homepage; the data-nav-ready mark stops a second copy.
+   -------------------------------------------------------------------------- */
+(function () {
+  'use strict';
+  function wire() {
+    var toggle = document.getElementById('navToggle');
+    var links = document.getElementById('navLinks');
+    if (!toggle || !links || toggle.hasAttribute('data-nav-ready')) return;
+    toggle.setAttribute('data-nav-ready', '');
+    function setOpen(open) {
+      links.classList.toggle('open', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    toggle.addEventListener('click', function () { setOpen(!links.classList.contains('open')); });
+    Array.prototype.forEach.call(links.querySelectorAll('a'), function (a) {
+      a.addEventListener('click', function () { setOpen(false); });
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
+    var wide = window.matchMedia && window.matchMedia('(min-width: 761px)');
+    if (wide && wide.addEventListener) wide.addEventListener('change', function (e) { if (e.matches) setOpen(false); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
+})();

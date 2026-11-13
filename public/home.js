@@ -21,7 +21,10 @@
   (function nav() {
     var toggle = byId('navToggle');
     var links = byId('navLinks');
-    if (!toggle || !links) return;
+    /* site-plus.js carries the same menu for pages without this file; whichever runs first
+       marks the button so the menu is never wired twice (two toggles cancel out). */
+    if (!toggle || !links || toggle.hasAttribute('data-nav-ready')) return;
+    toggle.setAttribute('data-nav-ready', '');
 
     function setOpen(open) {
       links.classList.toggle('open', open);

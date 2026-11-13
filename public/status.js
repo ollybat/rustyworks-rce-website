@@ -126,7 +126,8 @@
     var format = function (value) {
       return value.toLocaleString("en-GB", { minimumFractionDigits: decimals || 0, maximumFractionDigits: decimals || 0 }) + (suffix || "");
     };
-    if (typeof target !== "number" || !isFinite(target)) { text(el, target); return; }
+    /* Nothing reported: show the dash the page starts with, never a blank card. */
+    if (typeof target !== "number" || !isFinite(target)) { text(el, "\u2014"); return; }
     var from = parseFloat(String(previous || "").replace(/[^0-9.]/g, ""));
     if (reduceMotion() || !isFinite(from) || from === target) { text(el, format(target)); return; }
     var steps = 16, step = 0;
@@ -480,6 +481,8 @@
     }
   }
   function checkDashboard() {
+    /* The sign-in row was removed from the page; without it there is nothing to fill. */
+    if (!els.svcAuthPill && !els.svcAuthDetail) return Promise.resolve();
     return fetch("/auth/me", { credentials: "same-origin", headers: { accept: "application/json" } })
       .then(function (response) {
         /* Sign-in was retired with the dashboard, so /auth/me no longer exists. */
@@ -524,14 +527,16 @@
     animateTo(els.statGuilds, typeof stats.guilds === "number" ? stats.guilds : null);
     animateTo(els.statUptime, typeof data.uptime30d === "number" ? data.uptime30d : null, "%", 2);
     animateTo(els.statApiUptime, typeof data.apiUptime30d === "number" ? data.apiUptime30d : null, "%", 2);
-    text(els.subUsers, deltaLine("users", stats.users) || "live, from the bot");
-    text(els.subServers, deltaLine("servers", stats.servers) || "live, from the bot");
-    text(els.subGuilds, deltaLine("guilds", stats.guilds) || "live, from the bot");
+    /* Say "live" only for a number the bot really sent. */
+    var NOT_SENT = "the bot does not report this yet";
+    text(els.subUsers, deltaLine("users", stats.users) || (typeof stats.users === "number" ? "live, from the bot" : NOT_SENT));
+    text(els.subServers, deltaLine("servers", stats.servers) || (typeof stats.servers === "number" ? "live, from the bot" : NOT_SENT));
+    text(els.subGuilds, deltaLine("guilds", stats.guilds) || (typeof stats.guilds === "number" ? "live, from the bot" : NOT_SENT));
     deltaClass(els.subUsers, "users", stats.users);
     deltaClass(els.subServers, "servers", stats.servers);
     deltaClass(els.subGuilds, "guilds", stats.guilds);
-    text(els.subUptime, "as reported by the bot");
-    text(els.subApiUptime, "as reported by the bot");
+    text(els.subUptime, typeof data.uptime30d === "number" ? "as reported by the bot" : NOT_SENT);
+    text(els.subApiUptime, typeof data.apiUptime30d === "number" ? "as reported by the bot" : NOT_SENT);
 
     if (previous && previous.stats) {
       ["users", "servers", "guilds"].forEach(function (key) {

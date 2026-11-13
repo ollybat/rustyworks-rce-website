@@ -71,8 +71,18 @@ const PORT = Number(process.env.PORT || 8080);
    server on 127.0.0.1 would answer nothing and the public domain would 502. */
 const HOST = process.env.HOST || '0.0.0.0';
 
-const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null };
+const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null, lastHeartbeat: null, latencyMs: null };
 const log = (...a) => console.log('[spinback]', ...a);
+
+/* What the status page prints as the version. Railway sets RAILWAY_GIT_COMMIT_SHA on every
+   deploy from GitHub, so the page can show which commit is live and notice a new deploy. */
+const VERSION = 'Spinback RCE bot' + (process.env.RAILWAY_GIT_COMMIT_SHA ? ' ' + String(process.env.RAILWAY_GIT_COMMIT_SHA).slice(0, 7) : '');
+
+/* A stray rejected promise (a reply to an interaction that expired, a REST call that timed
+   out) would otherwise end the process, and Railway stops restarting after ten failures. */
+process.on('unhandledRejection', (reason) => {
+  log('unhandled rejection:', String((reason && reason.stack) || reason).slice(0, 500));
+});
 
 /* ---------------------------------------------------------------- gateway -- */
 
@@ -158,6 +168,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.Error, (e) => log('gateway error:', String((e && e.message) || e)));
+/* The gateway heartbeat is the best proof the connection is really alive: the API can answer
+   while the gateway is wedged. discord.js reports each acknowledged heartbeat on its debug
+   channel. The status page only shows a heartbeat once one has really been seen, so if this
+   wording ever changes the page says "not reported" instead of raising a false alarm. */
+client.on(Events.Debug, (message) => {
+  const text = String(message || '');
+  if (!/heartbeat acknowledged/i.test(text)) return;
+  state.lastHeartbeat = Date.now();
+  const latency = /latency of (\d+)\s*ms/i.exec(text);
+  if (latency) state.latencyMs = Number(latency[1]);
+});
 client.on(Events.ShardDisconnect, (code) => { state.gateway = 'disconnected'; log('gateway disconnected, code', code); });
 client.on(Events.ShardReconnecting, () => { state.gateway = 'reconnecting'; log('gateway reconnecting'); });
 
@@ -562,8 +583,13 @@ createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
     let body = '';
-    req.on('data', (chunk) => { body += chunk; });
+    let tooBig = false;
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 16384 && !tooBig) { tooBig = true; req.destroy(); }
+    });
     req.on('end', async () => {
+      if (tooBig) return;
       const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
       if (!CLIENT_SECRET) {
         res.writeHead(503, cors);
@@ -611,6 +637,10 @@ createServer(async (req, res) => {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
+      version: VERSION,
+      /* Left out until a heartbeat has actually been acknowledged (see the Debug listener). */
+      lastHeartbeat: state.lastHeartbeat || undefined,
+      latencyMs: state.latencyMs === null ? undefined : state.latencyMs,
       /* online is the field the status page reads. Without it the page assumed the bot
          was up whenever it got an answer at all, which is how a tokenless process could
          be announced as online. */
@@ -645,9 +675,22 @@ createServer(async (req, res) => {
     }));
     return;
   }
+  /* Discord's interaction payloads are a few kilobytes; anything near a megabyte is not
+     Discord, and buffering it without a limit would let anyone fill this process's memory. */
   let raw = '';
-  req.on('data', (c) => { raw += c; });
+  let refused = false;
+  req.on('data', (c) => {
+    if (refused) return;
+    raw += c;
+    if (raw.length > 1048576) {
+      refused = true;
+      res.writeHead(413, { 'content-type': 'application/json' });
+      res.end('{"error":"payload too large"}');
+      req.destroy();
+    }
+  });
   req.on('end', async () => {
+    if (refused) return;
     try {
       const response = await handler.fetch(toRequest(req, raw), env);
       const text = await response.text();

@@ -20,16 +20,13 @@
   function bump(key) {
     try { localStorage.setItem(key, String((parseInt(localStorage.getItem(key) || '0', 10) || 0) + 1)); } catch (e) {}
   }
+  function count(key) {
+    try { return parseInt(localStorage.getItem(key) || '0', 10) || 0; } catch (e) { return 0; }
+  }
   function nextId(list) {
     var max = 0;
     list.forEach(function (k) { if (k && k.id > max) max = k.id; });
     return max + 1;
-  }
-  function globalStats() {
-    if (!nativeFetch) return Promise.resolve(null);
-    return nativeFetch('/api/kitbuilder/stats', { headers: { accept: 'application/json' } })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .catch(function () { return null; });
   }
 
   window.fetch = function (input, init) {
@@ -66,12 +63,11 @@
           write(list.filter(function (k) { return k.id !== id; }));
           return Promise.resolve(reply({ ok: true }));
         }
-        if (what === 'generate' && method === 'POST') { bump(GEN); return Promise.resolve(reply({ ok: true })); }
+        /* The counters at the top of the page are this browser's own: kits generated here
+           and kits saved here. The bot has no counter endpoint, so nothing is fetched. */
+        if (what === 'generate' && method === 'POST') { bump(GEN); return Promise.resolve(reply({ ok: true, generated: count(GEN) })); }
         if (what === 'stats') {
-          return globalStats().then(function (d) {
-            var base = (d && typeof d.generated === 'number') ? d : { generated: 0, saved: 0 };
-            return reply({ generated: base.generated, saved: base.saved, localKits: read().length });
-          });
+          return Promise.resolve(reply({ generated: count(GEN), saved: list.length, localKits: list.length }));
         }
       }
     } catch (e) {}
