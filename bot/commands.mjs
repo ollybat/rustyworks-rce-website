@@ -100,11 +100,11 @@ export function autocompleteChoices(ctx, commandName, subcommand, focused, optio
   }
 
   if (commandName === "setup" && subcommand === "refresh" && focused.name === "server") {
-    (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
+    (ctx.servers() || []).forEach(function (server) { add(server.name, server.id || server.name); });
   } else if (commandName === "kits" && subcommand === "grab" && focused.name === "server") {
-    (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
+    (ctx.servers() || []).forEach(function (server) { add(server.name, server.id || server.name); });
   } else if (commandName === "kits" && subcommand === "give" && focused.name === "server") {
-    (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
+    (ctx.servers() || []).forEach(function (server) { add(server.name, server.id || server.name); });
   } else if (commandName === "kits" && (subcommand === "give" || subcommand === "auth-spawn")) {
     if (focused.name === "kit") (ctx.kits().known || []).forEach(function (kit) { add(kit, kit); });
     else if (focused.name === "gamertag") (ctx.links() || []).forEach(function (link) { add(link.gamertag, link.gamertag); });
@@ -260,7 +260,7 @@ export async function testAndSaveServer(ctx, data, existingId) {
 }
 export async function testServerByName(ctx, name) {
   var wanted = String(name || "").trim();
-  var server = ctx.servers().filter(function (s) { return s.name === wanted; })[0] || ctx.servers()[0];
+  var server = ctx.servers().filter(function (s) { return s.name === wanted || s.id === wanted; })[0] || ctx.servers()[0];
   if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
   var answer = await ctx.rconTest({ host: server.host, port: server.port, password: server.password, command: "serverinfo" });
   var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c,
