@@ -15,9 +15,16 @@
   var PAGES = [
     ['Home', '/index.html', 'What Spinback is, and what it does'],
     ['Status', '/status.html', 'Live uptime, checks and how the bot is behaving'],
+    ['Commands', '/commands.html', 'Every command and subcommand, who may run it and what it needs set up first'],
+    ['/ping', '/commands.html#ping', 'Live bot and website health, measured when you run it'],
+    ['/setup', '/commands.html#setup', 'Roles, logging channels and your Rust server RCON connection'],
+    ['/kits', '/commands.html#kits', 'Emote kits: binds, cooldowns, giving and installing'],
 
     ['Kit Studio', '/dashboard/kitbuilder.html', 'Build a kit and read the item catalogue'],
-    ['Colour Studio', '/dashboard/colortext.html', 'Rust colour codes and text formatting']
+    ['Colour Studio', '/dashboard/colortext.html', 'Rust colour codes and text formatting'],
+
+
+
   ];
 
   function el(tag, cls, text) {
@@ -53,13 +60,13 @@
         (skins.skins || []).forEach(function (skin) {
           if (!skin || !skin.name) return;
           var sub = [skin.category, skin.released ? 'released ' + skin.released : 'release date not published'].filter(Boolean).join(' \u00b7 ');
-          index.push({ title: skin.name, sub: sub, kind: 'Skin', url: skin.link || '/dashboard/kitbuilder.html', hay: (skin.name + ' ' + (skin.category || '') + ' ' + (skin.pack || '')).toLowerCase() });
+          index.push({ title: skin.name, sub: sub, kind: 'Skin', url: skin.link || '/rustskins.html', hay: (skin.name + ' ' + (skin.category || '') + ' ' + (skin.pack || '')).toLowerCase() });
         });
         (skins.products || []).forEach(function (product) {
           if (!product || !product.name) return;
           var isPack = product.type === 'pack' || (product.contents && product.contents.length);
           var sub = [product.category, product.released ? 'released ' + product.released : 'release date not published'].filter(Boolean).join(' \u00b7 ');
-          index.push({ title: product.name, sub: sub, kind: isPack ? 'Pack' : 'Product', url: product.link || '/dashboard/kitbuilder.html', hay: (product.name + ' ' + (product.category || '')).toLowerCase() });
+          index.push({ title: product.name, sub: sub, kind: isPack ? 'Pack' : 'Product', url: product.link || '/rustskins.html', hay: (product.name + ' ' + (product.category || '')).toLowerCase() });
         });
       }
       loading = false;
@@ -215,12 +222,4 @@
     button.addEventListener('click', open);
     links.insertBefore(button, links.firstChild);
   }
-
-  /* Any button in a page can open the palette by carrying data-open-search. */
-  document.addEventListener('click', function (event) {
-    var trigger = event.target && event.target.closest ? event.target.closest('[data-open-search]') : null;
-    if (!trigger) return;
-    event.preventDefault();
-    open();
-  });
 })();
