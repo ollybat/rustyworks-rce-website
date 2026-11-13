@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <script>
+      /* Marks the page as scripted, and applies the saved light/dark choice
+         before the first paint, so there is never a flash of the wrong palette. */
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("spinback-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Page not found - Spinback RCE</title>
+    <meta name="application-name" content="Spinback RCE">
+    <meta name="apple-mobile-web-app-title" content="Spinback">
+    <meta name="robots" content="noindex">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/chakrapetch/v13/cIf6MapbsEk7TDLdtEz1BwkWn6pg.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYg.woff2">
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="/sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+    <meta name="theme-color" content="#0b0704">
+    <script src="/theme.js"></script>
+    <script src="/config.js"></script>
+    <script src="/notfound.js" defer></script>
+    <link rel="stylesheet" href="/theme-spinback.css">
+  <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+  </head>
+  <body>
+    <div id="rw-fx" aria-hidden="true"></div>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header>
+      <div class="wrap">
+        <nav>
+          <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="/status.html">Status</a>
+            <a
+              href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
+              target="_blank"
+              rel="noopener"
+              class="btn">
+              Add to Discord
+            </a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section class="page-hero">
+        <div class="wrap">
+          <span class="tag">404</span>
+          <h1>That page isn't <span class="accent">here</span></h1>
+          <p id="notFoundHint">
+            The link may be old, or the page may have moved. Nothing is broken on your side.
+          </p>
+        </div>
+      </section>
+
+      <section style="padding-top:0">
+        <div class="wrap">
+          <div class="grid u-grid-auto">
+            <div class="panel-box">
+              <h2>Where to go instead</h2>
+              <ul class="ks-list" style="margin-top:10px">
+                <li><a href="/index.html">Homepage</a> - what the bot does and how to add it</li>
+                <li><a href="/status.html">Status</a> - live uptime, players and servers</li>
+                <li><a href="/dashboard/kitbuilder.html">Kit Studio</a> - build a kit in the browser</li>
+                <li><a href="/dashboard/colortext.html">Colour Studio</a> - gradient text for your server</li>
+              </ul>
+            </div>
+            <div class="panel-box">
+              <h2>Looking for the old pages?</h2>
+              <p class="note" style="margin-top:10px">
+                The Features, Commands, Docs, Updates, Partners, Server Browser and Skin Store pages were retired, so links to
+                them land here. Everything they covered is still on the homepage, and the bot's
+                own commands can be listed in Discord.
+              </p>
+              <div class="u-mt-18">
+                <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener" class="btn ghost">Ask in the support server</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="/dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="/dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="/status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">© <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</div>
+      </div>
+    </footer>
+  <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+  </body>
+</html>

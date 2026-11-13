@@ -481,9 +481,18 @@
   }
   function checkDashboard() {
     return fetch("/auth/me", { credentials: "same-origin", headers: { accept: "application/json" } })
-      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (response) {
+        /* Sign-in was retired with the dashboard, so /auth/me no longer exists. */
+        if (response.status === 404) return { retired: true };
+        return response.ok ? response.json() : null;
+      })
       .then(function (data) {
         if (!data) { setPill(els.svcAuthPill, "warn", "Unknown"); return; }
+        if (data.retired) {
+          setPill(els.svcAuthPill, "ok", "Not needed");
+          text(els.svcAuthDetail, "The site has no sign-in any more: Kit Studio and Colour Studio are open to everyone, and /dashboard opens Kit Studio.");
+          return;
+        }
         if (data.authenticated) {
           setPill(els.svcAuthPill, "ok", "You are signed in");
           text(els.svcAuthDetail, "Your owner session is active - open /dashboard to use it.");

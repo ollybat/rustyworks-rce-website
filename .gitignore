@@ -2,3 +2,9 @@ node_modules/
 build/
 .wrangler/
 .DS_Store
+
+# Decoded by scripts/build.mjs from the committed .b64 parts - edit the parts, not these.
+public/media/*.png
+public/media/*.jpg
+public/media/*.webp
+__pycache__/

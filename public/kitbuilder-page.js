@@ -236,10 +236,14 @@ function toLabel(sn) {
 async function loadEntities() {
   let raw = {};
   try {
-    raw = await fetch('/data/entities.json').then(r => r.json());
+    raw = await fetch('/data/entities.json').then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
   } catch(e) {
-    console.warn('[KitBuilder] entities.json failed to load:', e.message);
-    return; // CATS stays empty — builder will show nothing, not crash
+    console.warn('[KitBuilder] entities.json failed to load:', e.message, '- using the local catalogue');
+    await loadLocalCatalogue();
+    return;
   }
 
   // Build WEARABLE set from Armour + Attire (excluding Horse subcategories)
@@ -257,6 +261,34 @@ async function loadEntities() {
       });
     }
     if (items.length) CATS[catLabel] = items;
+  }
+  /* A reachable file with none of the expected categories is as empty as a failed one. */
+  if (!Object.keys(CATS).length) await loadLocalCatalogue();
+}
+
+/* Fallback: the catalogue this site ships in /data/items.json (about 300 items, grouped
+   by the site's own categories). Used when the upstream item list cannot be reached, so
+   the studio is never empty. */
+async function loadLocalCatalogue() {
+  try {
+    const data = await fetch('/data/items.json').then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+    const order = Array.isArray(data.groups) ? data.groups : [];
+    const byGroup = {};
+    (data.items || []).forEach(it => {
+      if (!it || !it.short) return;
+      const g = it.group || 'Other';
+      (byGroup[g] = byGroup[g] || []).push({ v: it.short, l: it.name || toLabel(it.short) });
+      if (g === 'Clothing & armour') WEARABLE.add(it.short);
+    });
+    const groups = order.concat(Object.keys(byGroup).filter(g => !order.includes(g)));
+    groups.forEach(g => {
+      if (byGroup[g] && byGroup[g].length) CATS[g] = byGroup[g].sort((a, b) => a.l.localeCompare(b.l));
+    });
+  } catch (e) {
+    console.warn('[KitBuilder] local catalogue failed to load too:', e.message);
   }
 }
 
