@@ -15,17 +15,13 @@
   var PAGES = [
     ['Home', '/index.html', 'What Spinback is, and what it does'],
     ['Status', '/status.html', 'Live uptime, checks and how the bot is behaving'],
-    ['Server Browser', '/rustservers.html', 'Official and community Rust Console servers'],
-    ['Skin Store', '/rustskins.html', 'Every Rust Console store product, release dates and prices'],
+
     ['Kit Studio', '/dashboard/kitbuilder.html', 'Build a kit and read the item catalogue'],
     ['Colour Studio', '/dashboard/colortext.html', 'Rust colour codes and text formatting'],
-    ['Your Servers', '/servers.html', 'Every server you can manage, and whether the bot is in it'],
-    ['Profile', '/profile.html', 'The Discord account you signed in with'],
-    ['Settings', '/settings.html', 'Theme, seasonal look, font, text size and calm mode'],
-    ['Sign in', '/login.html', 'Sign in with Discord - no slash commands'],
+
     ['Dashboard', '/dashboard', 'The owner console: roles, logs and the Rust server'],
-    ['Terms of Service', '/legal/terms.html', 'The plain-English rules'],
-    ['Privacy Policy', '/legal/privacy.html', 'What is kept, and what never is']
+
+
   ];
 
   function el(tag, cls, text) {

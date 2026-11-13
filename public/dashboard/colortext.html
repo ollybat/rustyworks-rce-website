@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Colour Studio | Spinback RCE</title>
+    <meta name="description" content="Build a colour gradient, watch it live, and copy the exact markup for a Discord ANSI block, a bot embed accent colour or a web page.">
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="/sections.css">
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+    <link rel="stylesheet" href="/site-pro.css">
+    <style>
+      .ct-wrap { max-width: 940px; margin: 0 auto; padding: 28px 18px 60px; }
+      .ct-head h1 { margin: 0 0 6px; font-size: 30px; }
+      .ct-head p { margin: 0 0 22px; color: #9c9088; font-size: 15px; }
+      .ct-card { border: 1px solid #2e251d; border-radius: 16px; background: rgba(255,255,255,.02); padding: 18px 20px; margin-bottom: 18px; }
+      .ct-card h2 { margin: 0 0 12px; font-size: 17px; }
+      .ct-preview { display: grid; place-items: center; min-height: 140px; border-radius: 14px; border: 1px dashed #3a2f25; padding: 18px; margin-bottom: 16px; background: #0e0b08; }
+      .ct-preview b { font-size: clamp(28px, 7vw, 54px); font-weight: 800; letter-spacing: .5px; -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .ct-stops { display: grid; gap: 8px; }
+      .ct-stop { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; }
+      .ct-stop input[type="color"] { width: 46px; height: 34px; border: 1px solid #3a2f25; border-radius: 8px; background: #120e0b; padding: 2px; }
+      .ct-stop input[type="text"] { padding: 9px 11px; border-radius: 9px; border: 1px solid #3a2f25; background: #120e0b; color: inherit; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .ct-x { padding: 8px 12px; border-radius: 9px; border: 1px solid #3a2f25; background: transparent; color: inherit; cursor: pointer; }
+      .ct-row { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin-top: 12px; }
+      .ct-btn { padding: 10px 14px; border-radius: 10px; border: 1px solid #3a2f25; background: rgba(255,154,0,.1); color: inherit; font: inherit; cursor: pointer; }
+      .ct-btn.ghost { background: transparent; }
+      .ct-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+      .ct-preset { padding: 8px 13px; border-radius: 999px; border: 1px solid #3a2f25; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+      .ct-out { width: 100%; min-height: 92px; padding: 12px; border-radius: 10px; border: 1px solid #3a2f25; background: #0e0b08; color: #f4ece4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; resize: vertical; }
+      .ct-note { font-size: 13px; color: #9c9088; margin: 8px 0 0; }
+      .ct-msg { font-size: 13.5px; color: #6cc24a; }
+      .ct-saved { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 7px; }
+      .ct-saved li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; border: 1px solid #2e251d; border-radius: 10px; padding: 9px 12px; }
+      .ct-swatch { width: 76px; height: 14px; border-radius: 999px; border: 1px solid #3a2f25; }
+    </style>
+  </head>
+  <body>
+    <main id="main" class="ct-wrap">
+      <div class="ct-head">
+        <h1>Colour <span class="accent">Studio</span></h1>
+        <p>Pick up to eight colours, watch the gradient form, then copy the markup for the place you want it: a Discord ANSI block, a bot embed accent, or a web page.</p>
+      </div>
+
+      <section class="ct-card">
+        <div class="ct-preview"><b id="ctPreview">SPINBACK RCE</b></div>
+        <h2>Colour stops</h2>
+        <div class="ct-stops" id="ctStops"></div>
+        <div class="ct-row">
+          <button class="ct-btn" id="ctAdd" type="button">Add a stop</button>
+          <button class="ct-btn ghost" id="ctReset" type="button">Reset</button>
+          <label class="ct-note" for="ctText">Preview text</label>
+          <input id="ctText" type="text" maxlength="40" value="SPINBACK RCE" style="padding:9px 11px;border-radius:9px;border:1px solid #3a2f25;background:#120e0b;color:inherit;font:inherit">
+          <span class="ct-msg" id="ctMsg"></span>
+        </div>
+      </section>
+
+      <section class="ct-card">
+        <h2>Presets built into this page</h2>
+        <p class="ct-note">Simple ramps made for this page. Nothing here is claimed to come from anywhere else.</p>
+        <div class="ct-presets" id="ctPresets"></div>
+      </section>
+
+      <section class="ct-card">
+        <h2>Copy it into your place</h2>
+        <p class="ct-note">Discord renders ANSI colour codes inside an <code>ansi</code> code block, so what you copy is the nearest of the sixteen ANSI colours to each stop. Embeds take an accent colour as a decimal integer, and a web page takes the gradient itself.</p>
+        <label class="ct-note" for="ctAnsi">Discord ANSI block</label>
+        <textarea class="ct-out" id="ctAnsi" readonly></textarea>
+        <div class="ct-row"><button class="ct-btn" id="ctCopyAnsi" type="button">Copy ANSI block</button></div>
+        <label class="ct-note" for="ctEmbed">Embed accent colour (discord.js)</label>
+        <textarea class="ct-out" id="ctEmbed" readonly style="min-height:64px"></textarea>
+        <div class="ct-row"><button class="ct-btn" id="ctCopyEmbed" type="button">Copy accent code</button></div>
+        <label class="ct-note" for="ctCss">Web gradient</label>
+        <textarea class="ct-out" id="ctCss" readonly style="min-height:64px"></textarea>
+        <div class="ct-row"><button class="ct-btn" id="ctCopyCss" type="button">Copy CSS</button><span class="ct-msg" id="ctCopyMsg"></span></div>
+      </section>
+
+      <section class="ct-card">
+        <h2>Saved palettes</h2>
+        <p class="ct-note">Saved in this browser only, with no account and nothing sent anywhere.</p>
+        <div class="ct-row">
+          <input id="ctName" type="text" maxlength="40" placeholder="Name this palette" style="padding:9px 11px;border-radius:9px;border:1px solid #3a2f25;background:#120e0b;color:inherit;font:inherit">
+          <button class="ct-btn" id="ctSave" type="button">Save palette</button>
+          <span class="ct-msg" id="ctSaveMsg"></span>
+        </div>
+        <ul class="ct-saved" id="ctSavedList"></ul>
+      </section>
+    </main>
+    <script src="/theme.js" defer></script>
+    <script src="../config.js" defer></script>
+    <script src="/apiHelper.js" defer></script>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+    <script src="/dashboard/colortext.js" defer></script>
+  </body>
+</html>
