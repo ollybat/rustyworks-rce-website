@@ -36,11 +36,62 @@ public/
 worker.js               Serves public/, proxies the bot API, and gates /dashboard
 scripts/build.mjs       Copies public/ + worker.js into build/
 bot/
-  interactions-worker.js  The Discord bot: one /dashboard command, owner-only
-  register-commands.mjs   Registers that command inside the single guild
+  Dockerfile              Railway image for the bot service
+  package.json            Bot-only production dependencies
+  server.mjs              Discord Gateway, HTTP API, settings sync and RCON client
+  commands.mjs            Slash commands, forms, buttons and permission checks
+  network-guard.mjs       Public-IP validation for outbound RCON
+  interactions-worker.js  Signed Discord interactions fallback
+  register-commands.mjs   Registers the bot's slash commands
 docs/
-  DISCORD-DASHBOARD.md    Setup, secrets and how the owner-only rules are enforced
+  DISCORD-DASHBOARD.md    Historical dashboard and Discord setup notes
 ```
+
+## Hosting layout
+
+This repository contains two different deployables:
+
+- **Railway runs the bot/API.** `railway.json` selects `bot/Dockerfile`, which starts
+  `bot/server.mjs`. That one process connects to Discord's Gateway and serves the bot API.
+- **The website is a Cloudflare Worker.** `worker.js`, `wrangler.jsonc` and `public/`
+  are deployed separately with `npm run deploy`. The Worker uses the `ASSETS` binding
+  for the site and the `STATUS_LOG` R2 bucket for status history and site settings.
+
+The Railway configuration does not deploy the website. Keep the bot and website deployments
+separate unless the Worker APIs and R2 storage are deliberately replaced with Railway-compatible
+services.
+
+### Railway bot service
+
+Connect this repository to Railway and let it use the checked-in `railway.json`. Do not
+override the Dockerfile with a root-level build: the configured image installs the bot's
+own dependencies from `bot/package.json`.
+
+Set these variables on the Railway bot service:
+
+| Variable | Purpose |
+| --- | --- |
+| `DISCORD_BOT_TOKEN` | Bot token used for the Gateway connection |
+| `DISCORD_GUILD_ID` | Discord server the bot is configured for |
+| `DISCORD_GUILD_OWNER_ID` | Optional explicit owner id for owner-only checks |
+| `DISCORD_PUBLIC_KEY` | Discord application public key for signed interaction requests |
+| `BOT_SETTINGS_TOKEN` | Shared secret for settings sync and trusted website-to-bot requests |
+| `SITE_URL` | Canonical website origin used for links and settings writes |
+| `SITE_ORIGIN` | Website origin used when the bot reads settings |
+| `DISCORD_CLIENT_SECRET` | Required only when using the bot's Discord OAuth code-exchange route |
+
+Set **the same `BOT_SETTINGS_TOKEN`** on the website Worker. It must remain a server-side
+secret: never add it to `public/config.js` or any browser JavaScript. The Worker adds it when
+reading private guild metadata from the bot.
+
+Railway supplies `PORT` at runtime. Leave it unset in the dashboard and let the app bind to
+`0.0.0.0`; the health check is `GET /healthz`. That endpoint intentionally returns only a
+small liveness response. The public status page reads the separate, sanitised `GET /api/status`.
+
+For a standard Railway deploy, the configured health check path is already in `railway.json`.
+After deploy, confirm `/healthz` returns HTTP 200 and `/api/status` reports the expected
+Gateway state. Never paste bot tokens, the shared settings token, or RCON passwords into
+issues, logs, or public environment files.
 
 ## Local development
 
