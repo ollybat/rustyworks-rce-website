@@ -44,6 +44,8 @@ export async function run({ world, make, interact }) {
   expect("/help lists /user", text(last(it)).includes("/user"), text(last(it)));
   it = await go(make.button(ADMIN, "help:cmd:user"), "help: /user page");
   expect("help detail page opens (it used to wipe the buttons)", text(last(it)).includes("Help: /user") && ((last(it) || {}).components || []).length > 0, text(last(it)));
+  it = await go(make.command(PLAYER, "help"), "/help by a non-staff member");
+  expect("/help is available to ordinary server members", text(last(it)).includes("/kits") && text(last(it)).includes("/user"), text(last(it)));
 
   /* 3. before any staff role exists, only Administrator / Manage Server / owner may configure */
   it = await go(make.command(LINKED_ONLY, "setup", "run"), "/setup run by a linked player, before setup");
@@ -103,6 +105,14 @@ export async function run({ world, make, interact }) {
   expect("slow RCON answers are acknowledged in time", edited.firstAckAt !== null && edited.firstAckAt < 3000 && given.firstAckAt < 3000, edited.firstAckAt + " / " + given.firstAckAt);
   expect("a Discord user gets their linked gamertag, not their id", text(last(given)).includes('kit givetoplayer STARTER \\"PlayerOne\\"'), text(last(given)));
   expect("the RCON command is logged", world.sent.some((m) => m.channelId === "100000000000000404" && text(m.payload).includes("kit givetoplayer STARTER")), text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-1)));
+  const rconLogsBeforeCooldown = world.sent.filter((m) => m.channelId === "100000000000000404").length;
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "STARTER", gamertag: "PlayerOne", server: "srv1" }), "repeat the same kit give");
+  expect("a successful give starts a per-player, per-kit cooldown", text(last(it)).includes("Giveaway cooldown"), text(last(it)));
+  expect("a cooldown blocks the second RCON command", world.sent.filter((m) => m.channelId === "100000000000000404").length === rconLogsBeforeCooldown, text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-2)));
+  it = await go(make.button(ADMIN, "kits:lock"), "pause manual kit delivery");
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "OTHER", gamertag: "PlayerOne", server: "srv1" }), "give while delivery is paused");
+  expect("the kit delivery lock is enforced", text(last(it)).includes("Kit delivery is paused"), text(last(it)));
+  it = await go(make.button(ADMIN, "kits:lock"), "resume manual kit delivery");
   it = await go(make.command(ADMIN, "kits", "give", { gamertag: "PlayerOne" }), "/kits give with no kit");
   expect("a give with no kit asks for one (it used to send 'undefined')", text(last(it)).includes("Which kit?"), text(last(it)));
 
@@ -180,7 +190,7 @@ export async function run({ world, make, interact }) {
   expect("a give command without {player} and {kit} is refused", text(last(it)).includes("Not saved"), text(last(it)));
   it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"' }), "save delivery");
   w = await writes();
-  expect("delivery settings are saved to the website", ((latest(w).kits || {}).listCommand === "kit list") && /\{player\}/.test((latest(w).kits || {}).giveCommand || ""), text(latest(w).kits));
+  expect("delivery settings and cooldown are saved to the website", ((latest(w).kits || {}).listCommand === "kit list") && String((latest(w).kits || {}).giveCommand || "").includes("{player}") && latest(w).kits.giveCooldownSeconds === 30, text(latest(w).kits));
   expect("the saved reply shows an example", text(last(it)).includes("Delivery saved"), text(last(it)));
   it = await go(make.button(ADMIN, "kits:grab"), "read kit names from the panel");
   expect("Read kit names answers from the panel", it.firstAckAt !== null && text(last(it)).length > 10, text(last(it)).slice(0, 300));
@@ -189,6 +199,10 @@ export async function run({ world, make, interact }) {
   const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
   it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "install a kit code");
   expect("the kit names in an install code are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  expect("the bot is honest that a code preview is not a server install", text(last(it)).includes("not installed"), text(last(it)).slice(0, 400));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  w = await writes();
+  expect("kit-code metadata persists inside the kits settings", Object.keys((latest(w).kits || {}).installCodes || {}).length > 0, text(latest(w).kits));
   it = await go(make.command(ADMIN, "kits", "give", { kit: "rai" }, "kit"), "autocomplete an installed kit");
   expect("an installed kit is suggested straight away", [].concat(last(it) || []).some((c) => c.value === "RAIDER"), text(last(it)));
 
