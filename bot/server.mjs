@@ -1376,12 +1376,14 @@ function rconConnect(options) {
 
 createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
-  const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  const statusPaths = ['/', '/status', '/api/status'];
+  const healthPaths = new Set(['/health', '/healthz', '/api/health']);
   /* Every server the bot is in right now. The website asks this before it will set anything
      up: a server Spinback is not in cannot be configured, so the page says so plainly and
      offers the invite instead of pretending otherwise. */
   if (req.method === 'GET' && url === '/api/guilds') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     const guilds = [...client.guilds.cache.values()].map((g) => ({
       id: g.id,
       name: g.name,
@@ -1394,7 +1396,8 @@ createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url === '/api/guild') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
     res.writeHead(200, cors);
     res.end(JSON.stringify({ ready: true, guild: state.guildInfo }));
@@ -1417,20 +1420,32 @@ createServer(async (req, res) => {
   /* Ask a Rust server, over RCON, whether it is really there. The website never sends a
      password to a browser: it calls this with the connection it has stored. */
   if (req.method === 'POST' && url === '/api/rcon/test') {
-    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     if (!rconAllowed()) {
       res.writeHead(429, cors);
       res.end(JSON.stringify({ ok: false, reason: 'rate-limited', detail: 'Six checks a minute is the limit. Try again shortly.' }));
       return;
     }
     let raw = '';
+    let tooBig = false;
     req.on('data', function (chunk) {
+      if (tooBig) return;
       raw += chunk;
-      if (raw.length > 4096) { try { req.destroy(); } catch (error) { /* already gone */ } }
+      if (raw.length > 4096) tooBig = true;
     });
     req.on('end', async function () {
+      if (tooBig) {
+        res.writeHead(413, cors);
+        res.end(JSON.stringify({ ok: false, reason: 'payload-too-large' }));
+        return;
+      }
       let body = {};
-      try { body = JSON.parse(raw || '{}'); } catch (error) { body = {}; }
+      try { body = JSON.parse(raw || '{}'); } catch (error) {
+        res.writeHead(400, cors);
+        res.end(JSON.stringify({ ok: false, reason: 'invalid-json' }));
+        return;
+      }
       let answer;
       /* A saved server is tested by its id, so its password never has to leave this service
          and never reaches a browser. A brand new server can still be tried with the password
@@ -1465,19 +1480,9 @@ createServer(async (req, res) => {
      It stays shut until BOT_SETTINGS_TOKEN is set on this service, because an open
      settings endpoint would be a way to read a server's credentials. */
   if (req.method === 'GET' && url === '/api/site-settings') {
+    if (requireSettingsAuth(req, res)) return;
     const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
-    const expected = cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || '');
-    if (!expected) {
-      res.writeHead(503, cors);
-      res.end(JSON.stringify({ ok: false, reason: 'no-token', detail: 'Set BOT_SETTINGS_TOKEN on this service to the same value as on the website.' }));
-      return;
-    }
-    const given = String(req.headers['x-settings-token'] || '');
-    if (given !== expected) {
-      res.writeHead(403, cors);
-      res.end(JSON.stringify({ ok: false, reason: 'bad-token' }));
-      return;
-    }
+    const given = settingsToken();
     const origin = cleanEnvValue(process.env.SITE_ORIGIN || 'https://spinback-j7ao5f.camelai.app');
     try {
       const response = await fetch(origin + '/api/bot/settings', { headers: { 'x-settings-token': given, accept: 'application/json' } });
@@ -1492,20 +1497,37 @@ createServer(async (req, res) => {
   }
 
   if (url === '/api/reconnect') {
-    const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'application/json', 'cache-control': 'no-store', allow: 'POST' });
+      res.end(JSON.stringify({ ok: false, reason: 'method-not-allowed' }));
+      return;
+    }
+    if (requireSettingsAuth(req, res)) return;
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
     req.resume();
     if (!TOKEN) { res.writeHead(503, cors); res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
     if (state.gateway === 'online') { res.writeHead(200, cors); res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
-    await relogin('asked by a request');
+    await relogin('asked by an authenticated request');
     res.writeHead(200, cors);
-    res.end(JSON.stringify({ ok: true, gateway: state.gateway, forcedLogins: forcedLogins }));
+    res.end(JSON.stringify({ ok: true, gateway: state.gateway }));
     return;
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
+    if (requireSettingsAuth(req, res)) return;
     let body = '';
-    req.on('data', (chunk) => { body += chunk; });
+    let tooBig = false;
+    req.on('data', (chunk) => {
+      if (tooBig) return;
+      body += chunk;
+      if (body.length > 16384) tooBig = true;
+    });
     req.on('end', async () => {
-      const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+      const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
+      if (tooBig) {
+        res.writeHead(413, cors);
+        res.end(JSON.stringify({ ok: false, error: 'payload_too_large' }));
+        return;
+      }
       if (!CLIENT_SECRET) {
         res.writeHead(503, cors);
         res.end(JSON.stringify({ ok: false, error: 'no_client_secret', message: 'this service has no DISCORD_CLIENT_SECRET set' }));
@@ -1548,41 +1570,26 @@ createServer(async (req, res) => {
     });
     return;
   }
+  if (req.method === 'GET' && healthPaths.has(url)) {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, service: 'spinback-rce-bot' }));
+    return;
+  }
   if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
-      /* online is the field the status page reads. Without it the page assumed the bot
-         was up whenever it got an answer at all, which is how a tokenless process could
-         be announced as online. */
       online: state.gateway === 'online',
       ok: state.gateway === 'online',
       gateway: state.gateway,
       tag: state.tag,
       guilds: state.guilds,
       command: state.command,
-      port: PORT,
-      host: HOST,
-      tokenPresent: !!TOKEN,
-      tokenSource: TOKEN_INFO.source,
       oauthExchange: !!CLIENT_SECRET,
-      clientIdPresent: !!CLIENT_ID,
-      tokenShape: tokenShape,
-      tokenLength: TOKEN.length,
-      loginAttempts: loginAttempts,
-      lookedFor: TOKEN_NAMES,
-      siteUrl: SITE_URL,
       interactions: !!PUBLIC_KEY,
-      guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
-      ownerSource: OWNER_ID ? 'DISCORD_GUILD_OWNER_ID' : (state.guildInfo && state.guildInfo.ownerId ? 'the guild owner record' : null),
-      forcedLogins: forcedLogins,
-      gatewayDownSeconds: gatewayDownSince ? Math.round((Date.now() - gatewayDownSince) / 1000) : 0,
-      error: state.error,
+      guildConfigured: !!GUILD_ID,
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
-      /* Only what this process really knows, so the site never shows invented numbers. */
-      stats: { guilds: state.guilds, gateway: state.gateway },
-      guildInfo: state.guildInfo || null,
+      stats: { guilds: state.guilds, gateway: state.gateway, commands: state.commandNames ? state.commandNames.length : 0 },
     }));
     return;
   }
