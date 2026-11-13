@@ -230,7 +230,7 @@ export function serverModal(existing) {
       row([input("srv_name", "Server name", e.name || "", !existing)]),
       row([input("srv_host", "Server IP or host", e.host || "", true)]),
       row([input("srv_port", "RCON port", e.port ? String(e.port) : "", true)]),
-      row([input("srv_pass", existing ? "New RCON password (leave blank to keep saved password)" : "RCON password", "", !existing)]),
+      row([input("srv_pass", existing ? "New RCON password (blank keeps old)" : "RCON password", "", !existing)]),
     ] };
 }
 export function serverPicker(ctx) {
