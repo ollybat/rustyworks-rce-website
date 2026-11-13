@@ -1320,17 +1320,31 @@ async function botSettings(request, env) {
   if (given !== expected) return json({ ok: false, reason: "bad-token" }, 403);
   /* The bot's panels write the same sections the site's own assignment tools read. */
   if (request.method === "POST") return botSettingsWrite(request, env);
+  /* RCON passwords are write-only for anything running in a browser. The bot asks for the
+     full copy on its own token (?full=1) because it is the only thing that speaks RCON. */
+  const wantsFull = new URL(request.url).searchParams.get("full") === "1";
   const servers = await storedServers(env);
+  const storedLinks = (await readJson(env, LINKS_KEY)) || {};
   return json({
     ok: true,
     readAt: Date.now(),
     staffRoles: (await readJson(env, ROLES_KEY)) || null,
     logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
     kits: (await readJson(env, KITS_KEY)) || null,
-    links: (await readJson(env, LINKS_KEY)) || null,
+    /* Flat lists, because this is the shape the bot loads and writes back. */
+    links: Array.isArray(storedLinks.links) ? storedLinks.links : [],
+    pending: Array.isArray(storedLinks.pending) ? storedLinks.pending : [],
+    linkPanel: storedLinks.linkPanel || null,
     staffRules: await accessRules(env),
     servers: servers.servers.map(function (row) {
-      return { id: row.id, name: row.name, host: row.host, port: row.port, password: row.password };
+      return {
+        id: row.id,
+        name: row.name,
+        host: row.host,
+        port: row.port,
+        hasPassword: Boolean(row.password),
+        password: wantsFull ? String(row.password || "") : "",
+      };
     }),
   }, 200);
 }
@@ -1389,15 +1403,28 @@ async function botSettingsWrite(request, env) {
   if (Array.isArray(body.servers)) {
     const held = (await storedServers(env)).servers.slice();
     body.servers.forEach(function (row) {
-      if (!row || !row.id) return;
+      if (!row || typeof row !== "object") return;
+      const id = row.id ? String(row.id) : "";
+      if (id && row.remove === true) {
+        const gone = held.findIndex(function (x) { return x.id === id; });
+        if (gone > -1) held.splice(gone, 1);
+        return;
+      }
+      /* A server sent without an id is new: the site issues the id so the same row can be
+         edited later instead of being added again on every save. */
+      const newId = id || ("web-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7));
+      const at = held.findIndex(function (x) { return x.id === newId; });
+      const before = at > -1 ? held[at] : null;
+      const typed = String(row.password || "");
       const clean = {
-        id: String(row.id),
+        id: newId,
         name: String(row.name || "server").slice(0, 60),
         host: String(row.host || ""),
         port: Number(row.port),
-        password: String(row.password || ""),
+        /* Blank means "leave the saved password alone", so a form can never wipe a
+           working RCON connection by saving an untouched field. */
+        password: typed || (before ? String(before.password || "") : ""),
       };
-      const at = held.findIndex(function (x) { return x.id === clean.id; });
       if (at > -1) held[at] = clean; else held.push(clean);
     });
     if (await writeJson(env, SERVERS_KEY, { servers: held, updatedAt: Date.now() })) wrote.push("servers");
@@ -1416,7 +1443,12 @@ async function botSettingsWrite(request, env) {
     const current = (await readJson(env, KITS_KEY)) || {};
     if (await writeJson(env, KITS_KEY, Object.assign({}, current, body.kits, { updatedAt: Date.now() }))) wrote.push("kits");
   }
-  return json({ ok: true, wrote: wrote, at: Date.now() }, 200);
+  /* The saved servers are handed back (without passwords) so a form can pick up the ids
+     the site just issued instead of guessing them. */
+  const after = (await storedServers(env)).servers.map(function (row) {
+    return { id: row.id, name: row.name, host: row.host, port: row.port, hasPassword: Boolean(row.password) };
+  });
+  return json({ ok: true, wrote: wrote, servers: after, at: Date.now() }, 200);
 }
 
 const ROLE_SLOTS = [
