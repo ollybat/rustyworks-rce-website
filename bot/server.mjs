@@ -482,6 +482,28 @@ function takePendingGive(userId) {
   return entry && entry.expiresAt > Date.now() ? entry.gamertag : '';
 }
 
+async function writeRconAudit(actorId, options, result) {
+  const channelId = String((settings.logChannels || {}).rcon || '');
+  if (!channelId) return;
+  const command = String((options && options.command) || 'serverinfo').replace(/[\r\n]+/g, ' ').slice(0, 120);
+  const host = String((options && options.host) || 'unknown').slice(0, 100);
+  const port = Number(options && options.port);
+  const destination = host + (Number.isInteger(port) ? ':' + port : '');
+  const ok = !!(result && result.ok);
+  const embed = panelEmbed(ok ? 0x3ba55d : 0xdc4c4c, ok ? 'RCON command completed' : 'RCON command failed',
+    'Requested by: ' + (actorId ? '<@' + actorId + '>' : 'unknown') +
+    '\nDestination: ' + destination +
+    '\nCommand: ' + command +
+    '\nResult: ' + (ok ? 'success' : String((result && result.reason) || 'no answer')) +
+    (Number.isFinite(Number(result && result.ms)) ? '\nTime: ' + Math.round(Number(result.ms)) + ' ms' : ''));
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel && typeof channel.send === 'function') await channel.send({ embeds: [embed] });
+  } catch (error) {
+    log('RCON audit log could not be posted:', String((error && error.message) || error).slice(0, 200));
+  }
+}
+
 function botCtx() {
   return {
     siteUrl: SITE_URL,
@@ -541,8 +563,16 @@ function botCtx() {
       persistSettings(['kits']).catch(function () {});
       return settings.kits.known.length;
     },
-    rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
-    rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
+    rconTest: async function (o) {
+      const result = await rconRun(Object.assign({}, o, { allowAny: false }));
+      await writeRconAudit(this.actorId, o, result);
+      return result;
+    },
+    rconRun: async function (o) {
+      const result = await rconRun(Object.assign({}, o, { allowAny: true }));
+      await writeRconAudit(this.actorId, o, result);
+      return result;
+    },
   };
 }
 
@@ -667,6 +697,7 @@ async function runCommand(interaction) {
   const name = interaction.commandName;
   if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user' && name !== 'server') return;
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   if (name !== 'ping' && name !== 'help' && !permitted(interaction, ctx)) {
     await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
     return;
@@ -705,6 +736,7 @@ async function runCommand(interaction) {
 async function runButton(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   if (id === 'ping:again') return await answerPanel(interaction, await pingReply(ctx));
   /* /server buttons re-ask the same read-only question, so they are one line. */
   if (id.indexOf('server:') === 0) return await answerPanel(interaction, await serverSnapshot(ctx, id.slice('server:'.length)));
@@ -783,6 +815,7 @@ async function runButton(interaction) {
 async function runSelect(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   const first = String((interaction.values || [])[0] || '');
   if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first));
@@ -844,6 +877,7 @@ async function runModal(interaction) {
   const id = customId(interaction);
   const fields = modalFields(interaction);
   const ctx = botCtx();
+  ctx.actorId = String((interaction.user && interaction.user.id) || '');
   /* A member linking themselves is not a staff action. */
   if (id === 'modal:link:self') {
     const answer = requestLink(interaction.user.id, fields.link_gamertag);
