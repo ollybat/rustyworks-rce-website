@@ -191,11 +191,11 @@ export async function run({ world, make, interact }) {
   it = await go(make.button(ADMIN, "kits:delivery"), "open the delivery form");
   expect("the delivery form opens", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes("kit_give"), text(it.calls));
   it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: "kit give" }), "save delivery without placeholders");
-  expect("a give command without {player} and {kit} is refused", text(last(it)).includes("Not saved"), text(last(it)));
+  expect("a give command without {player} and {kit} is refused", text(last(it)).includes("Delivery settings not saved"), text(last(it)));
   it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"' }), "save delivery");
   w = await writes();
   expect("delivery settings are saved to the website", ((latest(w).kits || {}).listCommand === "kit list") && /\{player\}/.test((latest(w).kits || {}).giveCommand || ""), text(latest(w).kits));
-  expect("the saved reply shows an example", text(last(it)).includes("Delivery saved"), text(last(it)));
+  expect("the saved reply shows an example and cooldown", text(last(it)).includes("Delivery settings saved") && text(last(it)).includes("30s"), text(last(it)));
   it = await go(make.button(ADMIN, "kits:grab"), "read kit names from the panel");
   expect("Read kit names answers from the panel", it.firstAckAt !== null && text(last(it)).length > 10, text(last(it)).slice(0, 300));
 
