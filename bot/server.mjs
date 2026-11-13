@@ -188,16 +188,19 @@ async function saveServer(s) {
   };
   const at = settings.servers.findIndex(function (x) { return x.id === entry.id; });
   if (at > -1) settings.servers[at] = entry; else settings.servers.push(entry);
-  return persistSettings();
+  return persistSettings(['servers']);
 }
 
 function installKitCode(raw, text) {
-  const key = createHash('sha1').update(String(raw)).digest('hex').slice(0, 16);
-  settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
-  const keys = Object.keys(settings.installs);
-  if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
-  persistSettings().catch(function () { /* reported the next time settings are saved */ });
-  return Object.keys(settings.installs).length;
+  const key = createHash('sha256').update(String(raw)).digest('hex').slice(0, 20);
+  const records = settings.kits.installCodes || (settings.kits.installCodes = {});
+  records[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
+  const keys = Object.keys(records).sort(function (a, b) {
+    return String(records[a].at).localeCompare(String(records[b].at));
+  });
+  if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete records[k]; });
+  persistSettings(['kits']).catch(function () {});
+  return Object.keys(records).length;
 }
 
 function setAuthSpawn(group, kit) {
@@ -205,7 +208,7 @@ function setAuthSpawn(group, kit) {
   if (!name) return;
   if (kit && String(kit).trim()) settings.kits.authSpawn[name] = String(kit).trim().slice(0, 60);
   else delete settings.kits.authSpawn[name];
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
 }
 
 function cooldownCount() { return cooldowns.size; }
@@ -252,7 +255,7 @@ function saveBind(data, keepRole, preserve) {
   if (!roleId && preserve && previous) roleId = previous.roleId || null;
   const entry = { emote: emote, kits: kits, cooldown: cooldown, roleId: roleId };
   if (at > -1) settings.kits.binds[at] = entry; else settings.kits.binds.push(entry);
-  persistSettings().catch(function () {});
+  persistSettings(['kits']).catch(function () {});
   return entry;
 }
 
@@ -288,7 +291,7 @@ function addLink(userId, gamertag, by) {
   settings.pending = settings.pending.filter(function (p) {
     return p.userId !== id && p.gamertag.toLowerCase() !== tag.toLowerCase();
   });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag, userId: id };
 }
 function removeLink(which) {
@@ -298,7 +301,7 @@ function removeLink(which) {
     return l.gamertag.toLowerCase() !== wanted.toLowerCase() && l.userId !== wanted;
   });
   settings.pending = settings.pending.filter(function (p) { return p.userId !== wanted; });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return before - settings.links.length;
 }
 function moveLink(gamertag, newUserId, newGamertag) {
@@ -319,7 +322,7 @@ function moveLink(gamertag, newUserId, newGamertag) {
   }
   settings.links = settings.links.filter(function (l) { return l !== current; });
   settings.links.push({ userId: id, gamertag: tag, at: current.at, by: current.by || id, movedAt: new Date().toISOString() });
-  persistSettings().catch(function () {});
+  persistSettings(['links']).catch(function () {});
   return { ok: true, gamertag: tag, userId: id };
 }
 function requestLink(userId, gamertag) {
@@ -334,7 +337,7 @@ function requestLink(userId, gamertag) {
   }
   settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
   settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag };
 }
 
@@ -382,7 +385,7 @@ async function postLinkPanel(channelId) {
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
     const message = await channel.send(linkPanelPayload());
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['linkPanel']);
     return { ok: true, saved: wrote.ok, detail: wrote.detail || '' };
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
@@ -576,7 +579,7 @@ async function runButton(interaction) {
   if (id === 'help:home') return await answerPanel(interaction, helpHome());
   if (id === 'kits:lock') {
     settings.kits.locked = !settings.kits.locked;
-    persistSettings().catch(function () {});
+    persistSettings(['kits']).catch(function () {});
     return await answerPanel(interaction, kitsPanel(ctx));
   }
   if (id.indexOf('kits:role:skip:') === 0) {
@@ -596,7 +599,7 @@ async function runSelect(interaction) {
     const typeKey = id.slice('setup:channel:'.length);
     const found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
     settings.logChannels[typeKey] = first;
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['logChannels']);
     return await answerPanel(interaction, {
       embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Log channel set',
         (found ? found[1] : typeKey) + ' goes to <#' + first + '>.' + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
@@ -672,7 +675,7 @@ async function runModal(interaction) {
       if (/^[0-9]{5,25}$/.test(value)) { settings.staffRoles[slot[0]] = value; saved += 1; }
       else skipped += 1;
     });
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['staffRoles']);
     return await answerModal(interaction, {
       embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Roles saved',
         saved + ' role id(s) stored' + (skipped ? ', ' + skipped + ' value(s) skipped because they were not role ids' : '') + '.' +
