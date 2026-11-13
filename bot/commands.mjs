@@ -454,7 +454,9 @@ export function helpDetail(name) {
   };
   var out = pages[name] || pages.ping;
   out.fields = extras[name] || [];
-  return out;
+  /* Components must return a message payload, not a bare embed. This is the object
+     the button router passes to interaction.update(). */
+  return { embeds: [out], components: [row([button("help:home", "Back to help", 2)])], flags: EPH };
 }
 
 /* /setup status ------------------------------------------------------------ */
