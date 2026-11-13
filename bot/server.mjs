@@ -649,6 +649,10 @@ async function routeInteraction(interaction) {
     const reference = Date.now().toString(36);
     const message = String((error && (error.stack || error.message)) || error);
     log('interaction failed [' + reference + ']:', message.slice(0, 1200));
+    if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) {
+      try { await interaction.respond([]); } catch (e) { /* expired autocomplete */ }
+      return;
+    }
     const body = { embeds: [panelEmbed(0xdc4c4c, 'That failed', 'The bot could not complete this action. Please try again. Reference: ' + reference)], flags: 64 };
     try {
       if (interaction.deferred || interaction.replied) {
