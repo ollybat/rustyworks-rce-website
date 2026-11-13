@@ -51,7 +51,7 @@ function readToken(envVars) {
     const value = cleanEnvValue(envVars[name]);
     if (value) return { token: value, source: name };
   }
-  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC/i.test(k));
+  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC|SETTINGS/i.test(k));
   if (loose) return { token: cleanEnvValue(envVars[loose]), source: loose + ' (matched by name)' };
   return { token: '', source: null };
 }
