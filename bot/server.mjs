@@ -19,7 +19,8 @@ import { createServer } from 'node:http';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from 'discord.js';
 import handler from './interactions-worker.js';
 import net from 'node:net';
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { isPublicAddress, rconHostAllowed } from './network-guard.mjs';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
@@ -47,7 +48,7 @@ function readToken(envVars) {
     const value = cleanEnvValue(envVars[name]);
     if (value) return { token: value, source: name };
   }
-  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC/i.test(k));
+  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC|SETTINGS/i.test(k));
   if (loose) return { token: cleanEnvValue(envVars[loose]), source: loose + ' (matched by name)' };
   return { token: '', source: null };
 }
@@ -93,13 +94,16 @@ const settings = {
   staffRoles: {},
   logChannels: {},
   servers: [],
-  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '' },
+  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '', giveCooldownSeconds: 30, installCodes: {} },
   installs: {},
   links: [],
   pending: [],
   linkPanel: null,
 };
 const cooldowns = new Map();
+const activeKitGives = new Set();
+let settingsTimer = null;
+let persistQueue = Promise.resolve();
 
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
 
@@ -107,22 +111,27 @@ function panelEmbed(color, title, description) { return { color: color, title: t
 function panelRow(components) { return { type: 1, components: components }; }
 function panelButton(id, label, style) { return { type: 2, custom_id: id, label: label, style: style || 2 }; }
 
-async function persistSettings() {
+async function persistSettingsNow(sections) {
   const token = settingsToken();
   if (!token) return { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set on this service, so the website cannot be written to' };
+  const all = {
+    staffRoles: settings.staffRoles,
+    logChannels: settings.logChannels,
+    servers: settings.servers,
+    kits: settings.kits,
+    links: settings.links,
+    pending: settings.pending,
+    linkPanel: settings.linkPanel,
+  };
+  const outgoing = {};
+  (Array.isArray(sections) && sections.length ? sections : Object.keys(all)).forEach(function (key) {
+    if (Object.prototype.hasOwnProperty.call(all, key)) outgoing[key] = all[key];
+  });
   try {
     const res = await fetch(SITE_URL + '/api/bot/settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-settings-token': token },
-      body: JSON.stringify({
-        staffRoles: settings.staffRoles,
-        logChannels: settings.logChannels,
-        servers: settings.servers,
-        kits: settings.kits,
-        links: settings.links,
-        pending: settings.pending,
-        linkPanel: settings.linkPanel,
-      }),
+      body: JSON.stringify(outgoing),
       signal: AbortSignal.timeout(8000),
     });
     const body = await res.json().catch(function () { return {}; });
@@ -131,6 +140,15 @@ async function persistSettings() {
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
   }
+}
+
+function persistSettings(sections) {
+  /* Serialize saves so quick updates cannot arrive out of order. Send only the
+     sections that changed so the bot cannot overwrite newer website edits. */
+  const run = () => persistSettingsNow(sections);
+  const pending = persistQueue.then(run, run);
+  persistQueue = pending.then(() => undefined, () => undefined);
+  return pending;
 }
 
 
