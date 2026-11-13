@@ -184,7 +184,7 @@ export async function pingReply(ctx) {
 /* /setup ------------------------------------------------------------------- */
 export function setupPanel(ctx) {
   var roles = ctx.settings.staffRoles || {};
-  var setRoles = ROLE_SLOTS.filter(function (s) { return roles[s[0]]; });
+  var setRoles = ROLE_SLOTS.filter(function (s) { return s[0] !== "linked" && roles[s[0]]; });
   var channels = ctx.settings.logChannels || {};
   var setChannels = LOG_TYPES.filter(function (s) { return channels[s[0]]; });
   var servers = ctx.servers();
