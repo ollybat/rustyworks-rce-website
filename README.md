@@ -204,13 +204,22 @@ staff roles configured during setup. Requests from another guild are refused. In
 HTTP endpoints that expose guild metadata, test RCON or reconnect the Gateway require
 the shared `BOT_SETTINGS_TOKEN`; this secret must never be sent to a browser.
 
-Manual kit giveaways use the configured RCON give template. Per-player/per-kit cooldowns
-apply after successful sends, and staff can pause manual delivery. Emote-bind and Auth
-Group respawn settings are stored preferences only until a Rust game-event/plugin
-connector is connected; the bot does not claim those in-game events are active.
+Manual kit delivery is configured from the Discord **/kits config** panel: set the
+Rust plugin list command, a give template containing `{player}` and `{kit}`, and the
+per-player/per-kit cooldown. The same panel can read kit names from a selected saved
+server, pause delivery, and open Kit Studio. A successful RCON giveaway starts its
+cooldown; failed attempts do not. RCON requests are queued, DNS-pinned to a validated
+public address, bounded by packet/response limits, and optionally written to the
+configured RCON audit channel without logging passwords.
 
-Kit Studio can export a code and the bot can preview it and recognise kit names for
-autocomplete. The bot does not execute the pasted code or install items on the Rust server.
+The bot offers native autocomplete for saved servers, confirmed linked gamertags and kit
+names learned from a live list response or a validated Kit Studio code preview. Manual
+giveaways resolve Discord users to their confirmed Rust gamertag and never send a Discord
+snowflake as a player name. Emote-bind and Auth Group respawn settings remain saved
+preferences only until a Rust game-event/plugin connector is connected.
+
+Kit Studio codes are validated and previewed as text. The bot does not execute pasted code
+or install items on the Rust server.
 
 ## Configuration
 
