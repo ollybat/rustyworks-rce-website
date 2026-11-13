@@ -85,7 +85,8 @@ export const COMMANDS = [
       { type: 1, name: "transfer", description: "Move a link to a new Discord account or a new gamertag" },
       { type: 1, name: "linkpanel", description: "Post a panel with Link Account and Unlink buttons in a channel",
         options: [{ type: 7, name: "channel", description: "Channel to post it in", channel_types: [0] }] },
-      { type: 1, name: "roster", description: "See every linked player" },
+      { type: 1, name: "roster", description: "See every linked player",
+        options: [{ type: 3, name: "search", description: "Optional gamertag or Discord ID filter", required: false }] },
     ] },
   { name: "server", description: "Ask your Rust server over RCON without changing anything", dm_permission: false,
     options: [
@@ -244,7 +245,7 @@ export function serverModal(existing) {
       row([input("srv_name", "Server name", e.name || "", !existing)]),
       row([input("srv_host", "Server IP or host", e.host || "", true)]),
       row([input("srv_port", "RCON port", e.port ? String(e.port) : "", true)]),
-      row([input("srv_pass", "RCON password", "", !existing)]),
+      row([input("srv_pass", existing ? "New password (blank keeps saved)" : "RCON password", "", !existing)]),
     ] };
 }
 export function serverPicker(ctx) {
@@ -1302,17 +1303,32 @@ export function transferModal(gamertag) {
   ] };
 }
 
-export function rosterPanel(ctx) {
+export function rosterPanel(ctx, page, query) {
   var held = linkRecords(ctx);
-  var lines = held.links.slice(0, 40).map(function (l) {
-    return "<@" + l.userId + "> -> " + code(l.gamertag) + (l.by ? " (by <@" + l.by + ">)" : "");
+  var search = String(query || "").trim().toLowerCase();
+  var links = (held.links || []).filter(function (link) {
+    return !search || String(link.gamertag || "").toLowerCase().includes(search)
+      || String(link.userId || "").includes(search);
   });
-  var built = embed(0x3ba55d, "Linked players", held.links.length
-    ? "Every link on record, newest last."
-    : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**.");
-  if (lines.length) built.fields = [field("Roster (" + held.links.length + ")", lines.join("\n").slice(0, 1000), false)];
-  if (held.links.length > 40) built.fields.push(field("Cut off", "Showing the first 40 of " + held.links.length + ".", false));
-  return { embeds: [built], components: [row([button("user:config", "Back to links", 2), button("user:panel", "Post the link panel", 1)])], flags: EPH };
+  var pageSize = 20;
+  var pages = Math.max(1, Math.ceil(links.length / pageSize));
+  var current = Math.max(1, Math.min(pages, Number(page) || 1));
+  var start = (current - 1) * pageSize;
+  var lines = links.slice(start, start + pageSize).map(function (link) {
+    return "<@" + link.userId + "> -> " + code(link.gamertag) + (link.by ? " (by <@" + link.by + ">)" : "");
+  });
+  var built = embed(0x3ba55d, search ? "Linked players - search" : "Linked players",
+    links.length
+      ? (search ? "Matches for " + code(String(query).slice(0, 50)) + "." : "Every link on record, newest last.")
+        + " Page " + current + " of " + pages + "."
+      : search ? "No linked players matched " + code(String(query).slice(0, 50)) + "." : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**.");
+  if (lines.length) built.fields = [field("Matching links (" + links.length + ")", lines.join("\n").slice(0, 1000), false)];
+  var navigation = [];
+  if (current > 1) navigation.push(button("user:roster:page:" + (current - 1), "Previous page", 2));
+  if (current < pages) navigation.push(button("user:roster:page:" + (current + 1), "Next page", 2));
+  navigation.push(button("user:config", "Back to links", 2));
+  navigation.push(button("user:panel", "Post the link panel", 1));
+  return { embeds: [built], components: [row(navigation)], flags: EPH };
 }
 
 export function pendingPanel(ctx) {
@@ -1674,7 +1690,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "forceunlink") return unlinkPicker(ctx);
     if (sub === "transfer") return transferPicker(ctx);
     if (sub === "linkpanel") return options.channel ? { postPanelTo: options.channel } : channelPickerForPanel();
-    if (sub === "roster") return rosterPanel(ctx);
+    if (sub === "roster") return rosterPanel(ctx, 1, options.search);
     return userPanel(ctx);
   }
   return { content: "That command is not wired up here yet.", flags: EPH };
