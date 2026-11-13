@@ -398,8 +398,8 @@ async function proxyApi(request, env, ctx) {
       connected: false,
       reason: "not_connected",
       message: "No bot API is connected yet. Set BOT_API_ORIGIN on this app to your bot's address."
-
-[1747 more lines in file. Use offset=401 to continue.]
+    }, 503);
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
@@ -800,8 +800,8 @@ async function authCallback(request, env) {
      link, which gains nothing on a page that only reports your own access. */
   const signedState = await verifySigned(env, state);
   const cookieMatches = Boolean(expectedState) && sameString(String(state), String(expectedState));
-
-[1345 more lines in file. Use offset=803 to continue.]
+  if (!code) {
+    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "no code came back from Discord" });
     return html("<p>Discord did not send a sign-in code back. <a href=\"/dashboard\">Start again</a>.</p>", 400);
   }
   if (!signedState && !cookieMatches) {
@@ -1202,8 +1202,8 @@ async function resolveSecrets(env) {
       : (stored && stored.clientSecret ? "this site's own storage" : (botExchange ? "the bot's service" : "nowhere yet")),
   };
   secretsCache = { at: now, value: value };
-
-[943 more lines in file. Use offset=1205 to continue.]
+  return value;
+}
 
 function forgetSecrets() { secretsCache = { at: 0, value: null }; }
 
@@ -1604,8 +1604,8 @@ async function ownerApi(request, env) {
     const settings = {
       name: tidy(body.name, 80),
       platform: tidy(body.platform, 30),
-
-[541 more lines in file. Use offset=1607 to continue.]
+      region: tidy(body.region, 40),
+      rate: tidy(body.rate, 20),
       wipe: tidy(body.wipe, 120),
       connect: tidy(body.connect, 120),
       joinUrl: tidy(body.joinUrl, 300),
@@ -2006,8 +2006,8 @@ async function dashboard(request, env) {
         <p style="margin-top:12px">Signed in as a Discord account; the session cookie is signed by this site and expires after ${SESSION_DAYS} days.</p>
       </div>
 
-
-[139 more lines in file. Use offset=2009 to continue.]
+      <div class="panel-box">
+        <h2 style="margin-bottom:10px">Coming from the bot</h2>
         <p>`/dashboard` in Discord replies privately with a link straight to this page. The command is hidden from
         everyone else in the server, and only the server owner can open what it links to.</p>
       </div>
