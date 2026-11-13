@@ -14,16 +14,14 @@
     <meta name="application-name" content="Spinback RCE">
     <meta
       name="description"
-      content="Spinback RCE settings: appearance and browser storage choices, plus the owner console that reads and writes the bot's saved roles, log channels, Rust servers, kits and player links.">
+      content="Spinback RCE settings: pick your staff roles and log channels from the bot\u2019s own live list, test Rust RCON connections, and manage appearance and browser storage. No ids to copy.">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/settings.html">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Spinback RCE">
     <meta property="og:title" content="Settings — Spinback RCE">
-    <meta property="og:description" content="Appearance and storage choices, plus the owner console for the bot's saved settings.">
+    <meta property="og:description" content="Click a role, pick a channel, test your RCON. Spinback\u2019s setup console.">
     <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/settings.html">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Settings — Spinback RCE">
-    <meta name="twitter:description" content="Appearance and storage choices, plus the owner console for the bot's saved settings.">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="style.css">
@@ -75,186 +73,331 @@
       </div>
     </header>
 
+    <!-- ================= the bar ================= -->
+    <div class="set-bar" id="cmdBar">
+      <div class="wrap set-bar__inner">
+        <div class="set-bar__who">
+          <img id="guildIcon" class="set-bar__icon" src="/media/spinback-icon.svg" alt="" width="40" height="40">
+          <div>
+            <strong id="guildName">Reading the bot…</strong>
+            <span id="guildMeta" class="set-bar__meta">asking this site for the server the bot is set up in</span>
+          </div>
+        </div>
+        <div class="set-bar__chips">
+          <span class="set-chip" id="chipGateway"><i class="set-dot"></i><span>gateway —</span></span>
+          <span class="set-chip" id="chipScan"><span>roles —</span></span>
+          <span class="set-chip" id="chipChannels"><span>channels —</span></span>
+          <span class="set-chip" id="chipToken"><span>token —</span></span>
+        </div>
+        <div class="set-bar__progress" title="What the bot needs before it will run anything">
+          <div class="set-bar__track"><span id="progressBar" style="width:0%"></span></div>
+          <span id="progressText" class="set-bar__ptext">setup: checking…</span>
+        </div>
+        <div class="set-bar__actions">
+          <span class="set-chip is-dirty" id="dirtyBadge" hidden><span>0 unsaved</span></span>
+          <button type="button" class="set-btn" id="scanBtn">Rescan server</button>
+          <button type="button" class="set-btn" id="discardTop" disabled>Discard</button>
+          <button type="button" class="set-btn is-primary" id="saveTop" disabled>Save changes</button>
+        </div>
+      </div>
+    </div>
+
     <main id="main">
       <section class="set-hero">
         <div class="wrap">
-          <span class="sp-kicker">Yours, not ours</span>
+          <span class="sp-kicker">Click, do not copy</span>
           <h1 class="sp-title">Settings</h1>
           <p class="sp-lede">
-            Two different things live here, and it matters which is which. <strong>Appearance</strong> and
-            <strong>browser storage</strong> are yours alone: they never leave this device.
-            <strong>Server settings</strong> is the owner console — it writes the bot's saved roles, log
-            channels, Rust servers, kit settings and player links through this site's own API, which is the
-            same place the Discord panels write to.
+            Spinback reads your server’s own roles and channels, so you choose them from a list instead of hunting
+            for ids. Nothing here needs Developer Mode: click a slot, pick the role or channel, test your RCON, save.
+            Everything is written to the same place the Discord panels write to.
           </p>
+          <div class="set-hero__grid">
+            <div class="set-card is-tight">
+              <h3>Three steps</h3>
+              <ol class="set-steps">
+                <li><strong>Rescan server</strong> pulls the live role and channel list from the bot.</li>
+                <li>Click any slot to choose from that list — searchable, no ids to copy.</li>
+                <li>Paste the settings token once, then <strong>Save changes</strong> writes all of it.</li>
+              </ol>
+            </div>
+            <div class="set-card is-tight">
+              <h3>What only Discord can do</h3>
+              <ul class="set-steps">
+                <li>Approving a player’s link request (<code>/user forcelink</code>), because that needs to know who is asking.</li>
+                <li>Reading your Rust server’s own logs and config.</li>
+                <li>Anything the bot cannot verify — it says so rather than guessing.</li>
+              </ul>
+            </div>
+          </div>
           <div class="set-toc">
+            <a href="#access">Owner access</a>
+            <a href="#setup">Checklist</a>
+            <a href="#roles">Staff roles</a>
+            <a href="#logs">Log channels</a>
+            <a href="#servers">Rust servers</a>
+            <a href="#kits">Kits</a>
+            <a href="#links">Player links</a>
             <a href="#appearance">Appearance</a>
-            <a href="#storage">This browser</a>
-            <a href="#owner">Server settings</a>
-            <a href="#token">About the token</a>
+            <a href="#diagnostics">Diagnostics</a>
           </div>
         </div>
       </section>
+
+      <!-- ================= token gate ================= -->
+      <section class="sp-section" id="access">
+        <div class="wrap">
+          <div class="set-card">
+            <div class="set-card__head">
+              <div>
+                <h3>Owner access</h3>
+                <p class="set-note">
+                  One shared secret between this site and the bot: <code>BOT_SETTINGS_TOKEN</code>. It is kept in this
+                  tab only, sent only to this site’s own API, and never put in a URL. Without it the page still reads
+                  everything — it just cannot write.
+                </p>
+              </div>
+              <span class="set-chip" id="accessChip"><span>not checked</span></span>
+            </div>
+            <div class="set-row">
+              <div>
+                <label for="token">Settings token</label>
+                <p>Same value in both places. The bot reads it as <code>BOT_SETTINGS_TOKEN</code> too.</p>
+              </div>
+              <div class="set-field">
+                <input type="password" id="token" placeholder="paste the token" autocomplete="off" spellcheck="false">
+              </div>
+            </div>
+            <div class="set-actions">
+              <button type="button" class="set-btn is-primary" id="loadBtn">Unlock with this token</button>
+              <button type="button" class="set-btn" id="forgetToken">Forget token</button>
+              <span class="set-state" id="loadState" role="status" aria-live="polite"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div id="console" hidden>
+        <section class="sp-section" id="setup">
+          <div class="wrap">
+            <div class="sp-head">
+              <span class="sp-kicker">The gate</span>
+              <h2 class="sp-title">Setup checklist</h2>
+              <p class="sp-lede">The bot runs nothing until this list is finished. It is the same list the Discord gate shows.</p>
+            </div>
+            <div class="set-checklist" id="checkItems"></div>
+          </div>
+        </section>
+
+        <section class="sp-section" id="roles">
+          <div class="wrap">
+            <div class="sp-head">
+              <span class="sp-kicker">Who may run staff commands</span>
+              <h2 class="sp-title">Staff roles</h2>
+              <p class="sp-lede">
+                Click a slot and choose from your server’s real roles. Anyone with one of these roles may use staff
+                commands; the owner and anyone with Administrator can always do so as well.
+              </p>
+            </div>
+            <div class="set-card">
+              <div class="set-actions is-top">
+                <button type="button" class="set-btn" id="suggestRoles">Suggest roles by name</button>
+                <button type="button" class="set-btn" id="clearRoles">Clear all role slots</button>
+                <span class="set-state" id="roleState" role="status" aria-live="polite"></span>
+              </div>
+              <div class="set-slots" id="roleSlots"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sp-section" id="logs">
+          <div class="wrap">
+            <div class="sp-head">
+              <span class="sp-kicker">Where the bot reports</span>
+              <h2 class="sp-title">Log channels</h2>
+              <p class="sp-lede">
+                Fifteen log types, one channel each. A type left off sends nothing. A channel the bot cannot post in
+                is flagged, because a log target it cannot write to is worse than none.
+              </p>
+            </div>
+            <div class="set-card">
+              <div class="set-actions is-top">
+                <button type="button" class="set-btn" id="suggestLogs">Match channels by name</button>
+                <button type="button" class="set-btn" id="clearLogs">Turn all logs off</button>
+                <span class="set-state" id="logState" role="status" aria-live="polite"></span>
+              </div>
+              <div class="set-logs" id="logRows"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sp-section" id="servers">
+          <div class="wrap">
+            <div class="sp-head">
+              <span class="sp-kicker">RCON</span>
+              <h2 class="sp-title">Rust servers</h2>
+              <p class="sp-lede">
+                The connections the bot talks to for player lists, kits and the health check. Passwords are write-only:
+                you can set one, never read one back, and a saved server is tested by its id so its password never
+                reaches a browser.
+              </p>
+            </div>
+            <div class="set-card">
+              <div id="serverCards"></div>
+              <div class="set-actions is-top">
+                <button type="button" class="set-btn" id="testAll">Test every saved server</button>
+                <span class="set-note">The bot allows six checks a minute, so a long list is tested slowly on purpose.</span>
+              </div>
+            </div>
+            <div class="set-card">
+              <h3>Add a Rust server</h3>
+              <p class="set-note">Address and RCON port come from your server’s config; the password is the one in <code>server.cfg</code> (rcon.password).</p>
+              <div class="set-grid">
+                <label>Name <input type="text" id="newName" placeholder="5x EU clan server"></label>
+                <label>Address <input type="text" id="newHost" placeholder="1.2.3.4 or my.server.name"></label>
+                <label>RCON port <input type="text" id="newPort" inputmode="numeric" placeholder="28017"></label>
+                <label>RCON password <input type="password" id="newPass" placeholder="from server.cfg" autocomplete="off"></label>
+              </div>
+              <div class="set-actions">
+                <button type="button" class="set-btn" id="addServer">Add to the list</button>
+                <button type="button" class="set-btn" id="testNew">Test this connection first</button>
+                <span class="set-state" id="serverState" role="status" aria-live="polite"></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sp-section" id="kits">
+          <div class="wrap">
+            <div class="sp-head">
+              <span class="sp-kicker">Emote kits</span>
+              <h2 class="sp-title">Kit settings</h2>
+              <p class="sp-lede">The bot never invents a plugin command. Leave a field blank and the matching subcommand tells you exactly what is missing.</p>
+            </div>
+            <div class="set-card">
+              <div class="set-grid">
+                <label>Kit list command <input type="text" id="kitList" placeholder="the command your kit plugin uses to list kits"></label>
+                <label>Give template <input type="text" id="kitGive" placeholder="e.g. kit give {player} {kit}"></label>
+              </div>
+              <label class="set-inline"><input type="checkbox" id="kitLocked" class="set-switch"> Lock kits so only staff may give them</label>
+              <p class="set-note">Placeholders: <code>{player}</code> the gamertag, <code>{kit}</code> the kit name. A template with neither is kept as you typed it, not silently rewritten.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="sp-section" id="links">
+          <div class="wrap">
+            <div class="sp-head">
+              <span class="sp-kicker">Discord account to gamertag</span>
+              <h2 class="sp-title">Player links <span class="set-badge" id="linkBadge">—</span></h2>
+              <p class="sp-lede">
+                The list the whole bot runs on. Read-only here on purpose: linking, unlinking and transfers happen in
+                Discord, where the bot can check who is asking rather than trusting whoever holds a token.
+              </p>
+            </div>
+            <div class="set-card">
+              <div class="set-actions is-top">
+                <input type="search" id="linkSearch" placeholder="Search gamertags or Discord ids" aria-label="Search links">
+                <span class="set-state" id="linkState">—</span>
+              </div>
+              <div class="set-roster" id="linkRoster"></div>
+              <div class="set-card is-sub" id="pendingCard" hidden>
+                <h3>Waiting for staff</h3>
+                <p class="set-note">These asked to link and are not linked yet. A request is not proof: approve it in Discord with <code>/user forcelink</code>.</p>
+                <div class="set-roster" id="pendingRoster"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
 
       <section class="sp-section" id="appearance">
         <div class="wrap">
           <div class="sp-head">
             <span class="sp-kicker">This device only</span>
-            <h2 class="sp-title">Appearance</h2>
-            <p class="sp-lede">Saved in this browser, applied immediately, and never sent anywhere. The theme is the same choice every other page on this site reads when it loads.</p>
+            <h2 class="sp-title">Appearance and storage</h2>
+            <p class="sp-lede">Nothing in this section is sent anywhere. It is the same preference every other page on this site reads.</p>
           </div>
           <div class="set-card">
             <div class="set-row">
               <div>
-                <label for="setTheme">Theme</label>
+                <label>Theme</label>
                 <p>Dark is the default. Light keeps the same layout with the paper palette.</p>
               </div>
-              <select id="setTheme">
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
+              <div class="set-seg" id="themeSeg" role="radiogroup" aria-label="Theme">
+                <button type="button" role="radio" data-theme-value="dark" aria-checked="false">Dark</button>
+                <button type="button" role="radio" data-theme-value="light" aria-checked="false">Light</button>
+              </div>
             </div>
             <div class="set-row">
               <div>
                 <label for="setReduceMotion">Reduce motion</label>
-                <p>Turns off the reveal animations, the backdrop and the progress bar. Your operating system's own reduced-motion setting already does this; this makes the choice explicit.</p>
+                <p>Turns off the reveal animations, the backdrop and the progress bar. Your operating system setting already does this; this makes it explicit.</p>
               </div>
               <input type="checkbox" id="setReduceMotion" class="set-switch">
             </div>
             <div class="set-row">
               <div>
                 <label for="setSeasonal">Seasonal touches</label>
-                <p>Small time-of-year decorations on the site. Off means no decorations at all.</p>
+                <p>Small time-of-year decorations. Off means none at all.</p>
               </div>
               <input type="checkbox" id="setSeasonal" class="set-switch">
             </div>
             <p class="set-note" id="appearanceNote">Changes apply as you make them.</p>
           </div>
-        </div>
-      </section>
-
-      <section class="sp-section" id="storage">
-        <div class="wrap">
-          <div class="sp-head">
-            <span class="sp-kicker">No account, no server</span>
-            <h2 class="sp-title">What this browser is holding</h2>
-            <p class="sp-lede">The Kit Studio and the Colour Studio save to this browser, not to us. Here is exactly what is stored, with a button to clear each one.</p>
-          </div>
           <div class="set-card">
-            <table class="set-table">
-              <thead><tr><th>What</th><th>Stored here</th><th></th></tr></thead>
-              <tbody>
-                <tr><td>Kit Studio kits</td><td id="kitsCount">0</td><td><button type="button" class="set-btn" id="clearKits">Clear kits</button></td></tr>
-                <tr><td>Colour Studio palettes</td><td id="palettesCount">0</td><td><button type="button" class="set-btn" id="clearPalettes">Clear palettes</button></td></tr>
-                <tr><td>Appearance choices</td><td id="prefCount">0</td><td><button type="button" class="set-btn" id="clearPrefs">Reset appearance</button></td></tr>
-              </tbody>
-            </table>
-            <p class="set-note" id="storageNote">Nothing here is sent to the bot, and nothing here needs a sign-in.</p>
+            <h3>What this browser is holding</h3>
+            <div class="set-store">
+              <div class="set-store__row"><span>Kit Studio kits</span><strong id="kitsCount">0</strong><button type="button" class="set-btn" id="clearKits">Clear</button></div>
+              <div class="set-store__row"><span>Colour Studio palettes</span><strong id="palettesCount">0</strong><button type="button" class="set-btn" id="clearPalettes">Clear</button></div>
+              <div class="set-store__row"><span>Appearance choices</span><strong id="prefCount">0</strong><button type="button" class="set-btn" id="clearPrefs">Reset</button></div>
+            </div>
+            <p class="set-note" id="storageNote">No account, no sign-in, nothing uploaded.</p>
           </div>
         </div>
       </section>
 
-      <section class="sp-section" id="owner">
+      <section class="sp-section" id="diagnostics">
         <div class="wrap">
           <div class="sp-head">
-            <span class="sp-kicker">Owner console</span>
-            <h2 class="sp-title">Server settings</h2>
+            <span class="sp-kicker">Run everything</span>
+            <h2 class="sp-title">Diagnostics</h2>
             <p class="sp-lede">
-              The same settings the Discord panels write, edited here instead. Reading and saving both need the
-              settings token; without it this page says so rather than showing you an empty form.
+              Every check this page can run, in one pass, each reported with what actually came back — including the
+              failures and the parts that need a token, so nothing is hidden behind a green tick.
             </p>
           </div>
-
           <div class="set-card">
-            <div class="set-row">
-              <div>
-                <label for="token">Settings token</label>
-                <p>Set to the same value as <code>BOT_SETTINGS_TOKEN</code> on this website and on the bot. It is kept in this tab's session storage only — close the tab and it is gone.</p>
-              </div>
-              <input type="password" id="token" placeholder="paste the token" autocomplete="off" spellcheck="false">
+            <div class="set-actions is-top">
+              <button type="button" class="set-btn is-primary" id="diagRun">Run diagnostics</button>
+              <button type="button" class="set-btn" id="diagCopy">Copy report</button>
+              <span class="set-state" id="diagState" role="status" aria-live="polite">not run yet</span>
             </div>
-            <div class="set-actions">
-              <button type="button" class="set-btn is-primary" id="loadBtn">Load saved settings</button>
-              <button type="button" class="set-btn" id="forgetToken">Forget token</button>
-              <span class="set-state" id="loadState"></span>
-            </div>
-          </div>
-
-          <div id="console" hidden>
-            <div class="set-card">
-              <h3>Staff roles</h3>
-              <p class="set-note">These are the roles allowed to run staff commands. Paste role ids, or pick a name if the bot is reporting its server.</p>
-              <div class="set-grid" id="roleFields"></div>
-            </div>
-
-            <div class="set-card">
-              <h3>Logging channels</h3>
-              <p class="set-note">One channel id per log type. A type left blank is simply switched off — no logs are sent for it.</p>
-              <div class="set-grid" id="logFields"></div>
-            </div>
-
-            <div class="set-card">
-              <h3>Rust servers</h3>
-              <p class="set-note">Saved RCON connections. The password is never shown back to you; leave the field blank to keep the one already saved.</p>
-              <div id="serverList"></div>
-              <div class="set-sub">
-                <h4>Add a server</h4>
-                <div class="set-grid">
-                  <label>Name <input type="text" id="newName" placeholder="5x EU clan"></label>
-                  <label>Address <input type="text" id="newHost" placeholder="1.2.3.4 or host.name"></label>
-                  <label>RCON port <input type="text" id="newPort" placeholder="28017"></label>
-                  <label>RCON password <input type="password" id="newPass" placeholder="from server.cfg" autocomplete="off"></label>
-                </div>
-                <div class="set-actions">
-                  <button type="button" class="set-btn" id="addServer">Add to the list</button>
-                  <span class="set-state" id="serverState"></span>
-                </div>
-              </div>
-            </div>
-
-            <div class="set-card">
-              <h3>Kit settings</h3>
-              <div class="set-grid">
-                <label>Kit list command <input type="text" id="kitList" placeholder="your kit plugin's list command"></label>
-                <label>Give template <input type="text" id="kitGive" placeholder="your give command with {player} and {kit}"></label>
-              </div>
-              <label class="set-inline"><input type="checkbox" id="kitLocked" class="set-switch"> Lock kits</label>
-              <p class="set-note">The bot never guesses these names: blank means the matching Discord subcommand explains what is missing.</p>
-            </div>
-
-            <div class="set-card">
-              <h3>Player links <span class="set-badge" id="linkBadge">0</span></h3>
-              <p class="set-note">Read-only here. Linking, unlinking and transfers live in Discord, where the bot can check who is asking: <code>/user forcelink</code>, <code>/user forceunlink</code>, <code>/user transfer</code>, <code>/user roster</code>.</p>
-              <div id="linkRoster" class="set-roster"></div>
-            </div>
-
-            <div class="set-actions is-sticky">
-              <button type="button" class="set-btn is-primary" id="saveBtn">Save everything</button>
-              <span class="set-state" id="saveState"></span>
-            </div>
+            <div class="set-diag" id="diagOut"></div>
           </div>
         </div>
       </section>
 
-      <section class="sp-section" id="token">
+      <section class="sp-section" id="help">
         <div class="wrap">
           <div class="set-grid2">
             <div class="cmd-note">
-              <h3>How the token works</h3>
+              <h3>Keyboard</h3>
               <ul>
-                <li>It is one shared secret between this site and the bot — the same string in both places.</li>
-                <li>This page sends it only to this site's own API, over HTTPS, on the same origin.</li>
-                <li>It lives in this tab's session storage. It is never written to disk and never put in a URL.</li>
-                <li>If it is not set on the website, loading says exactly that instead of pretending.</li>
+                <li><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>S</kbd> — save changes</li>
+                <li><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>K</kbd> — open the picker for the next empty slot</li>
+                <li><kbd>Esc</kbd> — close a picker</li>
+                <li>Inside a picker: type to filter, <kbd>↑</kbd><kbd>↓</kbd> to move, <kbd>Enter</kbd> to choose</li>
               </ul>
             </div>
             <div class="cmd-note">
-              <h3>What changes here and what does not</h3>
+              <h3>Where each setting is enforced</h3>
               <ul>
-                <li><strong>Changes here:</strong> staff roles, log channels, saved RCON servers, kit settings and the player link list.</li>
-                <li><strong>Does not change here:</strong> your Rust server's own config, or anything the bot cannot verify.</li>
-                <li>Server passwords are written but never read back into this page.</li>
-                <li>An RCON connection is only ever tested by the bot, in Discord (<code>/setup run</code> or <code>/setup refresh</code>), where it can report back honestly.</li>
+                <li><strong>Staff roles</strong> — checked on every command, button, menu and modal.</li>
+                <li><strong>Log channels</strong> — a channel the bot cannot post in is flagged before you save.</li>
+                <li><strong>Rust servers</strong> — private addresses are refused, so the bot cannot be aimed at your LAN.</li>
+                <li><strong>Kits</strong> — blanks stay blanks; no plugin command is ever guessed.</li>
+                <li><strong>Links</strong> — Discord-only, because approval has to know who is asking.</li>
               </ul>
             </div>
           </div>
@@ -264,8 +407,8 @@
       <section class="cta-band">
         <div class="wrap">
           <div class="cta-inner reveal">
-            <h2>Prefer to do it in Discord?</h2>
-            <p>Every setting on this page has a panel behind it: /setup, /kits config and /user.</p>
+            <h2>Prefer the Discord panels?</h2>
+            <p>Every setting here has a panel behind it: /setup, /kits and /user.</p>
             <div class="u-row">
               <a href="commands.html" class="btn ghost">See the commands</a>
               <a
@@ -280,6 +423,58 @@
         </div>
       </section>
     </main>
-    
+
+    <!-- ================= picker ================= -->
+    <dialog class="set-picker" id="picker" aria-labelledby="pickerTitle">
+      <form method="dialog" class="set-picker__head">
+        <h3 id="pickerTitle">Choose</h3>
+        <button type="submit" class="set-btn" id="pickerClose" aria-label="Close">✕</button>
+      </form>
+      <div class="set-picker__body">
+        <input type="search" id="pickerSearch" placeholder="Type to filter" aria-label="Filter the list" autocomplete="off">
+        <p class="set-note" id="pickerHint"></p>
+        <div class="set-picker__list" id="pickerList" role="listbox" aria-label="Options"></div>
+        <div class="set-actions">
+          <button type="button" class="set-btn" id="pickerClear">Use nothing here</button>
+          <button type="button" class="set-btn" id="pickerManual">Enter an id by hand</button>
+        </div>
+        <div class="set-actions" id="pickerManualRow" hidden>
+          <input type="text" id="pickerManualInput" placeholder="paste an id" autocomplete="off">
+          <button type="button" class="set-btn" id="pickerManualUse">Use this id</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="set-toasts" id="toasts" role="status" aria-live="polite"></div>
+
+    <!-- ============ FOOTER ============ -->
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">© <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</div>
+        <div class="foot-app">
+          <button type="button" id="rwInstallBtn">📲 Get the Spinback app</button>
+          <small>Open Spinback from your home screen. Free, no app store needed.</small>
+        </div>
+      </div>
+    </footer>
+
   </body>
 </html>
