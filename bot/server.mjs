@@ -1246,7 +1246,7 @@ async function runModal(interaction) {
   if (id === 'modal:kitdelivery') return await answerModal(interaction, saveDelivery(ctx, fields));
   if (id === 'modal:kitcode') {
     const payload = installKit(ctx, fields.install_code);
-    if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Install code accepted') {
+    if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Code preview saved - not installed') {
       logLater('emoteKits', 'Install code stored', who(ctx.actor) + ' stored a kit install code (' + String(fields.install_code || '').length + ' characters).');
     }
     return await answerModal(interaction, payload);
