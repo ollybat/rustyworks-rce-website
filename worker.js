@@ -1495,8 +1495,9 @@ async function botSettingsWrite(request, env) {
     if (await writeJson(env, KITS_KEY, Object.assign({}, current, body.kits, { updatedAt: Date.now() }))) wrote.push("kits");
   }
   if (body.installs && typeof body.installs === "object" && !Array.isArray(body.installs)) {
-    const current = (await readJson(env, INSTALLS_KEY)) || {};
-    if (await writeJson(env, INSTALLS_KEY, Object.assign({}, current, body.installs, { updatedAt: Date.now() }))) wrote.push("installs");
+    /* Unlike the section patches above, installs is sent as the complete bounded preview map.
+       Replace it so an empty object really clears old preview records during Reset. */
+    if (await writeJson(env, INSTALLS_KEY, body.installs)) wrote.push("installs");
   }
   /* The saved servers are handed back (without passwords) so a form can pick up the ids
      the site just issued instead of guessing them. */
