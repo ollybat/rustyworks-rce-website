@@ -16,7 +16,7 @@
    ========================================================================== */
 
 import { createServer } from 'node:http';
-import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, ChannelType, Events } from 'discord.js';
 import handler from './interactions-worker.js';
 import net from 'node:net';
 import { createHash } from 'node:crypto';
@@ -31,6 +31,11 @@ import {
   kitGivePanel, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
+  setupRolePanel, setupRoleSlot, roleSlotResult, channelSetupPanel, logChannelBuilder,
+  logChannelPlan, logChannelBuilt, serverStepPanel, setupSuggest, suggestApplied, setupDoctor,
+  setupImportPanel, setupImportModal, parseServerText, setupImportResult, setupExport,
+  setupResetPanel, setupResetModal, setupResetDone,
+  kitCommandsPanel, kitCommandsModal, kitCommandsResult, kitsDoctor,
 } from './commands.mjs';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
@@ -375,6 +380,107 @@ async function postLinkPanel(channelId) {
    the next screen. Held in memory only: a restart just means picking again. */
 const pendingGive = new Map();
 
+/* ------------------------------------------------- proposals not yet written ---- */
+/* These three maps hold exactly what was on screen for one person: a suggestion list, a list
+   of log types to create channels for, and parsed server.cfg lines. Nothing in them is a
+   setting, and each one is deleted the moment it is applied or cancelled. */
+const pendingSuggest = new Map();
+const pendingBuild = new Map();
+const pendingImport = new Map();
+
+function setKitCommands(values) {
+  const changed = [];
+  if ('list' in values) { settings.kits.listCommand = String(values.list || '').trim().slice(0, 200); changed.push('the list command'); }
+  if ('give' in values) { settings.kits.giveCommand = String(values.give || '').trim().slice(0, 200); changed.push('the give template'); }
+  if ('install' in values) { settings.kits.installCommand = String(values.install || '').trim().slice(0, 200); changed.push('the install command'); }
+  return { changed };
+}
+
+/* Counts what is about to go, clears the configuration, and deliberately keeps player data:
+   links, waiting requests and the link panel message id are not settings. */
+function clearAllSettings() {
+  let cleared = Object.keys(settings.staffRoles || {}).length
+    + Object.keys(settings.logChannels || {}).length
+    + (settings.servers || []).length
+    + (settings.kits.binds || []).length
+    + Object.keys(settings.kits.authSpawn || {}).length
+    + Object.keys(settings.installs || {}).length;
+  cleared += ['listCommand', 'giveCommand', 'installCommand'].filter(function (key) {
+    return String(settings.kits[key] || '').trim();
+  }).length;
+  settings.staffRoles = {};
+  settings.logChannels = {};
+  settings.servers = [];
+  settings.kits = { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '', installCommand: '' };
+  settings.installs = {};
+  return cleared;
+}
+
+function dropPending(userId) {
+  const before = (settings.pending || []).length;
+  settings.pending = (settings.pending || []).filter(function (p) { return String(p.userId) !== String(userId); });
+  return before - settings.pending.length;
+}
+
+/* Writes only what the proposal holds: no name is matched again here, so the panel a person
+   agreed to is the panel that is applied. */
+function applyProposal(proposal) {
+  const roleLines = [];
+  const channelLines = [];
+  const roleMisses = [];
+  ROLE_SLOTS.forEach(function (slot) {
+    const hit = proposal && proposal.roles ? proposal.roles[slot[0]] : null;
+    if (!hit) { roleMisses.push(slot[1]); return; }
+    if (String(settings.staffRoles[slot[0]] || '') === String(hit.roleId)) return;
+    settings.staffRoles[slot[0]] = String(hit.roleId);
+    roleLines.push(slot[1] + ' -> ' + hit.name);
+  });
+  LOG_TYPES.forEach(function (type) {
+    const hit = proposal && proposal.channels ? proposal.channels[type[0]] : null;
+    if (!hit) return;
+    settings.logChannels[type[0]] = String(hit.channelId);
+    channelLines.push(type[1] + ' -> #' + hit.name);
+  });
+  return { roleLines: roleLines, channelLines: channelLines, roleMisses: roleMisses };
+}
+
+/* The only thing on this service that creates anything in the guild, and it only runs after a
+   person ticks the types and presses Create. Every channel is reported back one by one. */
+async function createLogChannels(keys) {
+  const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
+  if (!guild) return { created: [], failed: ['the bot is not connected to this server right now'], wrote: { ok: false, detail: 'the guild is not available' } };
+  const created = [];
+  const failed = [];
+  let parentId = null;
+  try {
+    let category = guild.channels.cache.find(function (c) { return c.type === ChannelType.GuildCategory && String(c.name).toLowerCase() === 'spinback'; });
+    if (!category) {
+      category = await guild.channels.create({ name: 'Spinback', type: ChannelType.GuildCategory, reason: 'Spinback RCE log channels, requested by a server administrator' });
+    }
+    parentId = category.id;
+  } catch (error) {
+    failed.push('the Spinback category: ' + String((error && error.message) || error).slice(0, 140));
+  }
+  const wanted = (keys || []).slice(0, 10);
+  for (const key of wanted) {
+    const type = LOG_TYPES.filter(function (t) { return t[0] === key; })[0];
+    const name = 'spinback-' + String(key).toLowerCase();
+    try {
+      const options = { name: name, type: ChannelType.GuildText, topic: 'Spinback RCE ' + (type ? type[1] : key), reason: 'Spinback RCE log channel, requested by a server administrator' };
+      if (parentId) options.parent = parentId;
+      const channel = await guild.channels.create(options);
+      settings.logChannels[key] = channel.id;
+      created.push('#' + channel.name + ' for ' + (type ? type[1] : key));
+    } catch (error) {
+      failed.push(name + ': ' + String((error && error.message) || error).slice(0, 140));
+    }
+  }
+  const wrote = await persistSettings();
+  return { created: created, failed: failed, wrote: wrote };
+}
+
+
+
 function botCtx() {
   return {
     siteUrl: SITE_URL,
@@ -471,6 +577,9 @@ async function runCommand(interaction) {
   const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
     return { embeds: [panelEmbed(0xdc4c4c, 'That did not work', String((error && error.message) || error).slice(0, 400))] };
   });
+  /* A panel that offers Apply carries the exact list it is showing. It is kept per person here
+     and removed before the panel is sent, because Discord does not know that key. */
+  if (payload && payload.proposalData) { pendingSuggest.set(interaction.user.id, payload.proposalData); delete payload.proposalData; }
   if (payload && payload.postPanelTo) {
     const posted = await postLinkPanel(payload.postPanelTo);
     const body = posted.ok
@@ -541,11 +650,93 @@ async function runButton(interaction) {
     const group = id.slice('kits:spawn:'.length);
     return await interaction.showModal(kitSpawnModal(group, (settings.kits.authSpawn || {})[group] || ''));
   }
-  if (id === 'setup:roles') return await interaction.showModal(rolesModal());
-  if (id === 'setup:linked') return await interaction.showModal(linkedRoleModal());
-  if (id === 'setup:channels') return await answerPanel(interaction, logTypeMenu());
+  /* ------------------------------------------------------------ setup -------- */
+  if (id === 'setup:roles') return await answerPanel(interaction, setupRolePanel(ctx));
+  if (id === 'setup:roles:ids') return await interaction.showModal(rolesModal());
+  if (id.indexOf('setup:slot:') === 0) return await answerPanel(interaction, setupRoleSlot(ctx, id.slice('setup:slot:'.length)));
+  if (id === 'setup:channels') return await answerPanel(interaction, channelSetupPanel(ctx));
+  if (id === 'setup:channels:pick') return await answerPanel(interaction, logTypeMenu());
+  if (id === 'setup:channels:build') return await answerPanel(interaction, logChannelBuilder());
+  if (id === 'setup:channels:build:cancel') { pendingBuild.delete(interaction.user.id); return await answerPanel(interaction, channelSetupPanel(ctx)); }
+  if (id === 'setup:channels:build:go') {
+    const keys = pendingBuild.get(interaction.user.id) || [];
+    if (!keys.length) return await answerPanel(interaction, { embeds: [panelEmbed(0xfaa81a, 'Nothing was selected', 'Open Create channels for me again, tick the log types, then press Create.')], components: [panelRow([panelButton('setup:channels', 'Back to log channels', 2)])] });
+    const result = await createLogChannels(keys);
+    pendingBuild.delete(interaction.user.id);
+    return await answerPanel(interaction, logChannelBuilt(result.created, result.failed, result.wrote));
+  }
   if (id === 'setup:server') return await interaction.showModal(serverModal(null));
   if (id === 'setup:test') return await answerPanel(interaction, serverPicker(ctx));
+  if (id === 'setup:status') return await answerPanel(interaction, setupStatus(ctx));
+  if (id === 'setup:doctor') return await answerPanel(interaction, await setupDoctor(ctx));
+  if (id === 'setup:suggest') {
+    const panel = setupSuggest(ctx);
+    if (panel.proposalData) { pendingSuggest.set(interaction.user.id, panel.proposalData); delete panel.proposalData; }
+    return await answerPanel(interaction, panel);
+  }
+  if (id === 'setup:suggest:apply') {
+    const proposal = pendingSuggest.get(interaction.user.id);
+    if (!proposal) {
+      const fresh = setupSuggest(ctx);
+      fresh.embeds[0].title = 'Nothing was applied - the list was read again';
+      fresh.embeds[0].description = 'The list the bot showed you is not held any more (a restart clears it), so it read the names again. Check the list below, then press Apply once more.\n\n' + fresh.embeds[0].description;
+      if (fresh.proposalData) { pendingSuggest.set(interaction.user.id, fresh.proposalData); delete fresh.proposalData; }
+      return await answerPanel(interaction, fresh);
+    }
+    const applied = applyProposal(proposal);
+    const wrote = await persistSettings();
+    pendingSuggest.delete(interaction.user.id);
+    return await answerPanel(interaction, suggestApplied(ctx, applied.roleLines, applied.channelLines, wrote, { roleMisses: applied.roleMisses }));
+  }
+  if (id === 'setup:import') {
+    const parsed = pendingImport.get(interaction.user.id);
+    return await answerPanel(interaction, parsed ? setupImportResult(parsed) : setupImportPanel());
+  }
+  if (id === 'setup:import:paste') return await interaction.showModal(setupImportModal());
+  if (id === 'setup:import:go') {
+    const parsed = pendingImport.get(interaction.user.id);
+    if (!parsed || !parsed.host || !parsed.port || !parsed.password) return await answerPanel(interaction, setupImportPanel());
+    return await answerPanel(interaction, await testAndSaveServer(ctx, { srv_name: parsed.host, srv_host: parsed.host, srv_port: parsed.port, srv_pass: parsed.password }, null));
+  }
+  if (id === 'setup:export') return await answerPanel(interaction, setupExport(ctx));
+  if (id === 'setup:reset') return await answerPanel(interaction, setupResetPanel(ctx));
+  if (id === 'setup:reset:go') return await interaction.showModal(setupResetModal());
+  /* ------------------------------------------------------------- kits -------- */
+  if (id === 'kits:commands') return await answerPanel(interaction, kitCommandsPanel(ctx));
+  if (id === 'kits:commands:edit') return await interaction.showModal(kitCommandsModal(ctx));
+  if (id === 'kits:doctor') return await answerPanel(interaction, kitsDoctor(ctx));
+  /* ----------------------------------------------- waiting link requests ----- */
+  if (id.indexOf('user:pending:yes:') === 0 || id.indexOf('user:pending:no:') === 0) {
+    const approving = id.indexOf('user:pending:yes:') === 0;
+    const userId = id.slice((approving ? 'user:pending:yes:' : 'user:pending:no:').length);
+    const request = (settings.pending || []).filter(function (p) { return String(p.userId) === String(userId); })[0];
+    if (!request) return await answerPanel(interaction, pendingPanel(ctx));
+    if (approving) {
+      const advice = adviceOnGamertag(ctx, request.gamertag, userId);
+      if (!advice.free) return await answerPanel(interaction, {
+        embeds: [panelEmbed(0xdc4c4c, 'Could not approve that one', String(advice.detail || 'That gamertag is not free to link.').slice(0, 400))],
+        components: [panelRow([panelButton('user:transfer', 'Transfer it instead', 1), panelButton('user:pending', 'Back to requests', 2)])],
+      });
+      const done = addLink(userId, request.gamertag, interaction.user.id);
+      dropPending(userId);
+      const wrote = await persistSettings();
+      return await answerPanel(interaction, {
+        embeds: [panelEmbed(0x3ba55d, 'Link approved', '<@' + userId + '> is now linked to ' + done.gamertag + ', and the waiting request was cleared. The record shows that you confirmed it.'
+          + (wrote.ok ? '' : ' The website refused the save, so this is in memory only: ' + String(wrote.detail || '').slice(0, 140)))],
+        components: [panelRow([panelButton('user:pending', 'Back to requests', 2), panelButton('user:config', 'Back to links', 2)])],
+      });
+    }
+    const removed = dropPending(userId);
+    const wrote = await persistSettings();
+    return await answerPanel(interaction, {
+      embeds: [panelEmbed(removed ? 0x3ba55d : 0xfaa81a, removed ? 'Request rejected' : 'Nothing to reject',
+        removed ? 'The request from <@' + userId + '> was cleared and no link was written.'
+          : 'That request is no longer on record.'
+        + (wrote.ok ? '' : ' The website refused the save: ' + String(wrote.detail || '').slice(0, 140)))],
+      components: [panelRow([panelButton('user:pending', 'Back to requests', 2)])],
+    });
+  }
+  log('unhandled button:', id);
   if (id === 'kits:add') return await interaction.showModal(bindModal(null));
   if (id === 'kits:edit') return await answerPanel(interaction, bindList(ctx, 'edit'));
   if (id === 'kits:remove') return await answerPanel(interaction, bindList(ctx, 'remove'));
@@ -565,7 +756,7 @@ async function runButton(interaction) {
     saveBind({ emote: id.slice('kits:role:skip:'.length) }, null, false);
     return await answerPanel(interaction, kitsPanel(ctx));
   }
-  log('unhandled button:', id);
+
 }
 
 async function runSelect(interaction) {
@@ -574,6 +765,19 @@ async function runSelect(interaction) {
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   const first = String((interaction.values || [])[0] || '');
   if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first));
+  if (id.indexOf('setup:slot:') === 0) {
+    const slotKey = id.slice('setup:slot:'.length);
+    const roleId = first || null;
+    if (roleId) settings.staffRoles[slotKey] = String(roleId);
+    else delete settings.staffRoles[slotKey];
+    const wrote = await persistSettings();
+    return await answerPanel(interaction, roleSlotResult(ctx, slotKey, roleId, wrote));
+  }
+  if (id === 'setup:channels:build:pick') {
+    const keys = (interaction.values || []).slice(0, 10);
+    pendingBuild.set(interaction.user.id, keys);
+    return await answerPanel(interaction, logChannelPlan(keys));
+  }
   if (id.indexOf('setup:channel:') === 0) {
     const typeKey = id.slice('setup:channel:'.length);
     const found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
@@ -717,6 +921,30 @@ async function runModal(interaction) {
     return await answerModal(interaction, authSpawnNote(ctx, id.slice('modal:spawn:'.length), fields.spawn_kit));
   }
   if (id === 'modal:kitcode') return await answerModal(interaction, installKit(ctx, fields.install_code));
+  if (id === 'modal:import') {
+    const parsed = parseServerText(fields.import_text);
+    pendingImport.set(interaction.user.id, parsed);
+    return await answerModal(interaction, setupImportResult(parsed));
+  }
+  if (id === 'modal:kitcommands') {
+    const values = {};
+    if ('kit_list' in fields) values.list = fields.kit_list;
+    if ('kit_give' in fields) values.give = fields.kit_give;
+    if ('kit_install' in fields) values.install = fields.kit_install;
+    const change = setKitCommands(values);
+    const wrote = await persistSettings();
+    return await answerModal(interaction, kitCommandsResult(ctx, change.changed.length ? change.changed.join(', ') + ' updated.' : 'Nothing was changed.', wrote));
+  }
+  if (id === 'modal:reset') {
+    const word = String(fields.reset_word || '').trim().toUpperCase();
+    if (word !== 'RESET') {
+      return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'Not reset', 'That word did not match, so nothing was cleared.')],
+        components: [panelRow([panelButton('setup:reset', 'Try again', 1), panelButton('setup:status', 'Status', 2)])] });
+    }
+    const cleared = clearAllSettings();
+    const wrote = await persistSettings();
+    return await answerModal(interaction, setupResetDone(ctx, cleared, wrote));
+  }
   log('unhandled modal:', id);
 }
 
