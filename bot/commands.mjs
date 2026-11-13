@@ -992,9 +992,23 @@ export function customId(interaction) {
 }
 export function modalFields(interaction) {
   var out = {};
-  (((interaction.data || {}).components) || []).forEach(function (r) {
-    ((r.components) || []).forEach(function (c) { if (c && c.custom_id) out[c.custom_id] = c.value; });
+  /* discord.js exposes submitted inputs on interaction.components and on the fields
+     collection. Raw interaction payloads use data.components/custom_id. Support all
+     three shapes so the actual bot, tests and any HTTP fallback read identical values. */
+  var rows = interaction.components || ((interaction.data || {}).components) || [];
+  rows.forEach(function (row) {
+    (row.components || []).forEach(function (component) {
+      var id = component && (component.customId || component.custom_id);
+      if (id) out[id] = component.value == null ? "" : component.value;
+    });
   });
+  var collection = interaction.fields && interaction.fields.fields;
+  if (collection && typeof collection.values === "function") {
+    for (var field of collection.values()) {
+      var id = field && (field.customId || field.custom_id);
+      if (id && out[id] === undefined) out[id] = field.value == null ? "" : field.value;
+    }
+  }
   return out;
 }
 export function kitGivePanel(ctx) {
