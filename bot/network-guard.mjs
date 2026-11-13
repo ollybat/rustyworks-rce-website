@@ -62,8 +62,9 @@ export function isPublicAddress(address) {
 
   // Documentation (2001:db8::/32), Teredo (2001:0::/32), and 6to4
   // (2002::/16) are not accepted as direct public RCON destinations.
-  if (first === 0x2001 && (second === 0x0 || second === 0x0db8)) return false;
+  if (first === 0x2001 && (second === 0x0 || second === 0x0db8 || second === 0x10 || second === 0x20)) return false;
   if (first === 0x2002) return false;
+  if (first === 0x3fff && second < 0x1000) return false;
   return true;
 }
 
