@@ -58,9 +58,9 @@ export const COMMANDS = [
           { type: 3, name: "kit", description: "Kit to hand out (blank stops giving one)", autocomplete: true },
         ] },
       { type: 1, name: "cooldowns", description: "See active manual kit-give cooldowns" },
-      { type: 1, name: "build", description: "Kit Studio: build a kit on the website or work from an install code" },
+      { type: 1, name: "build", description: "Open Kit Studio to build a Rust Console kit" },
       { type: 1, name: "add", description: "Preview a kit code and recognise its kit names",
-        options: [{ type: 3, name: "code", description: "The Base64 install code (blank opens the panel)" }] },
+        options: [{ type: 3, name: "code", description: "Base64 code to preview (blank opens the panel)" }] },
     ] },
   { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
     options: [
