@@ -73,6 +73,21 @@ for (const cmd of COMMANDS) {
   checkOptions(p, cmd.options, 1);
 }
 
+/* Modal field extraction must work with both discord.js component objects and
+   raw REST interaction payloads. This protects every form submission path. */
+{
+  const discordJsShape = {
+    components: [{ components: [{ customId: "role_owner", value: "123456789012345678" }] }],
+  };
+  const rawApiShape = {
+    data: { components: [{ components: [{ custom_id: "srv_host", value: "rust.example.com" }] }] },
+  };
+  const fieldsA = mod.modalFields(discordJsShape);
+  const fieldsB = mod.modalFields(rawApiShape);
+  if (fieldsA.role_owner !== "123456789012345678") problems.push("modalFields: discord.js component values were not read");
+  if (fieldsB.srv_host !== "rust.example.com") problems.push("modalFields: raw REST component values were not read");
+}
+
 /* ---- 2. replies, panels and modals ---- */
 const limits = createChecker();
 function checkPayload(where, payload) {
