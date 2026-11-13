@@ -213,6 +213,16 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
       if (!paused || !paused.embeds || paused.embeds[0].title !== "Kit delivery is paused") problems.push("giveKit: staff kit pause did not block manual delivery");
       checkPayload("giveKit(paused)", paused);
       ctx.settings.kits.locked = false;
+      const beforeUnsafe = ctx.rconCalls.length;
+      const unsafe = await mod.giveKit(ctx, { kit: "STARTER", gamertag: 'Player0";status' });
+      if (!unsafe || !unsafe.embeds || unsafe.embeds[0].title !== "That name cannot be sent safely"
+        || ctx.rconCalls.length !== beforeUnsafe) problems.push("giveKit: command separators in a gamertag must be refused before RCON");
+      const available = ctx.servers();
+      if (available.length > 1) {
+        await mod.giveKit(ctx, { kit: "PVP", gamertag: "DifferentPlayer", server: available[1].name });
+        const lastCall = ctx.rconCalls[ctx.rconCalls.length - 1];
+        if (!lastCall || lastCall.host !== available[1].host) problems.push("giveKit: selected server autocomplete value did not select that server");
+      }
     }],
     ["giveKit(unlinked user)", async () => {
       const before = ctx.rconCalls.length;
