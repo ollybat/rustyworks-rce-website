@@ -20,6 +20,16 @@ import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TOKEN = "sim-settings-token";
+
+/* Reserve a loopback port for the real HTTP listener so this simulation can also
+   exercise the public health/status routes and the authenticated internal routes. */
+const portProbe = createServer();
+await new Promise((resolve, reject) => {
+  portProbe.once("error", reject);
+  portProbe.listen(0, "127.0.0.1", resolve);
+});
+const botPort = portProbe.address().port;
+await new Promise((resolve, reject) => portProbe.close((error) => error ? reject(error) : resolve()));
 const SLOW_SAVE_MS = 1800;
 const SLOW_CHECK_MS = 2000;
 
@@ -80,7 +90,7 @@ const siteUrl = "http://127.0.0.1:" + site.address().port;
 const child = spawn(process.execPath, ["--import", join(repo, "scripts", "sim", "register.mjs"), join(repo, "bot", "server.mjs")], {
   cwd: repo,
   env: Object.assign({}, process.env, {
-    PORT: "0",
+    PORT: String(botPort),
     HOST: "127.0.0.1",
     DISCORD_BOT_TOKEN: "simsimsimsimsimsimsimsim.simsim.simsimsimsimsimsimsimsimsim",
     DISCORD_GUILD_ID: "1",
@@ -96,6 +106,71 @@ const child = spawn(process.execPath, ["--import", join(repo, "scripts", "sim", 
 
 let result = null;
 let output = "";
+
+const apiChecksPromise = (async function () {
+  const base = "http://127.0.0.1:" + botPort;
+  const failures = [];
+  function check(name, passed, detail) {
+    if (!passed) failures.push({ name: "HTTP API: " + name, detail: detail || "" });
+  }
+  async function request(path, options) {
+    return fetch(base + path, Object.assign({ signal: AbortSignal.timeout(3000) }, options || {}));
+  }
+
+  let health = null;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try {
+      const response = await request("/healthz");
+      if (response.ok) { health = response; break; }
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (!health) {
+    check("Railway health endpoint starts", false, "GET /healthz did not answer");
+    return failures;
+  }
+
+  const healthData = await health.json().catch(() => ({}));
+  check("Railway health endpoint is minimal", healthData.ok === true
+    && healthData.service === "spinback-rce-bot"
+    && Object.keys(healthData).sort().join(",") === "ok,service", JSON.stringify(healthData));
+
+  const statusResponse = await request("/api/status");
+  const statusData = await statusResponse.json().catch(() => ({}));
+  const privateFields = [
+    "host", "port", "tokenPresent", "tokenSource", "tokenShape", "tokenLength",
+    "lookedFor", "loginAttempts", "siteUrl", "ownerKnown", "ownerSource",
+    "forcedLogins", "gatewayDownSeconds", "error", "guildInfo",
+  ];
+  check("public status omits internal diagnostics", statusResponse.ok
+    && privateFields.every((key) => !(key in statusData)), JSON.stringify(statusData));
+
+  for (const [path, method, body] of [
+    ["/api/reconnect", "POST", "{}"],
+    ["/api/rcon/test", "POST", "{}"],
+    ["/api/guild", "GET"],
+    ["/api/guilds", "GET"],
+  ]) {
+    const response = await request(path, {
+      method,
+      headers: { "content-type": "application/json" },
+      ...(body ? { body } : {}),
+    });
+    check(path + " rejects anonymous access", response.status === 403, "got " + response.status);
+  }
+
+  const methodCheck = await request("/api/reconnect", {
+    method: "GET",
+    headers: { "x-settings-token": TOKEN },
+  });
+  check("reconnect requires POST even with the shared token", methodCheck.status === 405, "got " + methodCheck.status);
+
+  const trustedGuilds = await request("/api/guilds", {
+    headers: { "x-settings-token": TOKEN },
+  });
+  check("trusted Worker credential can read guild metadata", trustedGuilds.status === 200, "got " + trustedGuilds.status);
+  return failures;
+})();
 child.stdout.on("data", (chunk) => {
   output += chunk;
   for (const line of String(chunk).split("\n")) if (line.startsWith("SIM_RESULT ")) result = JSON.parse(line.slice(11));
@@ -111,7 +186,10 @@ if (!result) {
   console.log("The bot did not finish the simulation (exit code " + code + ").");
   process.exit(1);
 }
+const apiFailures = await apiChecksPromise;
 console.log("Bot registered: /" + result.commands.join(", /"));
-console.log(result.interactions + " interactions, " + result.total + " checks, " + result.failed + " failed.");
+console.log(result.interactions + " interactions, " + result.total + " checks, " + result.failed + " interaction checks failed.");
 for (const f of result.failures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
-process.exit(result.failed ? 1 : 0);
+console.log("HTTP API: " + (7 - apiFailures.length) + " route checks passed, " + apiFailures.length + " failed.");
+for (const f of apiFailures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
+process.exit(result.failed || apiFailures.length ? 1 : 0);
