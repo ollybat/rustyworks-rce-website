@@ -269,9 +269,9 @@ function cooldownList() {
   pruneCooldowns();
   const rows = [];
   cooldowns.forEach(function (value, key) {
-    const parts = String(key).split('::');
+    const parts = String(key).split('\u0000');
     const user = parts[0] || 'unknown';
-    const kit = parts.slice(1).join('::') || 'unknown';
+    const kit = parts.slice(1).join('\u0000') || 'unknown';
     const left = Math.max(0, Math.ceil((Number(value) - Date.now()) / 1000));
     rows.push({ sort: Number(value), text: user + ' -> ' + kit + ' (' + left + 's left)' });
   });
@@ -282,7 +282,7 @@ function reserveKitGive(gamertag, kit, cooldownSeconds) {
   pruneCooldowns();
   const user = String(gamertag || '').trim().toLowerCase();
   const item = String(kit || '').trim().toLowerCase();
-  const key = user + '::' + item;
+  const key = user + '\u0000' + item;
   const seconds = Math.max(0, Math.min(86400, Math.floor(Number(cooldownSeconds) || 0)));
   const now = Date.now();
   const expiresAt = Number(cooldowns.get(key) || 0);
@@ -308,9 +308,9 @@ function clearCooldowns(scope, target) {
   const wanted = String(target || '').trim().toLowerCase();
   let cleared = 0;
   cooldowns.forEach(function (value, key) {
-    const parts = String(key).split('::');
+    const parts = String(key).split('\u0000');
     const user = parts[0] || '';
-    const kit = parts[1] || '';
+    const kit = parts.slice(1).join('\u0000') || '';
     let hit = false;
     if (scope === 'all-users' || scope === 'all-kits') hit = true;
     else if (scope === 'user') hit = !!wanted && user.toLowerCase() === wanted;
