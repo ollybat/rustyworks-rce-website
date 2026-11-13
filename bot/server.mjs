@@ -31,7 +31,7 @@ import {
   forcelinkPicker, forcelinkModal, adviceOnGamertag, unlinkPicker, unlinkConfirm,
   transferPicker, transferModal, rosterPanel, pendingPanel, channelPickerForPanel,
   kitGivePanel, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
-  kitAddPanel, kitAddModal, kitStudioPanel, deliveryModal, saveDelivery,
+  kitAddPanel, kitAddModal, kitStudioPanel, deliveryModal, saveDelivery, installKit,
   grabKits, grabKitsRun, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
 } from './commands.mjs';
@@ -683,6 +683,7 @@ async function routeInteraction(interaction) {
     if (interaction.isStringSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isChannelSelectMenu === 'function' && interaction.isChannelSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isRoleSelectMenu === 'function' && interaction.isRoleSelectMenu()) return await runSelect(interaction);
+    if (typeof interaction.isUserSelectMenu === 'function' && interaction.isUserSelectMenu()) return await runSelect(interaction);
     return;
   } catch (error) {
     const reference = Date.now().toString(36);
@@ -1055,7 +1056,7 @@ client.once(Events.ClientReady, async (c) => {
   state.guilds = c.guilds.cache.size;
   log('logged in as ' + c.user.tag + ' — in ' + c.guilds.cache.size + ' guild(s)');
   try {
-    c.user.setPresence({ status: 'online', activities: [{ name: '/dashboard — Spinback RCE', type: 0 }] });
+    c.user.setPresence({ status: 'online', activities: [{ name: 'Rust servers linked: ' + settings.servers.length + ' • /help', type: 0 }] });
     if (!GUILD_ID) {
       log('WARNING: DISCORD_GUILD_ID is not set, so no command was registered');
       return;
