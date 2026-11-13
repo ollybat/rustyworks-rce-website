@@ -23,7 +23,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isPublicAddress, rconHostAllowed } from './network-guard.mjs';
 import {
-  COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
+  COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields, autocompleteChoices,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
   testAndSaveServer, kitsPanel, bindModal, bindList, bindRoleMenu, emoteGuide,
   helpHome, helpDetail, setupStatus, cooldownsPanel, serverSnapshot,
@@ -607,46 +607,8 @@ function autocompleteChoicesFor(interaction, ctx) {
   const focused = interaction.options && typeof interaction.options.getFocused === 'function'
     ? interaction.options.getFocused(true)
     : null;
-  if (!focused || !focused.name) return [];
-  const query = String(focused.value || '').trim().toLowerCase();
   const opts = optionMap(interaction);
-  const source = [];
-
-  function add(name, value) {
-    const label = String(name || '').trim().slice(0, 100);
-    const item = String(value == null ? '' : value).trim().slice(0, 100);
-    if (label && item) source.push({ name: label, value: item });
-  }
-
-  if (interaction.commandName === 'setup' && opts.__sub === 'refresh' && focused.name === 'server') {
-    (ctx.servers() || []).forEach((server) => add(server.name, server.name));
-  } else if (interaction.commandName === 'kits' && opts.__sub === 'grab' && focused.name === 'server') {
-    (ctx.servers() || []).forEach((server) => add(server.name, server.name));
-  } else if (interaction.commandName === 'kits' && (opts.__sub === 'give' || opts.__sub === 'auth-spawn')) {
-    if (focused.name === 'kit') {
-      (ctx.kits().known || []).forEach((kit) => add(kit, kit));
-    } else if (focused.name === 'gamertag') {
-      (ctx.links() || []).forEach((link) => add(link.gamertag, link.gamertag));
-    }
-  } else if (interaction.commandName === 'user' && (opts.__sub === 'whois' || opts.__sub === 'roster')) {
-    if (focused.name === 'gamertag' || focused.name === 'search') {
-      (ctx.links() || []).forEach((link) => add(link.gamertag, link.gamertag));
-    }
-  }
-
-  const matches = source.filter((choice) => choice.name.toLowerCase().includes(query));
-  matches.sort((a, b) => {
-    const ap = a.name.toLowerCase().startsWith(query) ? 0 : 1;
-    const bp = b.name.toLowerCase().startsWith(query) ? 0 : 1;
-    return ap - bp || a.name.localeCompare(b.name);
-  });
-  const seen = new Set();
-  return matches.filter((choice) => {
-    const key = choice.value.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 25);
+  return autocompleteChoices(ctx, interaction.commandName, opts.__sub, focused);
 }
 
 async function runAutocomplete(interaction) {
