@@ -62,6 +62,12 @@ the retired endpoints and the status history. It exits non-zero on the first pro
 GitHub runs it with the other checks on every push and pull request
 (`.github/workflows/checks.yml`).
 
+`node scripts/check-commands.mjs` does the same for the bot's slash commands: it checks every
+definition in `bot/commands.mjs` against Discord's rules (one bad definition makes Discord
+refuse the whole list), then runs every command and subcommand against a pretend bot, before
+and after setup and with lots of saved data, and checks each reply, panel and form against
+Discord's size limits.
+
 ## Stylesheet map
 
 `public/style.css` is the whole site's stylesheet, in this order:

@@ -19,7 +19,8 @@ import { createServer } from 'node:http';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from 'discord.js';
 import handler from './interactions-worker.js';
 import net from 'node:net';
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
@@ -82,8 +83,18 @@ const PORT = Number(process.env.PORT || 8080);
    server on 127.0.0.1 would answer nothing and the public domain would 502. */
 const HOST = process.env.HOST || '0.0.0.0';
 
-const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null };
+const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null, lastHeartbeat: null, latencyMs: null };
 const log = (...a) => console.log('[spinback]', ...a);
+
+/* What the status page prints as the version. Railway sets RAILWAY_GIT_COMMIT_SHA on every
+   deploy from GitHub, so the page can show which commit is live and notice a new deploy. */
+const VERSION = 'Spinback RCE bot' + (process.env.RAILWAY_GIT_COMMIT_SHA ? ' ' + String(process.env.RAILWAY_GIT_COMMIT_SHA).slice(0, 7) : '');
+
+/* A stray rejected promise (a reply to an interaction that expired, a REST call that timed
+   out) would otherwise end the process, and Railway stops restarting after ten failures. */
+process.on('unhandledRejection', (reason) => {
+  log('unhandled rejection:', String((reason && reason.stack) || reason).slice(0, 500));
+});
 
 /* -------------------------------------------------------------- settings ---- */
 /* Roles, logging channels, servers and kit settings are kept here and mirrored to the
@@ -752,7 +763,8 @@ client.once(Events.ClientReady, async (c) => {
        in Discord's own Integrations screen, which does not change what the bot enforces. */
     const applied = await guild.commands.set(COMMANDS.map((cmd) => Object.assign({}, cmd, { dm_permission: false })));
     state.commandNames = applied.map((cmd) => cmd.name);
-    const setupCmd = applied.get('setup');
+    /* The collection discord.js returns is keyed by command id, not by name. */
+    const setupCmd = applied.find((cmd) => cmd.name === 'setup');
     state.command = (setupCmd && setupCmd.id) || (applied.first() && applied.first().id) || null;
     log(applied.size + ' command(s) registered in ' + guild.name + ': ' + state.commandNames.join(', '));
     /* The website reads this to turn the role ids Discord gives it into names, so it can
@@ -779,6 +791,17 @@ client.once(Events.ClientReady, async (c) => {
 client.on(Events.InteractionCreate, (interaction) => routeInteraction(interaction));
 
 client.on(Events.Error, (e) => log('gateway error:', String((e && e.message) || e)));
+/* The gateway heartbeat is the best proof the connection is really alive: the API can answer
+   while the gateway is wedged. discord.js reports each acknowledged heartbeat on its debug
+   channel. The status page only shows a heartbeat once one has really been seen, so if this
+   wording ever changes the page says "not reported" instead of raising a false alarm. */
+client.on(Events.Debug, (message) => {
+  const text = String(message || '');
+  if (!/heartbeat acknowledged/i.test(text)) return;
+  state.lastHeartbeat = Date.now();
+  const latency = /latency of (\d+)\s*ms/i.exec(text);
+  if (latency) state.latencyMs = Number(latency[1]);
+});
 client.on(Events.ShardDisconnect, (code) => { state.gateway = 'disconnected'; log('gateway disconnected, code', code); });
 client.on(Events.ShardReconnecting, () => { state.gateway = 'reconnecting'; log('gateway reconnecting'); });
 
@@ -926,6 +949,46 @@ function rconParse(buffer) {
   return { packets: packets, rest: rest };
 }
 
+/* Is this literal address somewhere public? Covers the private, loopback, link-local,
+   carrier-grade NAT and multicast ranges for IPv4, and the IPv6 equivalents. */
+function publicAddress(ip) {
+  const a = String(ip || '').toLowerCase();
+  if (net.isIPv4(a)) {
+    const p = a.split('.').map(Number);
+    if (p[0] === 0 || p[0] === 10 || p[0] === 127 || p[0] >= 224) return false;
+    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return false;
+    if (p[0] === 169 && p[1] === 254) return false;
+    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return false;
+    if (p[0] === 192 && p[1] === 168) return false;
+    if (p[0] === 192 && p[1] === 0 && p[2] === 0) return false;
+    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return false;
+    return true;
+  }
+  if (net.isIPv6(a)) {
+    if (a === '::' || a === '::1') return false;
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+    if (mapped) return publicAddress(mapped[1]);
+    if (/^(fc|fd|fe8|fe9|fea|feb|ff)/.test(a)) return false;
+    return true;
+  }
+  return false;
+}
+
+/* A name is resolved here and the connection goes to the address checked, so a public
+   looking name that points at a private address (or changes between check and connect)
+   cannot reach anything internal. */
+async function rconResolve(host) {
+  const h = String(host || '').trim().toLowerCase();
+  if (net.isIP(h)) return publicAddress(h) ? h : null;
+  try {
+    const all = await lookup(h, { all: true });
+    if (!all.length || all.some((r) => !publicAddress(r.address))) return null;
+    return all[0].address;
+  } catch (error) {
+    return null;
+  }
+}
+
 /* Nothing on the private internet: that keeps this from being pointed at a local service. */
 function rconHostAllowed(host) {
   const h = String(host || '').trim().toLowerCase();
@@ -944,7 +1007,15 @@ function rconHostAllowed(host) {
   return /^[a-z0-9][a-z0-9.-]*$/.test(h);
 }
 
-function rconRun(options) {
+async function rconRun(options) {
+  const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
+  if (!target) {
+    return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or does not resolve), so the bot will not connect to it.' };
+  }
+  return rconConnect(Object.assign({}, options, { address: target }));
+}
+
+function rconConnect(options) {
   return new Promise(function (resolve) {
     const started = Date.now();
     const host = String(options.host || '').trim();
@@ -954,7 +1025,9 @@ function rconRun(options) {
     /* The fixed list is what the automatic health check may ask for. When an administrator
        asks for a command they configured themselves - a kit plugin command, for instance -
        it is passed through as a single line with a hard length cap. */
-    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300).toLowerCase();
+    /* Kept exactly as typed: kit names and gamertags can be case-sensitive on the server.
+       Only the fixed health-check list is compared in lower case. */
+    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
     const command = options.allowAny && requested ? requested : (RCON_ALLOWED.indexOf(asked) > -1 ? asked : 'serverinfo');
 
     if (!rconHostAllowed(host)) {
@@ -984,7 +1057,7 @@ function rconRun(options) {
     }, RCON_TIMEOUT_MS);
 
     try {
-      socket = net.connect({ host: host, port: port });
+      socket = net.connect({ host: options.address || host, port: port });
     } catch (error) {
       return finish({ ok: false, reason: 'connect-failed', detail: String(error.message || error) });
     }
@@ -1108,7 +1181,8 @@ createServer(async (req, res) => {
       return;
     }
     const given = String(req.headers['x-settings-token'] || '');
-    if (given !== expected) {
+    const a = Buffer.from(given), b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       res.writeHead(403, cors);
       res.end(JSON.stringify({ ok: false, reason: 'bad-token' }));
       return;
@@ -1138,8 +1212,13 @@ createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url === '/api/oauth/exchange') {
     let body = '';
-    req.on('data', (chunk) => { body += chunk; });
+    let tooBig = false;
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 16384 && !tooBig) { tooBig = true; req.destroy(); }
+    });
     req.on('end', async () => {
+      if (tooBig) return;
       const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
       if (!CLIENT_SECRET) {
         res.writeHead(503, cors);
@@ -1187,6 +1266,10 @@ createServer(async (req, res) => {
     res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
     res.end(JSON.stringify({
       service: 'spinback-rce-bot',
+      version: VERSION,
+      /* Left out until a heartbeat has actually been acknowledged (see the Debug listener). */
+      lastHeartbeat: state.lastHeartbeat || undefined,
+      latencyMs: state.latencyMs === null ? undefined : state.latencyMs,
       /* online is the field the status page reads. Without it the page assumed the bot
          was up whenever it got an answer at all, which is how a tokenless process could
          be announced as online. */
@@ -1221,9 +1304,22 @@ createServer(async (req, res) => {
     }));
     return;
   }
+  /* Discord's interaction payloads are a few kilobytes; anything near a megabyte is not
+     Discord, and buffering it without a limit would let anyone fill this process's memory. */
   let raw = '';
-  req.on('data', (c) => { raw += c; });
+  let refused = false;
+  req.on('data', (c) => {
+    if (refused) return;
+    raw += c;
+    if (raw.length > 1048576) {
+      refused = true;
+      res.writeHead(413, { 'content-type': 'application/json' });
+      res.end('{"error":"payload too large"}');
+      req.destroy();
+    }
+  });
   req.on('end', async () => {
+    if (refused) return;
     try {
       const response = await handler.fetch(toRequest(req, raw), env);
       const text = await response.text();

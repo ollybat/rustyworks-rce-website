@@ -514,10 +514,13 @@ export function kitSpawnModal(group, currentKit) {
   ] };
 }
 
-export function kitAddPanel() {
+export function kitAddPanel(ctx) {
+  /* A link button (style 5) must carry a url and no custom_id, or Discord refuses the whole
+     reply and the user sees "This interaction failed". */
+  var studio = link("Open Kit Studio", ((ctx && ctx.siteUrl) || "https://spinback-j7ao5f.camelai.app") + "/dashboard/kitbuilder.html");
   return { embeds: [embed(0x5865f2, "Install a kit",
     "Paste a Base64 install code from Kit Studio. The bot checks it really is Base64 that decodes to text, stores it exactly as given, and never guesses what is inside.")],
-    components: [row([button("kits:add:code", "Enter a code", 1), button("kits:studio", "Open Kit Studio", 5)]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
+    components: [row([button("kits:add:code", "Enter a code", 1), studio]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
 }
 
 export function kitAddModal() {
@@ -601,7 +604,8 @@ export async function grabKitsRun(ctx) {
 export function kitStudioPanel(ctx) {
   return { embeds: [embed(0x5865f2, "Kit Studio",
     "Build a kit slot by slot on the website, then bring it back here as an install code. The site and this bot share the same 299-item catalogue, so a kit made there is the same kit here.")],
-    components: [row([link("Open Kit Studio", ctx.siteUrl + "/dashboard/kitbuilder.html"), button("kits:add", "Install a code", 1)])], flags: EPH };
+    /* kits:add:code opens the install-code form; kits:add is "Add a bind". */
+    components: [row([link("Open Kit Studio", ctx.siteUrl + "/dashboard/kitbuilder.html"), button("kits:add:code", "Install a code", 1)])], flags: EPH };
 }
 export function installKit(ctx, rawCode) {
   var raw = String(rawCode || "").trim();
@@ -723,7 +727,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "cooldowns") return cooldownsPanel(ctx, ctx.cooldownList());
     if (sub === "build") return kitStudioPanel(ctx);
     if (sub === "add") {
-      if (!options.code) return kitAddPanel();
+      if (!options.code) return kitAddPanel(ctx);
       return installKit(ctx, options.code);
     }
   }
