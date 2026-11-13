@@ -53,21 +53,23 @@ export async function run({ world, make, interact }) {
   it = await go(make.command(LINKED_ONLY, "setup", "run"), "/setup run by a linked player, before setup");
   expect("a non-admin is refused before setup", text(last(it)).includes("Not allowed"), text(last(it)));
 
-  /* 4. roles from Discord's own role menu, saved through the website */
+  /* 4. staff roles are entered in Discord modals and mirrored as a single settings section */
   it = await go(make.command(ADMIN, "setup", "run"), "/setup run");
   expect("/setup run shows the panel", text(last(it)).includes("Spinback RCE setup"), text(last(it)));
-  it = await go(make.button(ADMIN, "setup:roles"), "setup: roles page 1");
-  const roleMenus = ((last(it) || {}).components || []).filter((r) => r.components && r.components[0] && r.components[0].type === 6).length;
-  expect("roles are picked from role menus (4 on page 1)", roleMenus === 4, text(last(it)));
-  it = await go(make.select(ADMIN, "role", "setup:role:owner", ["100000000000000301"]), "pick the Owner role");
+  it = await go(make.button(ADMIN, "setup:roles"), "open staff role form");
+  expect("staff roles form opens", (it.calls[0] || {}).method === "showModal" && last(it).custom_id === "modal:roles", text(last(it)));
+  it = await go(make.modal(ADMIN, "modal:roles", {
+    role_owner: "100000000000000301", role_coOwner: "", role_headAdmin: "", role_admin: "", role_moderator: "",
+  }), "save Owner role");
   let w = await writes();
   expect("the Owner role is saved to the website", (latest(w).staffRoles || {}).owner === "100000000000000301", text(latest(w)));
   expect("a save sends only what changed (no stale copy of the rest)", Object.keys(latest(w)).join(",") === "staffRoles", Object.keys(latest(w)).join(","));
-  expect("a slow save is deferred, not dropped", (it.calls[0] || {}).method === "deferUpdate" && it.firstAckAt < 3000, text(it.calls.map((c) => c.method + "@" + c.at)));
-  it = await go(make.button(ADMIN, "setup:roles:2"), "setup: roles page 2");
-  it = await go(make.select(ADMIN, "role", "setup:role:linked", ["100000000000000302"]), "pick the Linked role");
+  expect("a slow modal save is deferred, not dropped", (it.calls[0] || {}).method === "deferReply" && it.firstAckAt < 3000, text(it.calls.map((c) => c.method + "@" + c.at)));
+  it = await go(make.button(ADMIN, "setup:linked"), "open Linked member role form");
+  expect("Linked role has its own separate form", last(it).custom_id === "modal:linked", text(last(it)));
+  it = await go(make.modal(ADMIN, "modal:linked", { role_linked: "100000000000000302" }), "save Linked member role");
   w = await writes();
-  expect("the Linked role is saved", (latest(w).staffRoles || {}).linked === "100000000000000302", text(latest(w)));
+  expect("the Linked member role is saved separately", (latest(w).staffRoles || {}).linked === "100000000000000302", text(latest(w)));
 
   /* 5. the Linked role is not a staff role (it used to be: every linked player was staff) */
   it = await go(make.command(LINKED_ONLY, "setup", "run"), "/setup run by a linked player, after setup");
@@ -129,7 +131,7 @@ export async function run({ world, make, interact }) {
   expect("non-staff get no suggestions", Array.isArray(last(it)) && last(it).length === 0, text(last(it)));
 
   /* 11. a bind's role is really saved (it used to be thrown away) */
-  it = await go(make.modal(ADMIN, "modal:bind", { bind_emote: "wave", bind_kit1: "PVP", bind_kit2: "", bind_kit3: "", bind_cooldown: "100000000000000300" }), "save a bind");
+  it = await go(make.modal(ADMIN, "modal:bind", { bind_emote: "wave", bind_kit1: "PVP", bind_kit2: "", bind_kit3: "", bind_cooldown: "60" }), "save a bind");
   expect("the bind form asks for a role next", text(last(it)).includes("Who may use it?"), text(last(it)));
   it = await go(make.select(ADMIN, "role", "kits:role:wave", ["100000000000000303"]), "pick the bind role");
   w = await writes();
