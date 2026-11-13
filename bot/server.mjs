@@ -872,7 +872,11 @@ async function runButton(interaction) {
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
   if (id === 'user:transfer') return await answerPanel(interaction, transferPicker(ctx));
-  if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx));
+  if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx, 1));
+  if (id.indexOf('user:roster:page:') === 0) {
+    const page = Number(id.slice('user:roster:page:'.length)) || 1;
+    return await answerPanel(interaction, rosterPanel(ctx, page));
+  }
   if (id === 'user:pending') return await answerPanel(interaction, pendingPanel(ctx));
   if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
   if (id.indexOf('user:unlink:go:') === 0) {
