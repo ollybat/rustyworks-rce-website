@@ -68,6 +68,15 @@ export async function run({ make, interact }) {
   for (let i = 0; i < 16; i++) staffBurst = await go(make.command(ADMIN, "help"), "/help by staff " + i);
   expect("staff clicking quickly are never slowed down", !text(last(staffBurst)).includes("Slow down"), text(last(staffBurst)).slice(0, 200));
 
+  /* reset: a wrong word changes nothing; RESET clears the settings and keeps player links */
+  it = await go(make.modal(ADMIN, "modal:reset", { reset_word: "nope" }), "reset with the wrong word");
+  expect("a wrong confirmation word resets nothing", text(last(it)).includes("Not reset"), text(last(it)).slice(0, 200));
+  it = await go(make.modal(ADMIN, "modal:reset", { reset_word: "reset" }), "reset");
+  await new Promise((r) => setTimeout(r, 800));
+  const wiped = fileNow();
+  expect("reset clears roles, channels and servers in the file", wiped && !(wiped.servers || []).length && !Object.values(wiped.staffRoles || {}).some(Boolean), text(wiped && { roles: wiped.staffRoles, servers: wiped.servers }));
+  expect("reset keeps player links", wiped && (wiped.links || []).length > 10, text(wiped && (wiped.links || []).length));
+
   for (const { it: one, label } of all) {
     expect("answered in time: " + label, one.firstAckAt !== null && one.firstAckAt < 3000, "first answer at " + one.firstAckAt + " ms");
     expect("no protocol error: " + label, one.errors.length === 0, one.errors.join("; "));

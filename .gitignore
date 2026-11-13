@@ -10,4 +10,4 @@ public/media/*.webp
 __pycache__/
 
 # The bot keeps a copy of its settings (RCON passwords included) here when run locally.
-data/
+/data/

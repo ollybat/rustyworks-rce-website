@@ -222,6 +222,13 @@ problems.push(...limits.problems);
     const page = (ref.commands || []).find((c) => c.name === real.name);
     if (!page) { problems.push("commands.json: /" + real.name + " is missing from the commands reference"); continue; }
     const subs = (real.options || []).filter((o) => o.type === 1);
+    if (!subs.length) {
+      /* a command with no subcommands: the page may describe its options in one entry */
+      const shownOptions = [].concat(...(page.subcommands || []).map((x) => x.options || []), page.options || []);
+      const uniq = (list) => [...new Set(list.map((x) => x.name))].sort().join(",");
+      if (uniq(real.options || []) !== uniq(shownOptions)) problems.push("commands.json: /" + real.name + " options differ (bot: " + uniq(real.options || []) + ", page: " + uniq(shownOptions) + ")");
+      continue;
+    }
     if (names(subs) !== names(page.subcommands)) problems.push("commands.json: /" + real.name + " subcommands differ (bot: " + names(subs) + ", page: " + names(page.subcommands) + ")");
     for (const sub of subs) {
       const shown = (page.subcommands || []).find((x) => x.name === sub.name);

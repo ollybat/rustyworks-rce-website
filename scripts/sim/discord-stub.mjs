@@ -13,6 +13,7 @@ import { resolve as resolvePath } from "node:path";
 export const GatewayIntentBits = { Guilds: 1 };
 export const Partials = { Channel: 1 };
 export const PermissionFlagsBits = { Administrator: 8n, ManageGuild: 32n, ManageRoles: 268435456n };
+export const ChannelType = { GuildText: 0, GuildCategory: 4 };
 export const Events = {
   ClientReady: "ready", InteractionCreate: "interactionCreate", Error: "error", Debug: "debug",
   ShardDisconnect: "shardDisconnect", ShardReconnecting: "shardReconnecting",
@@ -29,7 +30,7 @@ export class Collection extends Map {
 }
 
 /* What the pretend Discord saw: messages posted in channels, roles given and taken. */
-export const world = { sent: [], roleChanges: [], registered: [], dms: [], deleted: [], guildId: process.env.DISCORD_GUILD_ID || "1" };
+export const world = { sent: [], roleChanges: [], registered: [], dms: [], deleted: [], created: [], guildId: process.env.DISCORD_GUILD_ID || "1" };
 /* a member who keeps direct messages from server members closed */
 const DMS_CLOSED = "100000000000000209";
 /* the one log channel the bot may see but not post in */
@@ -47,6 +48,15 @@ function makeGuild() {
         return [id, { id, name: "log-" + n, type: 0, rawPosition: i, parent: { name: "Logs" },
           permissionsFor: () => ({ has: (perm) => (id === NO_SEND ? perm !== "SendMessages" : ["ViewChannel", "SendMessages", "EmbedLinks"].includes(perm)) }) }];
       })),
+      /* channel creation, for /setup channels > Create channels for me */
+      async create(options) {
+        const id = "1000000000000" + String(600 + world.created.length).padStart(5, "0");
+        const channel = { id, name: options.name, type: options.type, parentId: options.parent || null, rawPosition: 99,
+          permissionsFor: () => ({ has: () => true }) };
+        world.created.push(channel);
+        this.cache.set(id, channel);
+        return channel;
+      },
     },
     commands: {
       async set(list) {

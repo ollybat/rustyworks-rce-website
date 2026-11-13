@@ -300,6 +300,35 @@ export async function run({ world, make, interact }) {
   it = await go(make.button(PLAYER, "help:cmd:server"), "help page for /server, by a member");
   expect("members can open a help page", text(last(it)).includes("Help: /server"), text(last(it)).slice(0, 200));
 
+  /* 32. the click-through setup tools from main */
+  it = await go(make.command(ADMIN, "setup", "suggest"), "/setup suggest");
+  expect("suggest proposes roles from the names it can see", text(last(it)).includes("What the names suggest") && text(last(it)).includes("Owner"), text(last(it)).slice(0, 400));
+  expect("the proposal itself is never sent to Discord", !text(last(it)).includes("proposalData"), "");
+  it = await go(make.button(ADMIN, "setup:suggest:apply"), "apply the suggestion");
+  expect("Apply writes the proposal and says what it saved", text(last(it)).includes("Proposal applied"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "setup", "channels"), "/setup channels");
+  it = await go(make.button(ADMIN, "setup:channels:build"), "create channels: pick types");
+  it = await go(make.select(ADMIN, "string", "setup:channels:build:pick", ["killfeed", "nonsense"]), "create channels: tick kill feed");
+  expect("the plan lists exactly the channel it will make", text(last(it)).includes("spinback-killfeed") && !text(last(it)).includes("nonsense"), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "setup:channels:build:go"), "create channels: go");
+  expect("the bot creates the channel and saves it", world.created.some((c) => c.name === "spinback-killfeed") && world.created.some((c) => c.name === "Spinback"), text(world.created.map((c) => c.name)));
+  it = await go(make.button(ADMIN, "setup:import:paste"), "open the server.cfg paste form");
+  expect("the paste form opens", (it.calls[0] || {}).method === "showModal", text(it.calls));
+  it = await go(make.modal(ADMIN, "modal:import", { import_text: "rcon.ip 203.0.113.10\nrcon.port 28016\nrcon.password \"hunter2\"\nrcon.web 0" }), "paste server.cfg lines");
+  expect("server.cfg lines are read, password hidden", text(last(it)).includes("ready to test") && !text(last(it)).includes("hunter2"), text(last(it)).slice(0, 400));
+  it = await go(make.command(ADMIN, "setup", "export"), "/setup export");
+  expect("the export never contains a password", text(last(it)).includes("password not shown") && !text(last(it)).includes("secret"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "setup", "doctor"), "/setup doctor");
+  expect("the doctor answers in time with a report", it.firstAckAt !== null && it.firstAckAt < 3000 && text(last(it)).length > 100, it.firstAckAt);
+  it = await go(make.command(ADMIN, "kits", "commands"), "/kits commands");
+  expect("/kits commands opens the validated delivery form", text(last(it)).includes("kits:delivery"), text((last(it) || {}).components));
+  it = await go(make.command(ADMIN, "kits", "doctor"), "/kits doctor");
+  expect("/kits doctor is honest about binds needing the game hook", text(last(it)).includes("Kit setup check"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "user", "pending"), "/user pending");
+  expect("/user pending opens the waiting list", text(last(it)).includes("user:pending:approve") || text(last(it)).includes("Nobody is waiting") || text(last(it)).includes("aiting"), text(last(it)).slice(0, 300));
+  it = await go(make.command(PLAYER, "help", null, { command: "kits" }), "/help command:kits");
+  expect("/help can open one command's page straight away", text(last(it)).includes("Help: /kits"), text(last(it)).slice(0, 200));
+
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
     expect("answered in time: " + label, one.firstAckAt !== null && one.firstAckAt < 3000, "first answer at " + one.firstAckAt + " ms");

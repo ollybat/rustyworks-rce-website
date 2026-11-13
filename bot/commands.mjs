@@ -23,10 +23,22 @@ const BT = String.fromCharCode(96);
 
 export const COMMANDS = [
   { name: "ping", description: "Bot and website health, measured right now", dm_permission: false },
-  { name: "help", description: "What every command does, and what each one needs set up first", dm_permission: false },
+  { name: "help", description: "What every command does, and what each one needs set up first", dm_permission: false,
+    options: [
+      { type: 3, name: "command", description: "Open one command's help page straight away",
+        choices: ["ping", "help", "setup", "kits", "user", "server"].map(function (n) { return { name: n, value: n }; }) },
+    ] },
   { name: "setup", description: "Configure Spinback RCE for this server", dm_permission: false,
     options: [
       { type: 1, name: "run", description: "Guided setup: roles, logging channels, then your Rust server" },
+      { type: 1, name: "roles", description: "Pick your staff roles from Discord's role menus: no ids to copy" },
+      { type: 1, name: "channels", description: "Logging channels: pick them, or let the bot create them" },
+      { type: 1, name: "server", description: "Add or change a Rust server, tested before it is saved" },
+      { type: 1, name: "suggest", description: "Read the role and channel names here and propose a full setup" },
+      { type: 1, name: "doctor", description: "Health check: measure every saved setting and list what to fix" },
+      { type: 1, name: "import", description: "Paste your server.cfg RCON lines and let the bot read them" },
+      { type: 1, name: "export", description: "Your saved settings as copyable text, with no passwords in it" },
+      { type: 1, name: "reset", description: "Clear the saved settings again, after typing a confirmation" },
       { type: 1, name: "status", description: "Checklist of what is saved and what is still missing" },
       { type: 1, name: "edit", description: "Change a saved server IP, RCON port or password" },
       { type: 1, name: "refresh", description: "Force a fresh RCON connection and report what the server says",
@@ -37,6 +49,8 @@ export const COMMANDS = [
       { type: 1, name: "grab", description: "Read the real kit names from the Rust server",
         options: [{ type: 3, name: "server", description: "Saved server to ask (blank uses the first)", autocomplete: true }] },
       { type: 1, name: "config", description: "Emote kit wizard: binds, cooldowns, roles, lock kits, emote guide" },
+      { type: 1, name: "commands", description: "Set your kit plugin's list command, give template and cooldown" },
+      { type: 1, name: "doctor", description: "Check the kit settings and see exactly what is still missing" },
       { type: 1, name: "give", description: "Give a kit to a gamertag or a linked Discord user",
         options: [
           { type: 3, name: "kit", description: "Kit name (leave blank to open the panel)", autocomplete: true },
@@ -77,6 +91,7 @@ export const COMMANDS = [
           { type: 6, name: "to_user", description: "New Discord account for it" },
           { type: 3, name: "to_gamertag", description: "New gamertag for it" },
         ] },
+      { type: 1, name: "pending", description: "Link requests waiting for confirmation, with approve and reject" },
       { type: 1, name: "linkpanel", description: "Post a panel with Link Account and Unlink buttons in a channel",
         options: [{ type: 7, name: "channel", description: "Channel to post it in", channel_types: [0] }] },
       { type: 1, name: "roster", description: "See every linked player, or search for one",
@@ -113,6 +128,19 @@ function button(id, label, style) { return { type: 2, custom_id: id, label: labe
 function link(label, url) { return { type: 2, style: 5, label: label, url: url }; }
 function input(id, label, value, required) {
   return { type: 4, custom_id: id, label: label, style: 1, required: !!required, value: value || undefined, max_length: 220 };
+}
+function area(id, label, value, required) {
+  return { type: 4, custom_id: id, label: label, style: 2, required: !!required, value: value || undefined, max_length: 2000 };
+}
+function roleSelect(id, placeholder, minValues) {
+  return { type: 6, custom_id: id, placeholder: placeholder, min_values: minValues === undefined ? 1 : minValues, max_values: 1 };
+}
+function channelSelect(id, placeholder, kinds) {
+  return { type: 8, custom_id: id, placeholder: placeholder, channel_types: kinds || [0, 5] };
+}
+function stringSelect(id, placeholder, options, minValues, maxValues) {
+  return { type: 3, custom_id: id, placeholder: placeholder, min_values: minValues === undefined ? 1 : minValues,
+    max_values: maxValues || 1, options: options };
 }
 function when() { return new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC"; }
 function ms(n) { return Number.isFinite(n) ? Math.round(n) + " ms" : "not measured"; }
@@ -395,7 +423,7 @@ export function channelMenu(typeKey, ctx) {
   var current = ((ctx && ctx.settings.logChannels) || {})[typeKey];
   var menu = { type: 8, custom_id: "setup:channel:" + typeKey, placeholder: "Where should these logs go?", channel_types: [0, 5], min_values: 0, max_values: 1 };
   if (current) menu.default_values = [{ id: String(current), type: "channel" }];
-  var nav = [button("setup:channels", "Back to log types", 2)];
+  var nav = [button("setup:channels:pick", "Back to log types", 2)];
   if (current) nav.push(button("setup:logtest:" + typeKey, "Send a test message", 2));
   return { embeds: [embed(0x1abc9c, "Pick a channel",
     "Log type: **" + (found ? found[1] : typeKey) + "**" + (current ? "\nNow going to <#" + current + ">. Clear the menu to switch it off." : "\nOff right now.") +
@@ -590,6 +618,543 @@ export function whoisReply(ctx, gamertag) {
   return { embeds: [built], components: [row(nav)], flags: EPH };
 }
 
+
+/* ==========================================================================
+   Setup, made clickable
+   --------------------------------------------------------------------------
+   Everything below follows one rule: the bot shows what it found and then waits.
+   No role, channel, server or kit command is written until somebody presses the button that
+   says it will be, and every panel reports exactly what was stored (or the reason nothing was).
+   Nothing is inferred from a name unless the panel says it was: proposals are labelled, listed
+   in full, and saved only on Apply.
+   ========================================================================== */
+
+/* Step 1 (roles) is rolesPanel above: Discord's own role menus, one per slot. */
+
+/* ------------------------------------------------ step 2: log channels ------ */
+export function channelSetupPanel(ctx) {
+  var channels = ctx.settings.logChannels || {};
+  var setCount = LOG_TYPES.filter(function (t) { return channels[t[0]]; }).length;
+  var built = embed(0xff7200, "Step 2 - Logging channels",
+    "Every log type is optional: a type with no channel is simply switched off, and " + setCount + " of " + LOG_TYPES.length + " have one.");
+  built.fields = [
+    field("Two ways", "**Pick them one by one** - choose a log type, then the channel for it.\n**Create them for me** - the bot makes a Spinback category and one channel per type you tick, shows you the exact list first, and reports each channel back as it is made.", false),
+    field("Why the bot asks", "It only saves a channel it can actually post in, and it says so when it cannot. A log target the bot cannot write to would be worse than none.", false),
+  ];
+  return { embeds: [built], components: [
+    row([button("setup:channels:pick", "Pick a type, then a channel", 1), button("setup:channels:build", "Create channels for me", 2)]),
+    row([button("setup:roles", "Back to roles", 2), button("setup:server", "Next: the Rust server", 1)]),
+  ], flags: EPH };
+}
+
+export function logChannelBuilder() {
+  return { embeds: [embed(0xff7200, "Which logs should get a channel?",
+    "Tick the log types you want. The bot creates one text channel per ticked type inside a new **Spinback** category, then saves each channel as that type target. Nothing else in the server is touched, and you see the list before it makes anything.")],
+    components: [
+      row([stringSelect("setup:channels:build:pick", "Log types to create channels for",
+        LOG_TYPES.slice(0, 25).map(function (p) { return { label: p[1], value: p[0] }; }), 1, 10)]),
+      row([button("setup:channels", "Back", 2)]),
+    ], flags: EPH };
+}
+
+export function logChannelPlan(keys) {
+  var list = (keys || []).map(function (key) {
+    var found = LOG_TYPES.filter(function (t) { return t[0] === key; })[0];
+    return "- **#spinback-" + String(key).toLowerCase() + "** for " + (found ? found[1] : key);
+  });
+  var built = embed(0xfaa81a, "Create these channels?",
+    "A category named **Spinback**, then " + (keys || []).length + " text channel(s) in this server:\n\n" + (list.join("\n") || "nothing selected"));
+  built.fields = [field("Afterwards", "Each created channel is saved as that log type target, so logs start going there. A channel the bot cannot create is reported with the reason and simply skipped.", false)];
+  built.footer = { text: "This is the only step that creates channels, and it does it only when you press Create" };
+  return { embeds: [built], components: [
+    row([button("setup:channels:build:go", "Create them", 3), button("setup:channels:build:cancel", "Cancel", 2)]),
+  ], flags: EPH };
+}
+
+export function logChannelBuilt(created, failed, wrote) {
+  var okList = created || [];
+  var badList = failed || [];
+  var built = embed(badList.length ? 0xfaa81a : 0x3ba55d, "Log channels",
+    okList.length + " channel(s) created and saved" + (badList.length ? ", " + badList.length + " skipped" : "") + "."
+    + (wrote && wrote.ok ? "" : " The website refused the settings save, so these ids live in this bot memory only: " + String((wrote && wrote.detail) || "").slice(0, 160)));
+  if (okList.length) built.fields = [field("Created", okList.slice(0, 12).join("\n").slice(0, 1000), false)];
+  if (badList.length) built.fields = (built.fields || []).concat([field("Skipped", badList.slice(0, 8).join("\n").slice(0, 1000), false)]);
+  return { embeds: [built], components: [
+    row([button("setup:channels", "Back to log channels", 2), button("setup:doctor", "Health check", 2), button("setup:server", "Next: the Rust server", 1)]),
+  ], flags: EPH };
+}
+
+/* ------------------------------------------------- step 3: the Rust server -- */
+export function serverStepPanel(ctx) {
+  var servers = ctx.servers();
+  var built = embed(0xff7200, "Step 3 - Your Rust server",
+    "The address, the RCON port and the password come from your server.cfg. Nothing is saved until the server answers a real RCON command, so a wrong port or password cannot land in your settings."
+    + (servers.length ? "\n\nAlready saved: " + servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port); }).join(", ") : ""));
+  built.fields = [
+    field("Where the details are", "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + ", " + code("rcon.password") + ". " + code("rcon.web") + " must be " + code("0") + ", because this bot speaks the classic source RCON protocol."),
+    field("If it will not answer", "The port is the thing people get wrong most: it is the RCON port from server.cfg, not the game or query port. Then rcon.web. Then an IP allowlist on the host, because the bot runs from a cloud address that can change."),
+    field("Two ways in", "Type the details, or paste the RCON lines from server.cfg and let the bot read them."),
+  ];
+  return { embeds: [built], components: [
+    row([button("setup:server", "Enter the details", 1), button("setup:import", "Paste server.cfg", 2)]),
+    row([button("setup:test", "Test a saved server", 2), button("setup:doctor", "Health check", 2)]),
+    row([button("setup:roles", "Back to roles", 2), button("setup:channels", "Back to log channels", 2)]),
+  ], flags: EPH };
+}
+
+/* ------------------------------------------- find it for me: name proposals -- */
+/* Names are matched against hints, and the panel says which hint matched. Nothing is saved
+   here: the bot proposes, prints the whole proposal, and waits for Apply. */
+const ROLE_HINTS = [
+  ["owner", ["owner", "founder", "creator", "leader"]],
+  ["coOwner", ["co-owner", "coowner", "co owner", "vice owner", "deputy owner", "second owner"]],
+  ["headAdmin", ["head admin", "headadmin", "senior admin", "staff manager", "staff lead"]],
+  ["admin", ["admin", "administrator"]],
+  ["moderator", ["moderator", "trial mod"]],
+  ["linked", ["linked", "verified", "linked player"]],
+];
+const LOG_HINTS = {
+  server: ["server", "status"], console: ["console"], command: ["command"], rcon: ["rcon"],
+  linking: ["link"], killfeed: ["kill"], eventfeed: ["event"], emoteKits: ["emote", "kit"],
+  admin: ["admin"], zorp: ["zorp"], teleport: ["teleport", "tp"], clan: ["clan"],
+  catchARide: ["catch", "car"], joinLeave: ["join", "leave", "welcome", "goodbye"],
+  errors: ["error"],
+};
+function normName(value) { return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+/* A channel the bot cannot read the type of is not excluded: it is proposed and labelled, so a
+   person decides. Only voice, category and stage channels are refused as log targets. */
+function looksLikeTextChannel(channel) {
+  var kind = channel && channel.kind;
+  if (kind === undefined || kind === null || kind === "") return true;
+  if (typeof kind === "number") return kind === 0 || kind === 5 || kind === 15;
+  var text = String(kind).toLowerCase();
+  if (text.indexOf("voice") > -1 || text.indexOf("categor") > -1 || text.indexOf("stage") > -1) return false;
+  return true;
+}
+export function setupSuggest(ctx) {
+  var guild = ctx.guildInfo;
+  if (!guild) return { embeds: [embed(0xdc4c4c, "Nothing to read yet", "The bot has not received this server role and channel list yet. Try again in a moment.")], flags: EPH };
+  var roles = (guild.roles || []).slice();
+  var channels = (guild.channels || []).slice();
+  var proposal = { roles: {}, channels: {} };
+  var usedRoles = {};
+  var roleHits = [];
+  ROLE_HINTS.forEach(function (pair) {
+    var slot = pair[0];
+    var found = null;
+    roles.forEach(function (role) {
+      if (found || usedRoles[role.id]) return;
+      var name = normName(role.name);
+      var exact = pair[1].some(function (hint) { return name === normName(hint); });
+      var loose = pair[1].some(function (hint) { return name.indexOf(normName(hint)) > -1; });
+      if (exact) found = { id: role.id, name: role.name, how: "exact name match" };
+      else if (loose) found = { id: role.id, name: role.name, how: "name contains " + normName(pair[1][0]) };
+    });
+    if (found) {
+      usedRoles[found.id] = true;
+      roleHits.push({ slot: slot, hit: found });
+      proposal.roles[slot] = { roleId: found.id, name: found.name, how: found.how };
+    }
+  });
+  var usedChannels = {};
+  var channelHits = [];
+  LOG_TYPES.forEach(function (type) {
+    var hints = LOG_HINTS[type[0]] || [];
+    var found = null;
+    channels.forEach(function (channel) {
+      if (found || usedChannels[channel.id] || channel.canSend === false) return;
+      if (!looksLikeTextChannel(channel)) return;
+      var name = normName(channel.name);
+      var exact = hints.some(function (hint) { return name === normName(hint); });
+      var loose = hints.some(function (hint) { return name.indexOf(normName(hint)) > -1; });
+      if (exact) found = { id: channel.id, name: channel.name, how: "exact name match" };
+      else if (loose) found = { id: channel.id, name: channel.name, how: "name contains " + normName(hints[0]) };
+    });
+    if (found) {
+      usedChannels[found.id] = true;
+      channelHits.push({ slot: type[0], label: type[1], hit: found });
+      proposal.channels[type[0]] = { channelId: found.id, name: found.name, how: found.how };
+    }
+  });
+  var built = embed(0xff7200, "What the names suggest",
+    "Read from the " + roles.length + " role(s) and " + channels.length + " channel(s) the bot can see here, at " + when() + ". Nothing is saved yet: the whole proposal is below, and Apply does the writing.");
+  built.fields = [
+    field("Roles proposed (" + roleHits.length + " of " + ROLE_SLOTS.length + ")",
+      roleHits.length ? roleHits.map(function (r) {
+        var label = ROLE_SLOTS.filter(function (s) { return s[0] === r.slot; })[0];
+        return "**" + (label ? label[1] : r.slot) + "** -> " + r.hit.name + " (" + r.hit.how + ")";
+      }).join("\n").slice(0, 1000) : "No role name matched any slot. Save them by hand from the role slots panel.", false),
+    field("Log channels proposed (" + channelHits.length + ")", channelHits.length ? channelHits.map(function (c) {
+      return "**" + c.label + "** -> #" + c.hit.name + " (" + c.hit.how + ")";
+    }).join("\n").slice(0, 1000) : (channels.length ? "No channel name matched a log type." : "The bot can see no channels in this server yet. Create them with **2. Log channels**, then run this again."), false),
+    field("Not matched", roleHits.length === ROLE_SLOTS.length && channelHits.length ? "Everything was matched." :
+      "Anything missing above is deliberate: no guess was made for it. Save or pick those by hand. " +
+      (channels.length ? "" : "This server reports no channels to the bot at all, which also means it cannot post logs anywhere."), false),
+  ];
+  built.footer = { text: "A name match is a suggestion, not a decision: Apply writes exactly what is listed above" };
+  var rows = [];
+  if (roleHits.length || channelHits.length) {
+    rows.push(row([button("setup:suggest:apply", "Apply all - roles and channels", 3),
+      button("setup:suggest", "Read the names again", 2)]));
+  } else {
+    rows.push(row([button("setup:suggest", "Read the names again", 2)]));
+  }
+  rows.push(row([button("setup:roles", "Pick roles by hand", 2), button("setup:channels", "Pick channels by hand", 2)]));
+  rows.push(row([button("setup:doctor", "Health check", 2), button("setup:status", "Status", 2)]));
+  /* The proposal travels with the panel so Apply can only ever write the list that was on
+     screen. The caller deletes this key before the panel is sent, because Discord would not
+     understand it. */
+  return { embeds: [built], components: rows, flags: EPH, proposalData: proposal };
+}
+
+export function suggestApplied(ctx, roles, channels, wrote, proposal) {
+  var roleCount = (roles || []).length;
+  var channelCount = (channels || []).length;
+  var built = embed(wrote && wrote.ok ? 0x3ba55d : 0xfaa81a, "Proposal applied",
+    roleCount + " role slot(s) and " + channelCount + " log channel(s) saved."
+    + (wrote && wrote.ok ? " The website has them too, so they survive a restart."
+      : " The website refused the save, so this holds until the service restarts: " + String((wrote && wrote.detail) || "").slice(0, 160)));
+  var fields = [];
+  if (roleCount) fields.push(field("Roles saved", (roles || []).join("\n").slice(0, 1000), false));
+  if (channelCount) fields.push(field("Log channels saved", (channels || []).join("\n").slice(0, 1000), false));
+  if (proposal && (proposal.roleMisses || []).length) fields.push(field("Roles left alone", proposal.roleMisses.join(", ") + " - no name matched, so nothing was guessed.", false));
+  if (fields.length) built.fields = fields;
+  return { embeds: [built], components: [
+    row([button("setup:roles", "Check the roles", 2), button("setup:doctor", "Health check", 2), button("setup:status", "Status", 2)]),
+  ], flags: EPH };
+}
+
+/* ------------------------------------------------ health check: the doctor --- */
+function rconAdvice(reason) {
+  var table = {
+    timeout: "nothing answered in time. The port is usually the game or query port rather than the RCON port, or RCON is off, or rcon.web is 1 (this bot speaks the other kind: set rcon.web 0). A host that only accepts listed IPs looks exactly like this too, because the bot runs from a cloud address that can change.",
+    "bad-password": "the server answered and refused the password, so the address and port are right. Compare rcon.password in server.cfg with what is saved here, character for character.",
+    "refused-host": "that address is not on the public internet, so the bot will not connect to it. Use the public IP or hostname from server.cfg.",
+    "refused-port": "that port number cannot exist. rcon.port is normally a five digit number.",
+    "no-password": "no RCON password is saved for this server. Add one with /setup server.",
+    "connect-failed": "the connection itself failed. Check the address, and that the port is open to the internet.",
+    "closed-before-auth": "the server closed the connection before the password exchange finished. RCON is probably off, or the host is refusing the bot.",
+    closed: "the server closed the connection while it was answering, so the reply is incomplete.",
+    unexpected: "the connection failed in an unexpected way; the detail above comes from the operating system.",
+  };
+  return table[String(reason || "")] || "the reason is above. If it repeats, the port, the address and rcon.web are the three things worth re-reading in server.cfg.";
+}
+export async function setupDoctor(ctx) {
+  var guild = ctx.guildInfo;
+  var roles = ctx.settings.staffRoles || {};
+  var channels = ctx.settings.logChannels || {};
+  var servers = ctx.servers() || [];
+  var kits = ctx.kits();
+  var fields = [];
+  var todo = [];
+
+  /* 1 - staff roles, including ids that no longer exist */
+  var savedSlots = ROLE_SLOTS.filter(function (s) { return roles[s[0]]; });
+  var stale = [];
+  if (guild && savedSlots.length) {
+    savedSlots.forEach(function (s) {
+      var known = (guild.roles || []).filter(function (r) { return String(r.id) === String(roles[s[0]]); })[0];
+      if (!known) stale.push(s[1]);
+    });
+  }
+  fields.push(field("Staff roles", savedSlots.length + " of " + ROLE_SLOTS.length + " slots set"
+    + (stale.length ? "\n" + stale.join(", ") + " point at a role that is no longer in this server" : "")
+    + (guild ? "" : "\nThe bot has not received this server role list yet, so ids could not be checked"), false));
+  if (!savedSlots.length) todo.push("Save at least one staff role: **1. Staff roles** on the setup panel, or /setup suggest to have the names read for you.");
+  else if (stale.length) todo.push("Clear or replace the role slots that no longer exist: " + stale.join(", ") + ".");
+
+  /* 2 - log channels, including ones the bot cannot post in */
+  var chSet = 0, chGone = [], chNoPost = [], chUnknown = [];
+  LOG_TYPES.forEach(function (type) {
+    var id = channels[type[0]];
+    if (!id) return;
+    chSet += 1;
+    if (!guild) return;
+    var found = (guild.channels || []).filter(function (c) { return String(c.id) === String(id); })[0];
+    if (!found) { chGone.push(type[1]); return; }
+    if (found.canSend === false) chNoPost.push(type[1] + " (#" + found.name + ")");
+    else if (found.canSend === null || found.canSend === undefined) chUnknown.push(type[1] + " (#" + found.name + ")");
+  });
+  fields.push(field("Log channels", chSet + " of " + LOG_TYPES.length + " types set"
+    + (chGone.length ? "\n" + chGone.length + " point at a channel that is gone" : "")
+    + (chNoPost.length ? "\nthe bot cannot post in: " + chNoPost.slice(0, 6).join(", ") : "")
+    + (chUnknown.length ? "\ncould not read its permission in: " + chUnknown.slice(0, 6).join(", ") : ""), false));
+  if (chNoPost.length) todo.push("Give the bot permission to post in the listed channels, or point those log types somewhere else.");
+  if (chGone.length) todo.push("Re-pick the log types whose channel is gone.");
+  if (!chSet) todo.push("Optional but useful: **2. Log channels**.");
+
+  /* 3 - one fresh RCON connection per saved server, measured */
+  var probeLines = [];
+  var probes = servers.slice(0, 3);
+  for (var i = 0; i < probes.length; i++) {
+    var server = probes[i];
+    var answer = await ctx.rconTest({ host: server.host, port: server.port, password: server.password, command: "serverinfo" });
+    if (answer && answer.ok === true) {
+      probeLines.push("**" + server.name + "** answered in " + ms(answer.ms) + ": " + String(answer.answer || "").split("\n")[0].slice(0, 90));
+    } else {
+      probeLines.push("**" + server.name + "** did not answer -> " + code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 220) + "\n" + rconAdvice(answer && answer.reason));
+      todo.push("Fix the connection to " + server.name + " (" + server.host + ":" + server.port + "): " + rconAdvice(answer && answer.reason).slice(0, 220));
+    }
+  }
+  fields.push(field("Rust servers", servers.length
+    ? servers.length + " saved, " + probes.length + " opened a fresh connection just now\n\n" + probeLines.join("\n\n").slice(0, 1000)
+    : "none saved yet", false));
+  if (!servers.length) todo.push("Link your Rust server: **3. Rust server**, or /setup import to paste the lines from server.cfg.");
+
+  /* 4 - kit settings, checked against their own rules */
+  var give = String(kits.giveCommand || "").trim();
+  var list = String(kits.listCommand || "").trim();
+  var giveIssues = [];
+  if (give && give.indexOf("{player}") === -1) giveIssues.push("no {player}");
+  if (give && give.indexOf("{kit}") === -1) giveIssues.push("no {kit}");
+  fields.push(field("Kit settings",
+    (list ? "list command set" : "no list command") + "\n"
+    + (give ? "give template set" : "no give template") + (giveIssues.length ? " (" + giveIssues.join(", ") + ")" : "")
+    + "\ncooldown per player + kit: " + (kits.giveCooldownSeconds == null ? 30 : kits.giveCooldownSeconds) + " s"
+    + "\n" + (kits.binds || []).length + " bind(s), " + Object.keys(kits.authSpawn || {}).length + " respawn kit(s), delivery " + (kits.locked ? "paused" : "on"), false));
+  if (!list || !give) todo.push("Set your kit plugin own commands with **/kits commands**: without a list command the bot cannot read your real kit names, and without a give template it cannot hand a kit over.");
+  if (giveIssues.length) todo.push("The give template needs both {player} and {kit} in it, otherwise the bot has nothing to put the target and the kit into.");
+
+  /* 5 - where settings are stored */
+  fields.push(field("Storage", ctx.storeTokenSet()
+    ? "The website accepts saves, so settings survive a restart."
+    : "BOT_SETTINGS_TOKEN is not set, so anything saved stays in this bot memory until it restarts.", false));
+  if (!ctx.storeTokenSet()) todo.push("Set BOT_SETTINGS_TOKEN to the same value on the website service and this one, or every save lives in memory only.");
+
+  /* 6 - the gate itself */
+  var state = setupState(ctx);
+  fields.push(field("Setup gate", state.complete ? "passed: staff commands are unlocked" : "still closed: " + (state.rolesSaved ? "" : "no staff role saved. ") + (state.serverLinked ? "" : "no tested Rust server linked."), false));
+
+  var built = embed(todo.length ? 0xfaa81a : 0x3ba55d, "Health check",
+    "Everything below was measured at " + when() + ": role and channel ids were checked against this server, and each saved server was asked a real RCON command just now. "
+    + (todo.length ? "Then the list of what to fix, most important first." : "Nothing needs fixing."));
+  built.fields = fields.slice(0, 10);
+  if (todo.length) built.fields.push(field("Do this next", todo.slice(0, 5).map(function (line) { return "- " + line; }).join("\n").slice(0, 1000), false));
+  built.footer = { text: "Read-only: this panel changed nothing" };
+  return { embeds: [built], components: [
+    row([button("setup:roles", "Roles", 1), button("setup:channels", "Log channels", 1), button("setup:server", "Rust server", 1)]),
+    row([button("kits:commands", "Kit commands", 2), button("setup:doctor", "Run it again", 2), button("setup:status", "Status", 2)]),
+  ], flags: EPH };
+}
+
+/* ----------------------------------------------------- import server.cfg ----- */
+export function setupImportPanel() {
+  return { embeds: [embed(0x5865f2, "Import your Rust server details",
+    "Paste the RCON lines out of server.cfg, or just the address and password on one line. The bot reads exactly what is in front of it, says which pieces it found and which are missing, then tests the connection - and only saves the server if it answers.")],
+    components: [
+      row([button("setup:import:paste", "Paste the details", 1), button("setup:server", "Type them by hand", 2)]),
+      row([button("setup:doctor", "Health check", 2), button("setup:status", "Status", 2)]),
+    ], flags: EPH };
+}
+
+export function setupImportModal() {
+  return { title: "Paste RCON details", custom_id: "modal:import", components: [
+    row([area("import_text", "server.cfg lines, or: host port password", "", true)]),
+  ] };
+}
+
+/* Reads what is there. Every field it did not find is reported as missing rather than filled in. */
+export function parseServerText(text) {
+  var out = { host: null, port: null, password: null, web: null, found: [], missing: [], notes: [] };
+  var lines = String(text || "").split(/\r?\n/);
+  var strip = function (value) { return String(value || "").replace(/^["']|["']$/g, "").trim(); };
+  lines.forEach(function (rawLine) {
+    var line = String(rawLine).trim();
+    if (!line || line.charAt(0) === "#") return;
+    var named = line.match(/^\s*(rcon\.[a-z]+)\s+(.+)$/i);
+    if (named) {
+      var key = String(named[1]).toLowerCase();
+      var value = strip(named[2]);
+      if (key === "rcon.ip") out.host = value;
+      else if (key === "rcon.port") out.port = value;
+      else if (key === "rcon.password") out.password = value;
+      else if (key === "rcon.web") out.web = value;
+      return;
+    }
+    var connect = line.match(/^\s*(?:connect|rcon)\s+(.+)$/i);
+    var rest = connect ? connect[1].trim() : line;
+    var pairs = rest.split(/\s+/);
+    var first = pairs[0] || "";
+    if (first.indexOf(":") > -1 && first.split(":").length === 2) {
+      if (!out.host) {
+        out.host = first.split(":")[0];
+        out.port = first.split(":")[1];
+        if (pairs[1] && !out.password) out.password = strip(pairs[1]);
+      }
+      return;
+    }
+    if (pairs.length >= 3 && !out.host && /^[0-9a-zA-Z.\-]+$/.test(first)) {
+      out.host = first;
+      out.port = pairs[1];
+      out.password = strip(pairs.slice(2).join(" "));
+    }
+  });
+  if (out.host) out.found.push("address (" + code(out.host) + ")");
+  if (out.port) out.found.push("port (" + code(String(out.port)) + ")");
+  if (out.password) out.found.push("password (hidden)");
+  if (out.web !== null) out.found.push(code("rcon.web") + ": " + code(String(out.web)));
+  if (!out.host) out.missing.push("the address (" + code("rcon.ip") + ")");
+  if (!out.port) out.missing.push("the port (" + code("rcon.port") + ")");
+  if (!out.password) out.missing.push("the password (" + code("rcon.password") + ")");
+  if (out.web === "1") out.notes.push("**rcon.web is 1** in what you pasted. This bot speaks the classic source RCON protocol, so set " + code("rcon.web 0") + " on the server, or the connection will look like a timeout.");
+  var portNumber = Number(out.port);
+  if (out.port && !(portNumber >= 1 && portNumber <= 65535)) out.notes.push("**" + code(String(out.port)) + " is not a port number** that can exist, so nothing will be sent to it.");
+  return out;
+}
+
+export function setupImportResult(parsed) {
+  var ready = !!parsed && !!parsed.host && !!parsed.port && !!parsed.password && Number(parsed.port) >= 1 && Number(parsed.port) <= 65535;
+  var built = embed(ready ? 0x3ba55d : 0xfaa81a, ready ? "Read it - ready to test" : "Not everything was there",
+    ready
+      ? "Next the bot opens one RCON connection to **" + parsed.host + ":" + parsed.port + "** and asks " + code("serverinfo") + ". If it answers, the server is saved. If it does not, nothing is written and you get the reason."
+      : "The bot found what is below. It will not fill in the rest, so add the missing pieces by hand or paste a fuller section of server.cfg.");
+  built.fields = [
+    field("Found", parsed && parsed.found.length ? parsed.found.join("\n") : "nothing recognisable", false),
+    field("Missing", parsed && parsed.missing.length ? parsed.missing.join("\n") : "nothing", false),
+  ];
+  if (parsed && parsed.notes.length) built.fields.push(field("Worth knowing", parsed.notes.join("\n\n").slice(0, 1000), false));
+  var rows = [];
+  if (ready) rows.push(row([button("setup:import:go", "Test and save this server", 1), button("setup:import:paste", "Paste it again", 2)]));
+  else rows.push(row([button("setup:import:paste", "Paste it again", 2), button("setup:server", "Enter it by hand", 1)]));
+  rows.push(row([button("setup:doctor", "Health check", 2), button("setup:status", "Status", 2)]));
+  return { embeds: [built], components: rows, flags: EPH };
+}
+
+/* ------------------------------------------------------------- export -------- */
+export function setupExport(ctx) {
+  var guild = ctx.guildInfo;
+  var roles = ctx.settings.staffRoles || {};
+  var channels = ctx.settings.logChannels || {};
+  var kits = ctx.kits();
+  var roleName = function (id) {
+    var found = guild ? (guild.roles || []).filter(function (r) { return String(r.id) === String(id); })[0] : null;
+    return found ? found.name : "no longer in this server";
+  };
+  var channelName = function (id) {
+    var found = guild ? (guild.channels || []).filter(function (c) { return String(c.id) === String(id); })[0] : null;
+    return found ? "#" + found.name : "no longer in this server";
+  };
+  var roleLines = ROLE_SLOTS.filter(function (s) { return roles[s[0]]; }).map(function (s) {
+    return s[1] + " = " + roleName(roles[s[0]]) + " (" + roles[s[0]] + ")";
+  });
+  var channelLines = LOG_TYPES.filter(function (t) { return channels[t[0]]; }).map(function (t) {
+    return t[1] + " = " + channelName(channels[t[0]]) + " (" + channels[t[0]] + ")";
+  });
+  var built = embed(0x5865f2, "Your saved settings",
+    "Everything saved here, as text you can copy. **No RCON password is in this at all**: it never leaves the service that talks to your server, so this is safe to paste into a private note.");
+  built.fields = [
+    field("Roles", roleLines.length ? block(roleLines.join("\n").slice(0, 900)) : "none saved", false),
+    field("Log channels", channelLines.length ? block(channelLines.join("\n").slice(0, 900)) : "none saved", false),
+    field("Kit commands", block([
+      "list = " + (kits.listCommand ? kits.listCommand : "(not set)"),
+      "give = " + (kits.giveCommand ? kits.giveCommand : "(not set)"),
+      "cooldown = " + (kits.giveCooldownSeconds == null ? 30 : kits.giveCooldownSeconds) + " s",
+      "binds = " + (kits.binds || []).length,
+      "respawn kits = " + Object.keys(kits.authSpawn || {}).length,
+      "delivery paused = " + (kits.locked ? "yes" : "no"),
+    ].join("\n")), false),
+    field("Servers", ctx.servers().length ? block(ctx.servers().map(function (s) {
+      return s.name + " = " + s.host + ":" + s.port + " (password not shown)";
+    }).join("\n").slice(0, 900)) : "none saved", false),
+    field("Player links", ctx.links().length + " link(s) and " + ctx.pendingLinks().length + " waiting", true),
+    field("Stored where", ctx.storeTokenSet() ? "on the website, so it survives a restart" : "in this bot memory only: BOT_SETTINGS_TOKEN is not set", true),
+  ];
+  built.footer = { text: "Exported at " + when() };
+  return { embeds: [built], components: [
+    row([button("setup:doctor", "Health check", 2), button("setup:status", "Status", 2), button("setup:reset", "Reset instead", 4)]),
+  ], flags: EPH };
+}
+
+/* -------------------------------------------------------------- reset -------- */
+export function setupResetPanel(ctx) {
+  var roles = Object.keys(ctx.settings.staffRoles || {}).length;
+  var channels = Object.keys(ctx.settings.logChannels || {}).length;
+  var servers = ctx.servers().length;
+  var kits = ctx.kits();
+  var built = embed(0xdc4c4c, "Reset the settings?",
+    "This clears the configuration and nothing else. It is the switch for starting over, and it asks you to type a word first because there is no undo.");
+  built.fields = [
+    field("What goes", [roles + " role slot(s)", channels + " log channel(s)", servers + " server(s)", (kits.binds || []).length + " bind(s)", Object.keys(kits.authSpawn || {}).length + " respawn kit(s)", "the kit commands", "the stored install codes"].join("\n"), false),
+    field("What stays", [ctx.links().length + " player link(s)", ctx.pendingLinks().length + " waiting request(s)", "the link panel message id", "the log types already set in this server (the channels themselves are never deleted)"].join("\n"), false),
+  ];
+  built.footer = { text: "No channel, role, kit or player is ever deleted by this" };
+  return { embeds: [built], components: [
+    row([button("setup:reset:go", "I want to reset", 4), button("setup:status", "Back to status", 2), button("setup:doctor", "Health check", 2)]),
+  ], flags: EPH };
+}
+
+export function setupResetModal() {
+  return { title: "Confirm reset", custom_id: "modal:reset", components: [
+    row([input("reset_word", "Type RESET in capitals", "", true)]),
+  ] };
+}
+
+export function setupResetDone(ctx, cleared, wrote) {
+  var built = embed(wrote && wrote.ok ? 0x3ba55d : 0xfaa81a, "Settings reset",
+    cleared + " stored settings cleared."
+    + (wrote && wrote.ok ? " The website agrees, so a restart will not bring them back."
+      : " The website refused the save, so a restart may bring them back: " + String((wrote && wrote.detail) || "").slice(0, 160)));
+  built.fields = [
+    field("Kept", ctx.links().length + " player link(s) and " + ctx.pendingLinks().length + " waiting request(s), exactly as they were.", false),
+    field("Start again", "Press **1. Staff roles**, or run **/setup suggest** to have the role and channel names read for you.", false),
+  ];
+  return { embeds: [built], components: [
+    row([button("setup:roles", "Start setup again", 1), button("setup:status", "Status", 2)]),
+  ], flags: EPH };
+}
+
+/* --------------------------------------------------- kit commands + doctor --- */
+export function kitCommandsPanel(ctx) {
+  var kits = ctx.kits();
+  var list = String(kits.listCommand || "").trim();
+  var give = String(kits.giveCommand || "").trim();
+  var built = embed(0xff7200, "Your kit plugin's commands",
+    "This bot will not invent the name of a command inside your kit plugin. Give it yours, exactly as you would type them in the game console, and it uses them as given.");
+  built.fields = [
+    field("List kits", list ? code(list) : "not set - /kits grab cannot read your real kit names without it", false),
+    field("Give a kit", give ? code(give) : "not set - /kits give has nothing to send", false),
+    field("Cooldown per player + kit", (kits.giveCooldownSeconds == null ? 30 : kits.giveCooldownSeconds) + " s - only gives the server accepts start one", false),
+    field("Placeholders", "The give template is filled in with " + code("{player}") + " and " + code("{kit}") + ". Any wording around them is kept exactly as you write it.", false),
+  ];
+  built.footer = { text: "Leave a field blank when saving to clear that one command" };
+  return { embeds: [built], components: [
+    row([button("kits:delivery", "Enter the commands", 1), button("kits:grab", "Read my kits now", 2)]),
+    row([button("kits:doctor", "Check the kit setup", 2), button("kits:config", "Back to Emote Kits", 2)]),
+  ], flags: EPH };
+}
+
+export function kitsDoctor(ctx) {
+  var kits = ctx.kits();
+  var binds = kits.binds || [];
+  var auth = kits.authSpawn || {};
+  var give = String(kits.giveCommand || "").trim();
+  var list = String(kits.listCommand || "").trim();
+  var todo = [];
+  var broken = binds.filter(function (b) { return !b.emote || !(b.kits || []).length; });
+  if (!list) todo.push("Set your kit plugin **list command** with /kits commands: without it, /kits grab cannot read your real kit names, and this bot will not invent them.");
+  if (!give) todo.push("Set a **give template** with /kits commands, using {player} and {kit}: until then /kits give has nothing to send.");
+  else if (give.indexOf("{player}") === -1 || give.indexOf("{kit}") === -1) todo.push("The give template needs both {player} and {kit} in it.");
+  if (!binds.length) todo.push("Add at least one bind with /kits config: a bind is what ties an emote to its kits.");
+  if (broken.length) todo.push(broken.length + " bind(s) are incomplete and should be edited or removed.");
+  if (binds.length || Object.keys(auth).length) todo.push("Binds and respawn kits are saved, but run in game only once a Rust plugin sends emote and respawn events to the bot (not connected yet). /kits give works today.");
+  var built = embed(todo.length ? 0xfaa81a : 0x3ba55d, "Kit setup check",
+    "Read from what is saved at " + when() + ". Nothing was sent to your server by this panel, so a kit name is only ever checked against what the plugin itself reports.");
+  built.fields = [
+    field("Commands", "list: " + (list ? code(list) : "not set") + "\ngive: " + (give ? code(give) : "not set") + "\ncooldown per player + kit: " + (kits.giveCooldownSeconds == null ? 30 : kits.giveCooldownSeconds) + " s", false),
+    field("Binds", binds.length ? binds.slice(0, 10).map(function (b) {
+      return code(b.emote) + " -> " + (b.kits || []).join(", ") + (b.cooldown ? " | " + b.cooldown + "s" : "") + (b.roleId ? " | <@&" + b.roleId + ">" : "");
+    }).join("\n").slice(0, 1000) : "none yet", false),
+    field("Respawn kits", Object.keys(auth).length ? Object.keys(auth).map(function (g) { return g + " -> " + code(auth[g]); }).join("\n") : "none set", false),
+    field("Kit delivery", kits.locked ? "paused: /kits give refuses until it is resumed" : "on", true),
+    field("Kit codes stored", String(Object.keys(ctx.settings.installs || {}).length), true),
+  ];
+  if (todo.length) built.fields.push(field("Do this next", todo.slice(0, 5).map(function (t) { return "- " + t; }).join("\n").slice(0, 1000), false));
+  built.footer = { text: "Read-only: this panel changed nothing" };
+  return { embeds: [built], components: [
+    row([button("kits:commands", "Kit commands", 1), button("kits:grab", "Read my kits now", 2), button("kits:config", "Emote Kits", 2)]),
+  ], flags: EPH };
+}
+
 /* /help -------------------------------------------------------------------- */
 var STAFF_RULE = "Staff: the roles saved in step 1 of /setup, plus Administrator, Manage Server and the server owner. Before any staff role is saved, only those last three.";
 function helpButtons(current) {
@@ -619,6 +1184,8 @@ export function helpDetail(name, ctx) {
       "Your server, wired up in three steps. Roles and channels come from Discord's own pickers, and the Rust connection is tested before anything is saved, so a wrong port or password never lands in your settings."),
     kits: embed(0xff7200, "Help: /kits",
       "Kits end to end: the real kit names from your server, giving kits over RCON with a cooldown per player + kit, and Kit Studio codes. Emote binds and respawn kits are saved settings: they run in game only once a Rust plugin sends emote and respawn events to the bot, which is not connected yet."),
+    help: embed(0x5865f2, "Help: /help",
+      "This page. Run it bare for every command, or name one with the command option to jump straight to its page. Anyone in the server can use it."),
     server: embed(0x5865f2, "Help: /server",
       "Read-only questions put to your Rust server over RCON: info, players, time and status, plus a fresh-connection check. Whatever the server answers is shown as it arrived."),
     user: embed(0x1abc9c, "Help: /user",
@@ -632,6 +1199,13 @@ export function helpDetail(name, ctx) {
     setup: [
       field("Subcommands", [
         "**run** - the setup panel: roles, logging channels, then your Rust servers",
+        "**roles** - staff roles and the Linked role, from Discord's role menus",
+        "**channels** - pick a channel per log type, or let the bot create them for you",
+        "**server** - add a Rust server (typed in, or pasted from server.cfg with **import**)",
+        "**suggest** - read the role and channel names here and propose a full setup; Apply saves it",
+        "**doctor** - a full health check of every saved setting, with what to fix",
+        "**export** - your settings as copyable text, never with a password",
+        "**reset** - clear the settings after typing RESET (player links are kept)",
         "**status** - a checklist of what is saved, plus live checks: can the bot post in each log channel, do the roles still exist, can it give the linked role",
         "**edit** - pick a saved server and change its address, port or password",
         "**refresh** `server` - a fresh RCON check of one server, or of every server (the result also shows in /ping)",
@@ -644,6 +1218,8 @@ export function helpDetail(name, ctx) {
       field("Subcommands", [
         "**grab** `server` - read the real kit names from your server (they then autocomplete)",
         "**config** - binds, delivery settings, pause switch, emote guide",
+        "**commands** - your kit plugin's list command, give template and cooldown",
+        "**doctor** - what the kit setup still needs, read-only",
         "**give** `kit` `gamertag` or `user` `server` - give a kit now, over RCON",
         "**refresh** `scope` `target` - clear give cooldowns for a player, a kit, or everything",
         "**cooldowns** - give cooldowns running now (held in memory; a restart clears them)",
@@ -663,10 +1239,15 @@ export function helpDetail(name, ctx) {
         "**linkpanel** `channel` - post the Link account / Unlink panel for players",
         "**roster** `search` - every linked player, page by page, or only those matching a gamertag or Discord id",
         "**whois** `gamertag` - which Discord account is behind a gamertag (and any waiting requests)",
+        "**pending** - the waiting list: approve or reject link requests in one click",
       ].join("\n"), false),
       field("Waiting list", "Players who asked through the panel wait on the **Waiting list** in /user until staff approve or reject them, in one click each. The player is told by direct message either way (unless their DMs are closed; the reply says which). Posting a new link panel offers to remove the old one.", false),
       field("Permissions", STAFF_RULE + " The link panel's own buttons work for everyone.", false),
       field("Needs first", "Setup finished. Set a Linked role in /setup to have it given and taken away automatically (the bot needs Manage Roles, above that role).", false),
+    ],
+    help: [
+      field("Options", "**command** - open one command's page straight away", false),
+      field("Permissions", "Anyone in this server.", false),
     ],
     server: [
       field("Subcommands", [
@@ -1350,7 +1931,7 @@ export function kitGivePanel(ctx) {
 export function dispatchCommand(ctx, name, sub, options) {
   options = options || {};
   if (name === "ping") return pingReply(ctx);
-  if (name === "help") return helpHome(ctx);
+  if (name === "help") return options.command ? helpDetail(String(options.command), ctx) : helpHome(ctx);
   /* /setup is how you get out of the gate, so it is the only command that runs before setup
      is finished. Everything else answers with the checklist instead of doing nothing. */
   if (name !== "setup") {
@@ -1361,11 +1942,21 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "refresh") return testServers(ctx, options.server);
     if (sub === "status") return setupStatus(ctx);
     if (sub === "edit") return serverPicker(ctx, "edit");
+    if (sub === "roles") return rolesPanel(ctx, 1);
+    if (sub === "channels") return channelSetupPanel(ctx);
+    if (sub === "server") return serverStepPanel(ctx);
+    if (sub === "suggest") return setupSuggest(ctx);
+    if (sub === "doctor") return setupDoctor(ctx);
+    if (sub === "import") return setupImportPanel();
+    if (sub === "export") return setupExport(ctx);
+    if (sub === "reset") return setupResetPanel(ctx);
     return setupPanel(ctx);
   }
   if (name === "kits") {
     if (sub === "grab") { var quick = grabKits(ctx); return quick || grabKitsRun(ctx, options.server); }
     if (sub === "config") return kitsPanel(ctx);
+    if (sub === "commands") return kitCommandsPanel(ctx);
+    if (sub === "doctor") return kitsDoctor(ctx);
     if (sub === "give") {
       if (!options.kit && !options.gamertag && !options.user) return kitGivePanel(ctx);
       return giveKit(ctx, { kit: options.kit, gamertag: options.gamertag, user: options.user, server: options.server });
@@ -1397,6 +1988,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "linkpanel") return options.channel ? { postPanelTo: options.channel } : channelPickerForPanel();
     if (sub === "roster") return rosterPanel(ctx, 1, options.search);
     if (sub === "whois") return whoisReply(ctx, options.gamertag);
+    if (sub === "pending") return pendingPanel(ctx);
     return userPanel(ctx);
   }
   if (name === "server") return serverSnapshot(ctx, sub || "info", options.server);
