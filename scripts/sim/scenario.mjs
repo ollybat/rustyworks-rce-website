@@ -353,6 +353,17 @@ export async function run({ world, make, interact }) {
   expect("picking a player fills the give form with their gamertag", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes('"value":"PlayerOne"'), text(last(it)).slice(0, 400));
   expect("every registered command takes no typed option", world.registered.every((c) => (c.options || []).every((o) => o.type === 1 && !(o.options || []).length)), text(world.registered.map((c) => c.name)));
 
+  /* Reset is a complete clear of bot configuration, including the private preview map.
+     Player links remain, as promised by the reset panel. */
+  expect("preview metadata exists before reset", Object.keys(store.installs || {}).length > 0, text(store.installs));
+  it = await go(make.command(ADMIN, "setup", "reset"), "/setup reset");
+  expect("reset opens its confirmation panel", text(last(it)).includes("Reset the settings?"), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "setup:reset:go"), "open reset confirmation");
+  it = await go(make.modal(ADMIN, "modal:reset", { reset_word: "RESET" }), "confirm settings reset");
+  expect("website storage and memory drop kit-code previews", !Object.keys(store.installs || {}).length
+    && writes.some((write) => write.installs && !Object.keys(write.installs).length), text({ installs: store.installs, writes: writes.slice(-3) }));
+  expect("reset keeps confirmed player links", (store.links || []).length > 0, String((store.links || []).length));
+
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
     expect("answered in time: " + label, one.firstAckAt !== null && one.firstAckAt < 3000, "first answer at " + one.firstAckAt + " ms");
