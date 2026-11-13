@@ -52,7 +52,7 @@ export const COMMANDS = [
       { type: 1, name: "auth-spawn", description: "Save an Auth Group respawn kit (runs once a game hook is connected)" },
       { type: 1, name: "cooldowns", description: "See the kit-give cooldowns running right now" },
       { type: 1, name: "build", description: "Kit Studio: build a kit on the website, then store its code here" },
-      { type: 1, name: "add", description: "Store a Kit Studio code and learn its kit names" },
+      { type: 1, name: "add", description: "Preview a Kit Studio code and learn its kit names" },
     ] },
   { name: "user", description: "Player links: who is who in your clan", dm_permission: false,
     options: [
@@ -1190,7 +1190,7 @@ export function helpDetail(name, ctx) {
         "**cooldowns** - give cooldowns running now (held in memory; a restart clears them)",
         "**auth-spawn** `group` `kit` - save a respawn kit for a group (needs the game hook to run)",
         "**build** - Kit Studio on the website",
-        "**add** `code` - store a Kit Studio code and learn its kit names; it does not install anything on the server",
+        "**add** `code` - preview a Kit Studio code; only a hash and short excerpt are retained, never the full code",
       ].join("\n"), false),
       field("Delivery settings", "In **/kits config**, press **Delivery settings** to set the list command, the give template ({player} and {kit}) and the cooldown per player + kit. Only gives the server accepts start a cooldown. **Pause kit delivery** stops all gives until resumed.", false),
       field("Permissions", STAFF_RULE, false),
@@ -1611,13 +1611,13 @@ export function kitAddPanel(ctx) {
   /* A link button (style 5) must carry a url and no custom_id, or Discord refuses the whole
      reply and the user sees "This interaction failed". */
   var studio = link("Open Kit Studio", ((ctx && ctx.siteUrl) || "https://spinback-j7ao5f.camelai.app") + "/dashboard/kitbuilder.html");
-  return { embeds: [embed(0x5865f2, "Store a kit code",
-    "Paste a Base64 code from Kit Studio. The bot checks it really is Base64 that decodes to text, keeps it, and learns the kit names inside, so the give form can show them. It does not run the code or install anything on your Rust server.")],
+  return { embeds: [embed(0x5865f2, "Preview a kit code",
+    "Paste a Base64 code from Kit Studio. The bot validates it and learns recognised kit names for autocomplete. For privacy and safety, it retains only a hash, the decoded length and up to 400 characters of preview text; the original Base64 code is not saved or sent to your server.")],
     components: [row([button("kits:add:code", "Enter a code", 1), studio]), row([button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
 }
 
 export function kitAddModal() {
-  return { title: "Store a kit code", custom_id: "modal:kitcode", components: [
+  return { title: "Preview a kit code", custom_id: "modal:kitcode", components: [
     row([input("install_code", "Base64 kit code from Kit Studio", "", true)]),
   ] };
 }
@@ -1789,12 +1789,12 @@ export function installKit(ctx, rawCode) {
   var names = [];
   text.replace(/^\s*kit\s+add\s+"([^"]{1,60})"/gim, function (all, name) { if (names.indexOf(name) < 0) names.push(name); return all; });
   if (names.length && ctx.setKnownKits) ctx.setKnownKits(knownKitNames(ctx).concat(names.filter(function (n) { return knownKitNames(ctx).indexOf(n) < 0; })));
-  var built = embed(0x3ba55d, "Kit code stored",
-    "Kept as given, keyed by a hash of the code so two different codes cannot overwrite each other. Nothing was sent to your Rust server: create the kit there with your kit plugin, then give it with **/kits give**.");
+  var built = embed(0x3ba55d, "Code preview saved - not installed",
+    "The bot retained a SHA-256 fingerprint and a short excerpt of the decoded text (up to 400 characters). The original Base64 code is not retained, executed or sent over RCON. Create the kit with your server plugin, then use **/kits give**.");
   built.fields = [
     field("Decoded length", text.length + " characters", true),
-    field("Codes stored", String(count), true),
-    field("First line", code(text.split("\n")[0].slice(0, 150)), false),
+    field("Previews kept", String(count), true),
+    field("Preview excerpt", code(text.slice(0, 150)), false),
   ];
   if (names.length) built.fields.push(field("Kit names found", names.map(function (n) { return code(n); }).join(", ").slice(0, 1000) + " - the give form now shows them", false));
   return { embeds: [built], flags: EPH };
