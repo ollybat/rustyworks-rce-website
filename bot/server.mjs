@@ -24,6 +24,7 @@ import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
   testAndSaveServer, kitsPanel, bindModal, bindList, bindRoleMenu, emoteGuide,
+  helpHome, helpDetail, setupStatus, cooldownsPanel,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
 } from './commands.mjs';
 
@@ -170,6 +171,18 @@ function setAuthSpawn(group, kit) {
 
 function cooldownCount() { return cooldowns.size; }
 
+function cooldownList() {
+  const rows = [];
+  cooldowns.forEach(function (value, key) {
+    const parts = String(key).split('::');
+    const user = parts[0] || 'unknown';
+    const kit = parts[1] || 'unknown';
+    const left = Math.max(0, Math.round(((Number(value) || 0) - Date.now()) / 1000));
+    rows.push(user + ' -> ' + kit + (left ? ' (' + left + 's left)' : ''));
+  });
+  return rows;
+}
+
 function clearCooldowns(scope, target) {
   const wanted = String(target || '').trim().toLowerCase();
   let cleared = 0;
@@ -229,6 +242,7 @@ function botCtx() {
     setAuthSpawn: setAuthSpawn,
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
+    cooldownList: cooldownList,
     rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
     rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
   };
@@ -323,7 +337,11 @@ async function runButton(interaction) {
   if (id === 'kits:remove') return await answerPanel(interaction, bindList(ctx, 'remove'));
   if (id === 'kits:config') return await answerPanel(interaction, kitsPanel(ctx));
   if (id === 'kits:guide') return await answerPanel(interaction, emoteGuide(ctx));
-  if (id === 'kits:refresh') return await answerPanel(interaction, refreshCooldowns(ctx, 'all-kits', ''));
+  /* The Cooldowns button shows the records; clearing is its own button inside. */
+  if (id === 'kits:refresh') return await answerPanel(interaction, cooldownsPanel(ctx, cooldownList()));
+  if (id === 'kits:clear') return await answerPanel(interaction, refreshCooldowns(ctx, 'all-kits', ''));
+  if (id.indexOf('help:cmd:') === 0) return await answerPanel(interaction, helpDetail(id.slice('help:cmd:'.length)));
+  if (id === 'help:home') return await answerPanel(interaction, helpHome());
   if (id === 'kits:lock') {
     settings.kits.locked = !settings.kits.locked;
     persistSettings().catch(function () {});
