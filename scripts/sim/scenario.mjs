@@ -234,6 +234,19 @@ export async function run({ world, make, interact }) {
     expect("the older panel is deleted", text(last(it)).includes("Older panel removed") && world.deleted.length === 1, text(last(it)) + " " + text(world.deleted));
   }
 
+  /* 26. one look everywhere: brand on top, a timestamp, icons on buttons, a live status line */
+  it = await go(make.command(ADMIN, "setup", "run"), "/setup run (the look)");
+  const dressed = last(it) || {};
+  const firstEmbed = (dressed.embeds || [])[0] || {};
+  expect("replies carry the Spinback name on top", firstEmbed.author && firstEmbed.author.name === "Spinback RCE", text(firstEmbed.author));
+  expect("replies carry a timestamp", (dressed.embeds || []).some((e) => e.timestamp), "");
+  expect("panel buttons have icons", (dressed.components || []).some((r) => (r.components || []).some((c) => c.emoji && c.emoji.name)), text(dressed.components));
+  expect("the setup panel shows progress", text(dressed).includes("of 3"), text(firstEmbed).slice(0, 300));
+  const logged = world.sent.filter((m) => m.channelId === "100000000000000401").slice(-1)[0];
+  expect("log posts say which log they are", logged && text(logged.payload).includes("Command log"), text(logged && logged.payload).slice(0, 300));
+  expect("the DM to a player is a proper embed", world.dms.some((d) => (d.payload.embeds || []).length && text(d.payload).includes("You are linked")), text(world.dms.slice(-1)));
+  expect("the bot's status line says what it looks after", world.presence && /server.*linked/.test(text(world.presence)), text(world.presence));
+
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
     expect("answered in time: " + label, one.firstAckAt !== null && one.firstAckAt < 3000, "first answer at " + one.firstAckAt + " ms");

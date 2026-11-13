@@ -24,6 +24,7 @@ function checkComponents(where, rows, inModal) {
         else if (!c.custom_id) problems.push(where + ": button without a custom_id");
         if (!c.label && !c.emoji) problems.push(where + ": button without a label");
         if (c.label && c.label.length > 80) problems.push(where + ": button label over 80 characters");
+        if (c.emoji && (typeof c.emoji !== "object" || (!c.emoji.name && !c.emoji.id))) problems.push(where + ": button emoji needs a name or id");
       }
       if (c.type === 3) {
         const o = c.options || [];
@@ -71,7 +72,12 @@ function checkPayload(where, payload) {
       total += (f.name || "").length + String(f.value || "").length;
     }
     if (e.footer && e.footer.text && e.footer.text.length > 2048) problems.push(w + ": footer over 2048 characters");
-    total += (e.title || "").length + (e.description || "").length + ((e.footer && e.footer.text) || "").length;
+    if (e.author && e.author.name && e.author.name.length > 256) problems.push(w + ": author name over 256 characters");
+    if (e.timestamp && !Number.isFinite(Date.parse(e.timestamp))) problems.push(w + ": timestamp is not an ISO date");
+    for (const u of [e.author && e.author.icon_url, e.footer && e.footer.icon_url, e.thumbnail && e.thumbnail.url]) {
+      if (u && !/^https:\/\//.test(u)) problems.push(w + ": image url must be https");
+    }
+    total += (e.title || "").length + (e.description || "").length + ((e.footer && e.footer.text) || "").length + ((e.author && e.author.name) || "").length;
   });
   if (total > 6000) problems.push(where + ": embeds over 6000 characters in total");
   if (!embeds.length && !payload.content && !(payload.components && payload.components.length)) problems.push(where + ": an empty reply");
