@@ -35,8 +35,32 @@ for (const name of readdirSync(join("build", "client", "media"))) {
   if (RASTER.test(name)) rmSync(join("build", "client", "media", name));
 }
 
+/* Strip JSONC comments without touching strings: a plain //-to-end-of-line replace would
+   also cut "https://..." values in half the day one is added to vars. */
+function stripJsonc(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j;
+    } else if (c === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== "\n") i++;
+      out += "\n";
+    } else if (c === "/" && text[i + 1] === "*") {
+      i = text.indexOf("*/", i + 2);
+      if (i === -1) break;
+      i++;
+    } else {
+      out += c;
+    }
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1");
+}
 const rawConfig = readFileSync("wrangler.jsonc", "utf8");
-const config = JSON.parse(rawConfig.replace(/\/\/[^\n]*/g, "").replace(/,(\s*[}\]])/g, "$1"));
+const config = JSON.parse(stripJsonc(rawConfig));
 const manifest = {
   main: "worker.js",
   no_bundle: true,

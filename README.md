@@ -51,6 +51,11 @@ npm run build    # writes build/
 npm run deploy   # publishes with wrangler
 ```
 
+No wrangler handy? `node scripts/build.mjs && node scripts/local-server.mjs` runs the built
+worker under plain Node on http://localhost:8787, with an in-memory stand-in for the
+`STATUS_LOG` bucket. Upstream calls that cannot be reached fail the same way they would
+in production, so the fallbacks get exercised too.
+
 ## Stylesheet map
 
 `public/style.css` is the whole site's stylesheet, in this order:
@@ -291,6 +296,10 @@ was written (only the visible name was changed to Spinback). It reads its item l
 `/media/entitys/entities.json` and one icon per item from `/media/kitbuilder/`*<shortname>`.png`, both
 served by `worker.js` from `https://rustyworksrce.xyz` and cached by the browser for a day, so the
 repository does not carry a few hundred PNGs.
+
+If that upstream item list cannot be reached at all, the page falls back to the catalogue
+this repository ships in `public/data/items.json` (about 300 items in the site's own
+groups), so the studio is never empty.
 
 Because those paths are proxied, an item appears only when its icon exists upstream. Two
 features of that page talk to the bot API directly for account data (saved kits, live

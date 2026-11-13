@@ -73,11 +73,14 @@ function isGuildOwner(interaction, env) {
 }
 
 function dashboardReply(env) {
-  const url = (env.SITE_URL || "").replace(/\/+$/, "") + "/dashboard";
+  /* The owner console was retired; /dashboard on the site opens the Kit Studio. Link to
+     the tools that really exist rather than to a sign-in page. */
+  const site = (env.SITE_URL || "").replace(/\/+$/, "");
+  const kit = site + "/dashboard/kitbuilder.html";
+  const colour = site + "/dashboard/colortext.html";
   const content = [
-    "**Spinback RCE — dashboard**",
-    "This link is private to you and only works while signed in as the owner of this server.",
-    url,
+    "**Spinback RCE tools**",
+    "Kit Studio, Colour Studio and the live status page. Nothing needs a sign-in.",
   ].join("\n");
 
   return json({
@@ -87,7 +90,11 @@ function dashboardReply(env) {
       content,
       components: [{
         type: COMPONENT_ACTION_ROW,
-        components: [{ type: COMPONENT_BUTTON, style: BUTTON_STYLE_LINK, label: "Open the dashboard", url }],
+        components: [
+          { type: COMPONENT_BUTTON, style: BUTTON_STYLE_LINK, label: "Kit Studio", url: kit },
+          { type: COMPONENT_BUTTON, style: BUTTON_STYLE_LINK, label: "Colour Studio", url: colour },
+          { type: COMPONENT_BUTTON, style: BUTTON_STYLE_LINK, label: "Status", url: site + "/status" },
+        ],
       }],
     },
   }, 200);

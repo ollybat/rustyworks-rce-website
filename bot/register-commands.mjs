@@ -23,8 +23,10 @@ const commands = [];   /* the /dashboard command was removed with the dashboard 
 const url = "https://discord.com/api/v10/applications/" + DISCORD_APPLICATION_ID +
   "/guilds/" + DISCORD_GUILD_ID + "/commands";
 
+/* PUT is Discord's bulk overwrite: the guild ends up with exactly this list. POST takes a
+   single command object, so posting an array was always rejected with 400. */
 const response = await fetch(url, {
-  method: "POST",
+  method: "PUT",
   headers: {
     authorization: "Bot " + DISCORD_BOT_TOKEN,
     "content-type": "application/json",

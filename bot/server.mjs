@@ -16,9 +16,11 @@
    ========================================================================== */
 
 import { createServer } from 'node:http';
-import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events, MessageFlags } from 'discord.js';
 import handler from './interactions-worker.js';
 import net from 'node:net';
+import { lookup } from 'node:dns/promises';
+import { timingSafeEqual } from 'node:crypto';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
 /* Hosts hand the token in as an environment variable, and the name people give it
@@ -96,15 +98,17 @@ client.once(Events.ClientReady, async (c) => {
       log('WARNING: the bot is not in that server yet — invite it with its own invite link');
       return;
     }
-    const existing = await guild.commands.fetch();
-    await existing.set([]);
-    const cmd = await guild.commands.create({
+    /* One bulk overwrite: the guild ends up with exactly this command and nothing stale.
+       (The old code called .set([]) on the fetched Collection, which is Map.set and
+       cleared nothing on Discord.) */
+    const saved = await guild.commands.set([{
       name: 'dashboard',
-      description: 'Open the Spinback RCE owner console for this server',
+      description: 'Links to the Spinback RCE tools: Kit Studio, Colour Studio and status',
       dm_permission: false,
       default_member_permissions: PermissionFlagsBits.Administrator,
-    });
-    state.command = cmd.id;
+    }]);
+    const cmd = saved.find((c) => c.name === 'dashboard');
+    state.command = cmd ? cmd.id : null;
     log('/dashboard registered in ' + guild.name + ' (visible to administrators only)');
     /* The website reads this to turn the role ids Discord gives it into names, so it can
        tell a staff role from any other. Role names are already visible to every member. */
@@ -136,12 +140,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const isOwner = !!ownerId && interaction.user.id === ownerId;
   const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
   if (!isOwner || !rightGuild) {
-    await interaction.reply({ content: 'This command is only for the server owner.', ephemeral: true }).catch(() => {});
+    await interaction.reply({ content: 'This command is only for the server owner.', flags: MessageFlags.Ephemeral }).catch(() => {});
     return;
   }
+  /* The owner console was retired: /dashboard on the site now opens the Kit Studio, so the
+     reply points at what is really there instead of promising a sign-in page. */
   await interaction.reply({
-    content: 'Owner console: ' + SITE_URL + '/dashboard\nSign in with Discord and everything is on that page.',
-    ephemeral: true,
+    content: [
+      '**Spinback RCE tools**',
+      'Kit Studio: ' + SITE_URL + '/dashboard/kitbuilder.html',
+      'Colour Studio: ' + SITE_URL + '/dashboard/colortext.html',
+      'Status: ' + SITE_URL + '/status',
+    ].join('\n'),
+    flags: MessageFlags.Ephemeral,
   }).catch(() => {});
   log('dashboard opened for ' + interaction.user.tag);
 });
@@ -294,6 +305,46 @@ function rconParse(buffer) {
   return { packets: packets, rest: rest };
 }
 
+/* Is this literal address somewhere public? Covers the private, loopback, link-local,
+   carrier-grade NAT and multicast ranges for IPv4, and the IPv6 equivalents. */
+function publicAddress(ip) {
+  const a = String(ip || '').toLowerCase();
+  if (net.isIPv4(a)) {
+    const p = a.split('.').map(Number);
+    if (p[0] === 0 || p[0] === 10 || p[0] === 127 || p[0] >= 224) return false;
+    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return false;
+    if (p[0] === 169 && p[1] === 254) return false;
+    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return false;
+    if (p[0] === 192 && p[1] === 168) return false;
+    if (p[0] === 192 && p[1] === 0 && p[2] === 0) return false;
+    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return false;
+    return true;
+  }
+  if (net.isIPv6(a)) {
+    if (a === '::' || a === '::1') return false;
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+    if (mapped) return publicAddress(mapped[1]);
+    if (/^(fc|fd|fe8|fe9|fea|feb|ff)/.test(a)) return false;
+    return true;
+  }
+  return false;
+}
+
+/* A name is resolved here and the connection goes to the address checked, so a public
+   looking name that points at a private address (or changes between check and connect)
+   cannot reach anything internal. */
+async function rconResolve(host) {
+  const h = String(host || '').trim().toLowerCase();
+  if (net.isIP(h)) return publicAddress(h) ? h : null;
+  try {
+    const all = await lookup(h, { all: true });
+    if (!all.length || all.some((r) => !publicAddress(r.address))) return null;
+    return all[0].address;
+  } catch (error) {
+    return null;
+  }
+}
+
 /* Nothing on the private internet: that keeps this from being pointed at a local service. */
 function rconHostAllowed(host) {
   const h = String(host || '').trim().toLowerCase();
@@ -312,7 +363,15 @@ function rconHostAllowed(host) {
   return /^[a-z0-9][a-z0-9.-]*$/.test(h);
 }
 
-function rconRun(options) {
+async function rconRun(options) {
+  const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
+  if (!target) {
+    return { ok: false, reason: 'refused-host', detail: 'That address is not on the public internet (or does not resolve), so the bot will not connect to it.' };
+  }
+  return rconConnect(Object.assign({}, options, { address: target }));
+}
+
+function rconConnect(options) {
   return new Promise(function (resolve) {
     const started = Date.now();
     const host = String(options.host || '').trim();
@@ -348,7 +407,7 @@ function rconRun(options) {
     }, RCON_TIMEOUT_MS);
 
     try {
-      socket = net.connect({ host: host, port: port });
+      socket = net.connect({ host: options.address || host, port: port });
     } catch (error) {
       return finish({ ok: false, reason: 'connect-failed', detail: String(error.message || error) });
     }
@@ -472,7 +531,8 @@ createServer(async (req, res) => {
       return;
     }
     const given = String(req.headers['x-settings-token'] || '');
-    if (given !== expected) {
+    const a = Buffer.from(given), b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       res.writeHead(403, cors);
       res.end(JSON.stringify({ ok: false, reason: 'bad-token' }));
       return;
