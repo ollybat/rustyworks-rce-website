@@ -29,7 +29,11 @@ export class Collection extends Map {
 }
 
 /* What the pretend Discord saw: messages posted in channels, roles given and taken. */
-export const world = { sent: [], roleChanges: [], registered: [], guildId: process.env.DISCORD_GUILD_ID || "1" };
+export const world = { sent: [], roleChanges: [], registered: [], dms: [], deleted: [], guildId: process.env.DISCORD_GUILD_ID || "1" };
+/* a member who keeps direct messages from server members closed */
+const DMS_CLOSED = "100000000000000209";
+/* the one log channel the bot may see but not post in */
+const NO_SEND = "100000000000000404";
 
 function makeGuild() {
   const roles = [["100", "@everyone", 0], ["100000000000000301", "Owner", 9], ["100000000000000302", "Linked", 2], ["100000000000000303", "VIP", 3]]
@@ -41,7 +45,7 @@ function makeGuild() {
       cache: new Collection(["401", "402", "403", "404", "405", "406"].map((n, i) => {
         const id = "1000000000000" + n.padStart(5, "0");
         return [id, { id, name: "log-" + n, type: 0, rawPosition: i, parent: { name: "Logs" },
-          permissionsFor: () => ({ has: (perm) => perm === "SendMessages" }) }];
+          permissionsFor: () => ({ has: (perm) => (id === NO_SEND ? perm !== "SendMessages" : ["ViewChannel", "SendMessages", "EmbedLinks"].includes(perm)) }) }];
       })),
     },
     commands: {
@@ -53,6 +57,8 @@ function makeGuild() {
       },
     },
     members: {
+      /* the bot itself: Manage Roles, and a highest role above Linked (2) and VIP (3) */
+      me: { permissions: perms(268435456n), roles: { highest: { position: 5 } } },
       async fetch(id) {
         if (String(id).startsWith("0")) throw new Error("Unknown Member");
         const change = (action) => async (roleId) => { world.roleChanges.push({ userId: String(id), roleId: String(roleId), action }); };
@@ -74,6 +80,17 @@ export class Client extends EventEmitter {
       fetch: async (id) => ({
         id: String(id),
         send: async (payload) => { world.sent.push({ channelId: String(id), payload }); return { id: "m" + world.sent.length }; },
+        messages: { fetch: async (messageId) => ({ id: String(messageId), delete: async () => { world.deleted.push(String(messageId)); } }) },
+      }),
+    };
+    this.users = {
+      fetch: async (id) => ({
+        id: String(id),
+        send: async (payload) => {
+          if (String(id) === DMS_CLOSED) throw new Error("Cannot send messages to this user");
+          world.dms.push({ userId: String(id), payload });
+          return { id: "dm" + world.dms.length };
+        },
       }),
     };
   }

@@ -33,6 +33,7 @@ import {
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
   STAFF_SLOTS, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
+  deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit,
 } from './commands.mjs';
 
 const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
@@ -388,14 +389,31 @@ function permitted(interaction, ctx) {
   return state.rolesSaved ? isStaff(interaction) : hasAdminBypass(interaction);
 }
 
+/* new panel message id -> the panel it replaced, for the "Remove the older panel" button */
+const previousPanels = new Map();
+async function removeOldPanel(newMessageId) {
+  const old = previousPanels.get(String(newMessageId));
+  if (!old) return { ok: false, detail: 'There is no older panel on record.' };
+  try {
+    const channel = client.channels.cache.get(old.channelId) || await client.channels.fetch(old.channelId);
+    const message = await channel.messages.fetch(old.messageId);
+    await message.delete();
+    previousPanels.delete(String(newMessageId));
+    return { ok: true, channelId: old.channelId };
+  } catch (error) {
+    return { ok: false, detail: String((error && error.message) || error).slice(0, 200) };
+  }
+}
 async function postLinkPanel(channelId) {
   try {
     const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
     const message = await channel.send(linkPanelPayload());
+    const previous = settings.linkPanel && settings.linkPanel.messageId ? settings.linkPanel : null;
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
+    if (previous) previousPanels.set(String(settings.linkPanel.messageId), previous);
     const wrote = await persistSettings(['linkPanel']);
-    return { ok: true, saved: wrote.ok, detail: wrote.detail || '' };
+    return { ok: true, saved: wrote.ok, detail: wrote.detail || '', previous: previous };
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
   }
@@ -435,6 +453,19 @@ function botCtx(interaction) {
     setKnownKits: function (names) {
       settings.kits.known = names.slice(0, 100);
       persistSettings(['kits']).catch(function () {});
+    },
+    setDelivery: function (d) {
+      settings.kits.listCommand = d.listCommand;
+      settings.kits.giveCommand = d.giveCommand;
+      logLater('admin', 'Kit delivery changed', who(actor) + ' set the list command to `' + (d.listCommand || 'none') + '` and the give template to `' + (d.giveCommand || 'none') + '`.');
+      return persistSettings(['kits']).then(function (wrote) {
+        return wrote && wrote.ok ? { ok: true } : { ok: false, detail: (wrote && wrote.detail) || 'the website did not accept the save' };
+      }, function (error) { return { ok: false, detail: String((error && error.message) || error).slice(0, 160) }; });
+    },
+    diagnostics: diagnostics,
+    serverChecks: function () { return serverChecks; },
+    recordCheck: function (id, answer) {
+      serverChecks[id] = { ok: !!(answer && answer.ok), ms: answer && answer.ms, reason: answer && !answer.ok ? (answer.reason || 'unknown') : null, at: new Date().toISOString() };
     },
     linkPlayer: function (userId, gamertag) { return linkPlayer(userId, gamertag, actor); },
     moveLinkFull: function (gamertag, toUserId, toGamertag) { return moveLinkFull(gamertag, toUserId, toGamertag, actor); },
@@ -490,6 +521,64 @@ async function rconLogged(options, actor) {
       { name: 'Answer', value: answer && answer.answer ? '```\n' + String(answer.answer).slice(0, 900) + '\n```' : '-', inline: false },
     ]);
   return answer;
+}
+
+/* ------------------------------------------------------- live health checks ---- */
+/* The last RCON check of each saved server since this process started (not saved: it is
+   runtime state, and a restart is a good reason to check again). */
+const serverChecks = {};
+
+/* What /setup status checks, read from the guild as the bot sees it right now: can the bot
+   post in each saved log channel, does each saved role still exist, and can it give the
+   linked role (Manage Roles, and its own highest role above that role). */
+function diagnostics() {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  const out = { ready: !!guild, channels: {}, roles: {}, linked: null };
+  if (!guild) return out;
+  const me = guild.members && guild.members.me;
+  let canManage = false;
+  try { canManage = !!(me && me.permissions && me.permissions.has(PermissionFlagsBits.ManageRoles)); } catch (error) { canManage = false; }
+  const top = me && me.roles && me.roles.highest ? me.roles.highest.position : null;
+  Object.keys(settings.logChannels || {}).forEach(function (type) {
+    const id = settings.logChannels[type];
+    if (!id) return;
+    const channel = guild.channels && guild.channels.cache ? guild.channels.cache.get(String(id)) : null;
+    let canSend = null;
+    try {
+      const allowed = channel && channel.permissionsFor ? channel.permissionsFor(client.user) : null;
+      if (allowed) canSend = allowed.has('ViewChannel') && allowed.has('SendMessages') && allowed.has('EmbedLinks');
+    } catch (error) { canSend = null; }
+    out.channels[type] = { id: String(id), exists: !!channel, canSend: canSend };
+  });
+  Object.keys(settings.staffRoles || {}).forEach(function (slot) {
+    const id = settings.staffRoles[slot];
+    if (!id) return;
+    const role = guild.roles.cache.get(String(id));
+    out.roles[slot] = { id: String(id), exists: !!role };
+  });
+  const linkedId = (settings.staffRoles || {}).linked;
+  if (linkedId) {
+    const role = guild.roles.cache.get(String(linkedId));
+    out.linked = { id: String(linkedId), exists: !!role, canManage: canManage,
+      above: role && top !== null ? top > role.position : null, managed: !!(role && role.managed) };
+  }
+  return out;
+}
+
+/* A direct message to a player about their own link request. Many people keep DMs from
+   server members closed, so a refusal is expected and only reported back to staff. */
+async function tellPlayer(userId, text) {
+  try {
+    const user = await client.users.fetch(String(userId));
+    await user.send({ content: String(text).slice(0, 1900), allowedMentions: { parse: [] } });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+function guildName() {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  return guild ? guild.name : 'the server';
 }
 
 /* --------------------------------------------------------- the linked role ---- */
@@ -689,7 +778,9 @@ async function runCommand(interaction) {
       if (posted.ok) logLater('linking', 'Link panel posted', 'Posted in <#' + payload.postPanelTo + '> by ' + who(ctx.actor) + '.');
       return posted.ok
         ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; their requests wait on the **Waiting list** in /user for one-click approval.'
-          + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
+          + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.')
+          + (posted.previous ? '\n\nThe older panel in <#' + posted.previous.channelId + '> is still there.' : ''))],
+          components: posted.previous ? [panelRow([panelButton('user:panel:removeold:' + settings.linkPanel.messageId, 'Remove the older panel', 2)])] : [] }
         : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
     }
     return payload;
@@ -726,7 +817,18 @@ async function runButton(interaction) {
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
   if (id === 'user:transfer') return await answerPanel(interaction, transferPicker(ctx));
   if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx, 1));
-  if (id.indexOf('user:roster:') === 0) return await answerPanel(interaction, rosterPanel(ctx, Number(id.slice('user:roster:'.length))));
+  if (id.indexOf('user:roster:') === 0) {
+    const parts = id.slice('user:roster:'.length).split(':');
+    return await answerPanel(interaction, rosterPanel(ctx, Number(parts[0]), parts.slice(1).join(':')));
+  }
+  if (id.indexOf('user:panel:removeold:') === 0) {
+    return await answerModal(interaction, (async function () {
+      const removed = await removeOldPanel(id.slice('user:panel:removeold:'.length));
+      if (removed.ok) logLater('linking', 'Old link panel removed', 'The older panel in <#' + removed.channelId + '> was removed by ' + who(ctx.actor) + '.');
+      return { embeds: [panelEmbed(removed.ok ? 0x3ba55d : 0xfaa81a, removed.ok ? 'Older panel removed' : 'Nothing removed',
+        removed.ok ? 'The older link panel in <#' + removed.channelId + '> is gone; only the new one is left.' : String(removed.detail || '').slice(0, 300))] };
+    })());
+  }
   if (id === 'user:pending') return await answerPanel(interaction, pendingPanel(ctx));
   if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
   if (id.indexOf('user:unlink:go:') === 0) {
@@ -739,6 +841,8 @@ async function runButton(interaction) {
     })());
   }
   if (id === 'kits:give') return await interaction.showModal(kitGiveModal());
+  if (id === 'kits:delivery') return await interaction.showModal(deliveryModal(settings.kits));
+  if (id === 'kits:grab') return await answerPanel(interaction, grabKits(ctx) || grabKitsRun(ctx, ''));
   if (id === 'kits:add:code') return await interaction.showModal(kitAddModal());
   if (id.indexOf('kits:refresh:') === 0) {
     const scope = id.slice('kits:refresh:'.length);
@@ -876,14 +980,18 @@ async function runSelect(interaction) {
         settings.pending = settings.pending.filter(function (p) { return p.userId !== first; });
         persistSettings(['pending']).catch(function () {});
         logLater('linking', 'Link request rejected', '<@' + request.userId + '> asked for `' + request.gamertag + '`; rejected by ' + who(ctx.actor) + '.');
-        return pendingPanel(ctx, panelEmbed(0xfaa81a, 'Request rejected', '<@' + request.userId + '> is not linked to ' + request.gamertag + '.'));
+        const toldNo = await tellPlayer(request.userId, 'Your request to link the gamertag ' + request.gamertag + ' in ' + guildName() + ' was not approved. If that was a mistake, ask the staff there, or send a new request from the link panel.');
+        return pendingPanel(ctx, panelEmbed(0xfaa81a, 'Request rejected', '<@' + request.userId + '> is not linked to ' + request.gamertag + '.' +
+          (toldNo ? ' They were told by direct message.' : ' Their direct messages are closed, so they were not told.')));
       }
       const taken = findLinkByGamertag(request.gamertag);
       if (taken && taken.userId !== request.userId) {
         return pendingPanel(ctx, panelEmbed(0xdc4c4c, 'That gamertag is taken', request.gamertag + ' is already linked to <@' + taken.userId + '>. Reject this request, or move the link with Transfer.'));
       }
       const done = await linkPlayer(request.userId, request.gamertag, ctx.actor);
-      return pendingPanel(ctx, panelEmbed(0x3ba55d, 'Approved', '<@' + done.userId + '> is now linked to ' + done.gamertag + '.' + (done.roleNote || '')));
+      const toldYes = done.ok ? await tellPlayer(done.userId, 'Your gamertag ' + done.gamertag + ' is now linked to your Discord account in ' + guildName() + '.') : false;
+      return pendingPanel(ctx, panelEmbed(0x3ba55d, 'Approved', '<@' + done.userId + '> is now linked to ' + done.gamertag + '.' + (done.roleNote || '') +
+        (toldYes ? ' They were told by direct message.' : ' Their direct messages are closed, so they were not told.')));
     })());
   }
   if (id === 'user:panel:channel') {
@@ -892,8 +1000,10 @@ async function runSelect(interaction) {
       if (posted.ok) logLater('linking', 'Link panel posted', 'Posted in <#' + first + '> by ' + who(ctx.actor) + '.');
       return posted.ok
         ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + first + '> now. Members press **Link account** there.'
-          + (posted.saved ? '' : ' The website could not be told, so the panel id is in this bot memory only.'))],
-          components: [panelRow([panelButton('user:config', 'Back to links', 2)])] }
+          + (posted.saved ? '' : ' The website could not be told, so the panel id is in this bot memory only.')
+          + (posted.previous ? '\n\nThe older panel in <#' + posted.previous.channelId + '> is still there.' : ''))],
+          components: [panelRow([panelButton('user:config', 'Back to links', 2)].concat(posted.previous
+            ? [panelButton('user:panel:removeold:' + settings.linkPanel.messageId, 'Remove the older panel', 2)] : []))] }
         : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
     })());
   }
@@ -1007,6 +1117,7 @@ async function runModal(interaction) {
     logLater('emoteKits', 'Respawn kit ' + (fields.spawn_kit ? 'set' : 'cleared'), group + (fields.spawn_kit ? ' gets `' + String(fields.spawn_kit).slice(0, 60) + '`' : ' gets no kit') + ' on respawn, set by ' + who(ctx.actor) + '.');
     return await answerModal(interaction, authSpawnNote(ctx, group, fields.spawn_kit));
   }
+  if (id === 'modal:kitdelivery') return await answerModal(interaction, saveDelivery(ctx, fields));
   if (id === 'modal:kitcode') {
     const payload = installKit(ctx, fields.install_code);
     if (payload && payload.embeds && payload.embeds[0] && payload.embeds[0].title === 'Install code accepted') {

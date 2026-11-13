@@ -79,7 +79,8 @@ export const COMMANDS = [
         ] },
       { type: 1, name: "linkpanel", description: "Post a panel with Link Account and Unlink buttons in a channel",
         options: [{ type: 7, name: "channel", description: "Channel to post it in", channel_types: [0] }] },
-      { type: 1, name: "roster", description: "See every linked player" },
+      { type: 1, name: "roster", description: "See every linked player, or search for one",
+        options: [{ type: 3, name: "search", description: "Gamertag or Discord id to look for (blank lists everyone)", autocomplete: true }] },
     ] },
 ];
 
@@ -103,6 +104,24 @@ function when() { return new Date().toISOString().replace("T", " ").slice(0, 19)
 function ms(n) { return Number.isFinite(n) ? Math.round(n) + " ms" : "not measured"; }
 function code(text) { return BT + text + BT; }
 function block(text) { return BT + BT + BT + "\n" + text + "\n" + BT + BT + BT; }
+/* A Discord timestamp that every viewer sees in their own time zone ("3 days ago"). */
+function ago(when) {
+  var t = Date.parse(when || "");
+  return Number.isFinite(t) ? "<t:" + Math.floor(t / 1000) + ":R>" : "";
+}
+/* Shown at the top of the setup panels while nothing is being saved for real. */
+export function storageWarning(ctx) {
+  if (ctx.storeTokenSet()) return null;
+  return embed(0xdc4c4c, "Settings are not being saved",
+    "BOT_SETTINGS_TOKEN is not set on the bot, so everything set up here - roles, servers, log channels, binds and player links - lives in the bot's memory and is lost the next time it restarts or redeploys.\n\n" +
+    "**Fix:** choose a long random value and set it as BOT_SETTINGS_TOKEN in two places: the bot's service on Railway, and the website's environment. Use the same value in both. The website's Settings page then works too.");
+}
+/* The last RCON check of a saved server, as one line: "answered 2 minutes ago, 41 ms". */
+function lastCheckLine(ctx, server) {
+  var c = ctx.serverChecks ? ctx.serverChecks()[server.id] : null;
+  if (!c) return "not checked since the bot started";
+  return (c.ok ? "answered" : "did not answer (" + (c.reason || "unknown") + ")") + " " + ago(c.at) + (c.ok && Number.isFinite(c.ms) ? ", " + c.ms + " ms" : "");
+}
 /* Anything typed by a person that is put into an RCON command line: no quotes, backslashes or
    control characters, one space at a time, and a sane length. */
 export function cleanArg(value) {
@@ -142,7 +161,7 @@ export function autocompleteChoices(ctx, name, sub, focused, opts) {
     pool = (ctx.servers() || []).map(function (s) { return { name: s.name + " (" + s.host + ":" + s.port + ")", value: s.id, match: s.name }; });
   } else if (fieldName === "kit" || (fieldName === "target" && opts && opts.scope === "kit")) {
     pool = knownKitNames(ctx).map(function (k) { return { name: k, value: k, match: k }; });
-  } else if (fieldName === "gamertag" || fieldName === "target") {
+  } else if (fieldName === "gamertag" || fieldName === "target" || fieldName === "search") {
     pool = (ctx.links() || []).map(function (l) { return { name: l.gamertag, value: l.gamertag, match: l.gamertag }; });
   }
   var starts = [], contains = [];
@@ -185,9 +204,11 @@ export async function pingReply(ctx) {
     field("Guild", guild ? code(guild.name) + "\n" + guild.memberCount + " members, " + ((guild.roles && guild.roles.length) || 0) + " roles" : "not reported yet", true),
     field("Commands", code(String(ctx.commandCount())) + " registered here", true),
     field("Website", site.ok ? "answering, " + ms(site.ms) + (site.body && site.body.app ? "\napp: " + code(site.body.app) : "") : "no answer after " + ms(site.ms) + (site.error ? "\n" + site.error.slice(0, 90) : ""), true),
-    field("Settings store", ctx.storeTokenSet() ? "the website accepts saves from this bot" : "not configured yet (BOT_SETTINGS_TOKEN)", true),
-    field("Servers linked", code(String(ctx.servers().length)), true),
-    field("How the check works", "one harmless command (serverinfo) over RCON, and whatever the server answers is what you see", false),
+    field("Settings store", ctx.storeTokenSet() ? "the website accepts saves from this bot" : "not saved anywhere: BOT_SETTINGS_TOKEN is not set, so a restart forgets everything", true),
+    field("Rust servers (" + ctx.servers().length + ")", ctx.servers().length
+      ? fitLines(ctx.servers().map(function (s) { return "**" + s.name + "**: " + lastCheckLine(ctx, s); }), 1000)
+      : "none linked yet", false),
+    field("How the check works", "Gateway, uptime and memory come from this bot process; the website line is a live request made just now. Rust servers show their last RCON check - run **/setup refresh** for a fresh one.", false),
   ];
   built.footer = { text: "Site: " + ctx.siteUrl + " | checked at " + when() };
   return { embeds: [built], components: [row([button("ping:again", "Check again", 1), link("Status page", ctx.siteUrl + "/status.html")])] };
@@ -207,10 +228,11 @@ export function setupPanel(ctx) {
     field("Step 2 - Logging channels", setChannels.length
       ? setChannels.slice(0, 8).map(function (s) { return s[1] + " -> <#" + channels[s[0]] + ">"; }).join("\n") + (setChannels.length > 8 ? "\n+" + (setChannels.length - 8) + " more" : "")
       : "none saved yet", false),
-    field("Step 3 - Rust servers", servers.length ? servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port); }).join("\n") : "none linked yet", false),
+    field("Step 3 - Rust servers", servers.length ? fitLines(servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port) + " - " + lastCheckLine(ctx, s); }), 1000) : "none linked yet", false),
   ];
   built.footer = { text: "Staff roles, Administrator, Manage Server and the server owner may change this. Passwords are never shown back to you." };
-  return { embeds: [built], components: [
+  var warning = storageWarning(ctx);
+  return { embeds: warning ? [warning, built] : [built], components: [
     row([button("setup:roles", "1. Staff roles", 1), button("setup:linked", "Linked role", 2), button("setup:channels", "2. Logging channels", 1)]),
     row([button("setup:server", "3. Add a Rust server", 1), button("setup:edit", "Edit a server", 2), button("setup:test", "Test connections", 2)]),
   ], flags: EPH };
@@ -337,6 +359,7 @@ export async function testServers(ctx, wanted) {
     return Promise.resolve(ctx.rconTest({ host: s.host, port: s.port, password: s.password, command: "serverinfo" }))
       .catch(function (error) { return { ok: false, reason: "unexpected", detail: String((error && error.message) || error) }; });
   }));
+  if (ctx.recordCheck) list.forEach(function (s, i) { ctx.recordCheck(s.id, answers[i]); });
   var good = answers.filter(function (a) { return a && a.ok; }).length;
   var room = list.length > 3 ? 220 : 600;
   var built = embed(good === list.length ? 0x3ba55d : good ? 0xfaa81a : 0xdc4c4c,
@@ -391,10 +414,11 @@ export function helpDetail(name, ctx) {
     setup: [
       field("Subcommands", [
         "**run** - the setup panel: roles, logging channels, then your Rust servers",
-        "**status** - a checklist of what is saved and what is still missing",
+        "**status** - a checklist of what is saved, plus live checks: can the bot post in each log channel, do the roles still exist, can it give the linked role",
         "**edit** - pick a saved server and change its address, port or password",
-        "**refresh** `server` - a fresh RCON check of one server, or of every server",
+        "**refresh** `server` - a fresh RCON check of one server, or of every server (the result also shows in /ping)",
       ].join("\n"), false),
+      field("Saving", "Settings are kept on the website. If the bot cannot write there (no BOT_SETTINGS_TOKEN), /setup says so in red: changes then last only until the bot restarts.", false),
       field("Permissions", STAFF_RULE + " Panels are only visible to you.", false),
       field("Needs first", "The RCON port and password from server.cfg, with rcon.web set to 0.", false),
     ],
@@ -407,8 +431,9 @@ export function helpDetail(name, ctx) {
         "**cooldowns** - the cooldown records the bot is holding",
         "**auth-spawn** `group` `kit` - give a group a kit on every respawn",
         "**build** - Kit Studio on the website",
-        "**add** `code` - install a kit from a Base64 install code",
+        "**add** `code` - install a kit from a Base64 install code (its kit names are picked up for autocomplete)",
       ].join("\n"), false),
+      field("Delivery settings", "In **/kits config**, press **Delivery settings** to set the list command and the give template right here in Discord. The give template needs {player} and {kit}.", false),
       field("Permissions", STAFF_RULE, false),
       field("Needs first", "Setup finished (a staff role and a tested server), then your kit plugin's list command and a give template using {player} and {kit}. The bot will not guess either.", false),
     ],
@@ -418,9 +443,9 @@ export function helpDetail(name, ctx) {
         "**forceunlink** `gamertag` - remove a link, after a confirmation",
         "**transfer** `gamertag` `to_user` `to_gamertag` - move a link to a new account or gamertag",
         "**linkpanel** `channel` - post the Link account / Unlink panel for players",
-        "**roster** - every linked player, page by page",
+        "**roster** `search` - every linked player, page by page, or only those matching a gamertag or Discord id",
       ].join("\n"), false),
-      field("Waiting list", "Players who asked through the panel wait on the **Waiting list** in /user until staff approve or reject them, in one click each.", false),
+      field("Waiting list", "Players who asked through the panel wait on the **Waiting list** in /user until staff approve or reject them, in one click each. The player is told by direct message either way (unless their DMs are closed; the reply says which). Posting a new link panel offers to remove the old one.", false),
       field("Permissions", STAFF_RULE + " The link panel's own buttons work for everyone.", false),
       field("Needs first", "Setup finished. Set a Linked role in /setup to have it given and taken away automatically (the bot needs Manage Roles, above that role).", false),
     ],
@@ -445,16 +470,40 @@ export function setupStatus(ctx) {
     ["Auth groups with a respawn kit", String(Object.keys(kits.authSpawn || {}).length)],
   ];
   var next = [];
+  if (!ctx.storeTokenSet()) next.push("**Settings are not being saved.** Set BOT_SETTINGS_TOKEN to the same long random value on the bot (Railway) and the website, or a restart forgets everything.");
   if (!servers.length) next.push("Run **/setup run** and add your Rust server, so the RCON connection can be tested.");
   if (!STAFF_SLOTS.some(function (s) { return roles[s[0]]; })) next.push("Step 1: save your staff roles so staff-only features know who is who.");
   if (!LOG_TYPES.some(function (t) { return channels[t[0]]; })) next.push("Step 2: choose a channel for the log types you want.");
-  if (!kits.listCommand) next.push("Set your kit plugin list command, then **/kits grab** reads your real kit names.");
-  if (!kits.giveCommand) next.push("Set a give template using {player} and {kit}, then **/kits give** can hand kits out in game.");
-  if (!ctx.storeTokenSet()) next.push("Set BOT_SETTINGS_TOKEN to the same value on the website and the bot, otherwise saves stay in this bot memory only.");
+  if (!kits.listCommand) next.push("Set your kit plugin list command (**/kits config** > Delivery settings), then **/kits grab** reads your real kit names.");
+  if (!kits.giveCommand) next.push("Set a give template using {player} and {kit} (**/kits config** > Delivery settings), then **/kits give** hands kits out in game.");
+  /* Live checks of what is saved, from the guild as the bot sees it right now. */
+  var health = [];
+  var d = ctx.diagnostics ? ctx.diagnostics() : null;
+  if (d && d.ready) {
+    Object.keys(d.channels || {}).forEach(function (type) {
+      var c = d.channels[type];
+      var label = (LOG_TYPES.filter(function (t) { return t[0] === type; })[0] || [type, type])[1];
+      if (!c.exists) health.push(label + ": <#" + c.id + "> no longer exists, so nothing is logged there.");
+      else if (c.canSend === false) health.push(label + ": the bot cannot post in <#" + c.id + ">. Give it View Channel, Send Messages and Embed Links there.");
+    });
+    Object.keys(d.roles || {}).forEach(function (slot) {
+      var r = d.roles[slot];
+      var label = (ROLE_SLOTS.filter(function (t) { return t[0] === slot; })[0] || [slot, slot])[1];
+      if (!r.exists) health.push(label + " role: the saved role no longer exists. Pick it again in /setup run.");
+    });
+    if (d.linked && d.linked.exists) {
+      if (!d.linked.canManage) health.push("Linked role: the bot needs the Manage Roles permission to give it.");
+      else if (d.linked.above === false) health.push("Linked role: it sits above the bot's own highest role, so Discord will not let the bot give it. Drag the bot's role above it in Server Settings > Roles.");
+      else if (d.linked.managed) health.push("Linked role: it belongs to an integration, so no bot can give it. Pick an ordinary role.");
+    }
+  }
   var built = embed(next.length ? 0xfaa81a : 0x3ba55d, "Setup status",
     next.length ? "What is saved right now is below, then what is still missing, in the order worth doing it." : "Everything the bot can check is in place.");
   built.fields = checks.map(function (c) { return field(c[0], c[1], true); });
-  if (next.length) built.fields.push(field("What is missing", next.slice(0, 6).map(function (n) { return "- " + n; }).join("\n"), false));
+  if (next.length) built.fields.push(field("What is missing", fitLines(next.map(function (n) { return "- " + n; }), 1000), false));
+  if (health.length) built.fields.push(field("Problems found just now", fitLines(health.map(function (n) { return "- " + n; }), 1000), false));
+  else if (d && d.ready) built.fields.push(field("Live checks", "Every saved log channel can be posted in, every saved role still exists" + (d.linked ? ", and the bot can give the linked role" : "") + ".", false));
+  if (health.length && !next.length) built.color = 0xfaa81a;
   built.footer = { text: "Read-only: nothing on this panel changes your settings" };
   return { embeds: [built], components: [row([button("setup:roles", "Roles", 1), button("setup:channels", "Log channels", 1), button("setup:server", "Rust server", 1), button("setup:home", "Setup panel", 2)])], flags: EPH };
 }
@@ -616,22 +665,32 @@ export function transferModal(gamertag) {
 var ROSTER_PAGE = 30;
 /* Every link, 30 to a page, numbered, newest last. The old single field cut the list off at
    about 14 players without saying so. */
-export function rosterPanel(ctx, page) {
+export function rosterPanel(ctx, page, search) {
   var held = linkRecords(ctx);
+  var query = String(search || "").trim().slice(0, 40);
+  if (query) {
+    var q = query.toLowerCase(), digits = query.replace(/[^0-9]/g, "");
+    held = { links: held.links.filter(function (l) {
+      return l.gamertag.toLowerCase().indexOf(q) > -1 || (digits.length >= 5 && l.userId === digits);
+    }), pending: held.pending };
+  }
   var pages = Math.max(1, Math.ceil(held.links.length / ROSTER_PAGE));
   var p = Math.min(Math.max(1, Math.floor(Number(page) || 1)), pages);
   var from = (p - 1) * ROSTER_PAGE;
   var lines = held.links.slice(from, from + ROSTER_PAGE).map(function (l, i) {
-    return (from + i + 1) + ". <@" + l.userId + "> -> " + code(l.gamertag) + (l.by && l.by !== l.userId ? " (by <@" + l.by + ">)" : "");
+    var since = ago(l.at);
+    return (from + i + 1) + ". <@" + l.userId + "> -> " + code(l.gamertag) + (since ? " " + since : "") + (l.by && l.by !== l.userId ? " (by <@" + l.by + ">)" : "");
   });
-  var built = embed(0x3ba55d, "Linked players" + (held.links.length ? " (" + held.links.length + ")" : ""), held.links.length
+  var built = embed(0x3ba55d, (query ? "Links matching " + code(query) : "Linked players") + (held.links.length ? " (" + held.links.length + ")" : ""), held.links.length
     ? lines.join("\n")
-    : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**.");
+    : query ? "No linked gamertag contains that, and no link belongs to that Discord id." : "No links on record yet. Post the link panel so players can link themselves, or use **Force link**.");
   if (pages > 1) built.footer = { text: "Page " + p + " of " + pages };
   var nav = [];
   if (pages > 1) {
-    nav.push({ type: 2, custom_id: "user:roster:" + (p - 1), label: "Previous", style: 2, disabled: p <= 1 });
-    nav.push({ type: 2, custom_id: "user:roster:" + (p + 1), label: "Next", style: 2, disabled: p >= pages });
+    /* the search rides along in the button id, so paging keeps the filter */
+    var tail = query ? ":" + query.replace(/:/g, "") : "";
+    nav.push({ type: 2, custom_id: "user:roster:" + (p - 1) + tail, label: "Previous", style: 2, disabled: p <= 1 });
+    nav.push({ type: 2, custom_id: "user:roster:" + (p + 1) + tail, label: "Next", style: 2, disabled: p >= pages });
   }
   nav.push(button("user:config", "Back to links", 2));
   nav.push(button("user:panel", "Post the link panel", 1));
@@ -642,7 +701,7 @@ export function rosterPanel(ctx, page) {
    gives the linked role); reject drops the request. One click each, both logged. */
 export function pendingPanel(ctx, note) {
   var pending = ctx.pendingLinks() || [];
-  var lines = pending.slice(0, 40).map(function (p) { return "<@" + p.userId + "> asked for " + code(p.gamertag); });
+  var lines = pending.slice(0, 40).map(function (p) { var since = ago(p.at); return "<@" + p.userId + "> asked for " + code(p.gamertag) + (since ? " " + since : ""); });
   var built = embed(0x3ba55d, "Waiting to be confirmed" + (pending.length ? " (" + pending.length + ")" : ""), pending.length
     ? "**Approve** confirms the gamertag the player typed; **Reject** drops the request.\n\n" + lines.join("\n") + (pending.length > 40 ? "\n...and " + (pending.length - 40) + " more" : "")
     : "Nobody is waiting: no unconfirmed link requests are on record.");
@@ -768,11 +827,13 @@ export function kitsPanel(ctx) {
     field("Lock kits", ctx.kits().locked ? "locked" : "unlocked", true),
     field("Auth groups with a kit", String(Object.keys(auth).length), true),
     field("Cooldowns on record", String(ctx.cooldownCount()), true),
+    field("Delivery", "List command: " + (ctx.kits().listCommand ? code(ctx.kits().listCommand) : "not set") + "\nGive template: " + (ctx.kits().giveCommand ? code(ctx.kits().giveCommand) : "not set"), false),
   ];
   built.footer = { text: "Emote and kit names come from your own server" };
   return { embeds: [built], components: [
     row([button("kits:add", "Add a bind", 1), button("kits:edit", "Edit a bind", 2), button("kits:remove", "Remove a bind", 2)]),
     row([button("kits:lock", ctx.kits().locked ? "Unlock kits" : "Lock kits", 2), button("kits:guide", "Emote guide", 2), button("kits:refresh", "Cooldowns", 2)]),
+    row([button("kits:delivery", "Delivery settings", ctx.kits().giveCommand && ctx.kits().listCommand ? 2 : 1), button("kits:grab", "Read kit names", 2), button("kits:give", "Give a kit", 2)]),
   ], flags: EPH };
 }
 export function bindModal(existing) {
@@ -811,6 +872,38 @@ function fitLines(lines, max) {
   }
   return out.join("\n");
 }
+/* The two commands only your server's kit plugin knows: how to list kits and how to give one.
+   Settable here, so /kits grab and /kits give work without the website's Settings page. */
+export function deliveryModal(kits) {
+  var k = kits || {};
+  return { title: "Kit delivery", custom_id: "modal:kitdelivery", components: [
+    row([Object.assign(input("kit_list", "List command (lists your kits)", String(k.listCommand || ""), false), { placeholder: "for example: kit list" })]),
+    row([Object.assign(input("kit_give", "Give template, with {player} and {kit}", String(k.giveCommand || ""), false), { placeholder: 'for example: kit givetoplayer {kit} "{player}"' })]),
+  ] };
+}
+export function saveDelivery(ctx, data) {
+  var list = String(data.kit_list || "").replace(/[\r\n]+/g, " ").trim();
+  var give = String(data.kit_give || "").replace(/[\r\n]+/g, " ").trim();
+  var problems = [];
+  if (list.length > 120) problems.push("The list command is longer than 120 characters.");
+  if (give.length > 200) problems.push("The give template is longer than 200 characters.");
+  if (give && (give.indexOf("{player}") < 0 || give.indexOf("{kit}") < 0)) problems.push("The give template needs both {player} and {kit}, so the bot knows where the gamertag and the kit name go.");
+  if (problems.length) {
+    return { embeds: [embed(0xdc4c4c, "Not saved", problems.join("\n"))], components: [row([button("kits:delivery", "Try again", 1), button("kits:config", "Back to Emote Kits", 2)])], flags: EPH };
+  }
+  var result = ctx.setDelivery({ listCommand: list, giveCommand: give });
+  if (result && typeof result.then === "function") return result.then(function (wrote) { return deliverySaved(list, give, wrote); });
+  return deliverySaved(list, give, result);
+}
+function deliverySaved(list, give, wrote) {
+  var example = give ? give.split("{player}").join("PlayerOne").split("{kit}").join("STARTER") : "";
+  var built = embed(0x3ba55d, "Delivery saved", (list ? "List command: " + code(list) : "No list command (so /kits grab stays off).") + "\n" +
+    (give ? "Give template: " + code(give) + "\nFor example, STARTER to PlayerOne sends: " + code(example) : "No give template (so /kits give stays off).") +
+    (wrote && wrote.ok === false ? "\n\nKept in this bot memory only: " + wrote.detail : ""));
+  var nav = [button("kits:config", "Back to Emote Kits", 2)];
+  if (list) nav.unshift(button("kits:grab", "Read kit names now", 1));
+  return { embeds: [built], components: [row(nav)], flags: EPH };
+}
 export function emoteGuide(ctx) {
   var binds = ctx.kits().binds || [];
   var auth = ctx.kits().authSpawn || {};
@@ -825,7 +918,8 @@ export function emoteGuide(ctx) {
 export function grabKits(ctx) {
   if (!String(ctx.kits().listCommand || "").trim()) {
     return { embeds: [embed(0xfaa81a, "No kit list command is set",
-      "Reading the real kit names means asking your server a command it understands, and this bot will not invent the name of one.\n\nSet your kit plugin list command in the kit settings, and this runs it and shows exactly what comes back.")], flags: EPH };
+      "Reading the real kit names means asking your server a command it understands, and this bot will not invent the name of one.\n\nSet your kit plugin's list command, and this runs it and shows exactly what comes back.")],
+      components: [row([button("kits:delivery", "Set it now", 1)])], flags: EPH };
   }
   return null;
 }
@@ -858,7 +952,7 @@ export async function grabKitsRun(ctx, wanted) {
       ? names.length + " - they now autocomplete in /kits give and /kits auth-spawn"
       : "none recognised in that answer, so the suggestions are unchanged", false)];
   }
-  return { embeds: [built], flags: EPH };
+  return { embeds: [built], components: [row([button("kits:grab", "Read again", 2), button("kits:config", "Emote Kits", 2)])], flags: EPH };
 }
 export function kitStudioPanel(ctx) {
   return { embeds: [embed(0x5865f2, "Kit Studio",
@@ -874,6 +968,10 @@ export function installKit(ctx, rawCode) {
   var ok = !!text && text.length > 2 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
   if (!ok) return { embeds: [embed(0xdc4c4c, "That does not decode", "The value is not valid Base64, or it does not decode to readable text. Nothing was stored.")], flags: EPH };
   var count = ctx.installKit(raw, text);
+  /* Kit Studio codes decode to kit add "NAME" lines: those names join the suggestions. */
+  var names = [];
+  text.replace(/^\s*kit\s+add\s+"([^"]{1,60})"/gim, function (all, name) { if (names.indexOf(name) < 0) names.push(name); return all; });
+  if (names.length && ctx.setKnownKits) ctx.setKnownKits(knownKitNames(ctx).concat(names.filter(function (n) { return knownKitNames(ctx).indexOf(n) < 0; })));
   var built = embed(0x3ba55d, "Install code accepted",
     "Stored exactly as given, keyed by a hash of the code so two different codes cannot overwrite each other. Sending it to your server needs your own install command, set in the kit settings.");
   built.fields = [
@@ -881,6 +979,7 @@ export function installKit(ctx, rawCode) {
     field("Codes stored", String(count), true),
     field("First line", code(text.split("\n")[0].slice(0, 150)), false),
   ];
+  if (names.length) built.fields.push(field("Kit names found", names.map(function (n) { return code(n); }).join(", ").slice(0, 1000) + " - now suggested in /kits give", false));
   return { embeds: [built], flags: EPH };
 }
 export function authSpawnNote(ctx, group, kit) {
@@ -897,7 +996,8 @@ export async function giveKit(ctx, opts) {
   var command = String(ctx.kits().giveCommand || "").trim();
   if (!command) {
     return { embeds: [embed(0xfaa81a, "Delivery needs one more setting",
-      "To hand a kit over in game the bot must send your server own give command over RCON, and it will not guess what that is called.\n\nSet a template in the kit settings using {player} and {kit}, and this command runs exactly that.")], flags: EPH };
+      "To hand a kit over in game the bot must send your server own give command over RCON, and it will not guess what that is called.\n\nSet a template using {player} and {kit}, and this command runs exactly that.")],
+      components: [row([button("kits:delivery", "Set it now", 1)])], flags: EPH };
   }
   /* Typed values go into an RCON command line, so quotes, backslashes and control characters
      are dropped before they get there. */
@@ -1038,7 +1138,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     }
     if (sub === "transfer") return options.gamertag ? transferNow(ctx, options.gamertag, options.to_user, options.to_gamertag) : transferPicker(ctx);
     if (sub === "linkpanel") return options.channel ? { postPanelTo: options.channel } : channelPickerForPanel();
-    if (sub === "roster") return rosterPanel(ctx);
+    if (sub === "roster") return rosterPanel(ctx, 1, options.search);
     return userPanel(ctx);
   }
   return { content: "That command is not wired up here yet.", flags: EPH };

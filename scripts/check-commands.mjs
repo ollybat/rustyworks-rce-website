@@ -175,6 +175,17 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
     ...mod.LOG_TYPES.map((t) => ["channelMenu(" + t[0] + ")", () => mod.channelMenu(t[0], ctx)]),
     ["logTypeMenu", () => mod.logTypeMenu(ctx)],
     ["kitGivePanel", () => mod.kitGivePanel(ctx)],
+    ["deliveryModal", () => mod.deliveryModal(ctx.kits())],
+    ["saveDelivery(ok)", () => mod.saveDelivery(Object.assign({}, ctx, { setDelivery: () => ({ ok: true }) }), { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"' })],
+    ["saveDelivery(no placeholders)", () => mod.saveDelivery(Object.assign({}, ctx, { setDelivery: () => ({ ok: true }) }), { kit_give: "kit give" })],
+    ["setupPanel(not saving)", () => mod.setupPanel(Object.assign({}, ctx, { storeTokenSet: () => false }))],
+    ["setupStatus(problems)", () => mod.setupStatus(Object.assign({}, ctx, { storeTokenSet: () => false, diagnostics: () => ({ ready: true,
+      channels: { command: { id: "1", exists: false }, rcon: { id: "2", exists: true, canSend: false } },
+      roles: { owner: { id: "3", exists: false } }, linked: { id: "4", exists: true, canManage: true, above: false } }) }))],
+    ["setupStatus(healthy)", () => mod.setupStatus(Object.assign({}, ctx, { diagnostics: () => ({ ready: true, channels: {}, roles: {}, linked: null }) }))],
+    ["rosterPanel(search)", () => mod.rosterPanel(ctx, 1, "player1")],
+    ["rosterPanel(search, nothing)", () => mod.rosterPanel(ctx, 1, "zzzz")],
+    ["installKit(kit names)", () => mod.installKit(ctx, Buffer.from('kit remove "PVP"\nkit add "PVP"\nkit add "PVP" rifle.ak 1 1 main').toString("base64"))],
   ];
   for (const [name, run] of extra) {
     try { checkPayload(name + " [" + label + "]", await Promise.resolve(run())); }

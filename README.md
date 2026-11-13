@@ -73,7 +73,10 @@ discord.js (`scripts/sim/`) and a pretend website, and drives every command, but
 form and suggestion through it: typed form values must reach the bot, every interaction must
 be answered inside Discord's three seconds even when a save or an RCON check is slow, no
 handler may reply twice, settings must really be saved, and the linked role and the log
-channels must really be used. No Discord, token or `npm install` needed.
+channels must really be used. It also covers kit delivery set from Discord, kit names picked up
+from an install code, live permission checks in `/setup status`, direct messages to players
+when a link request is approved or rejected (including closed DMs), roster search across pages,
+and replacing an old link panel. No Discord, token or `npm install` needed.
 
 ## Stylesheet map
 
