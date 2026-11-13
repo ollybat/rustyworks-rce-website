@@ -1,1 +1,954 @@
-[object Object]
+/* ==========================================================================
+   Spinback RCE — the bot process. This is what runs on Railway.
+   --------------------------------------------------------------------------
+   Why the bot never came online: this file used to be an interactions endpoint
+   only. A server that just answers Discord's signed POSTs holds no gateway
+   connection, so Discord has nothing to show in the member list and the bot
+   looks offline forever. Interactions endpoints are for commands you register
+   and call; they are not a presence.
+
+   This file now does both jobs:
+     1. logs in to the Discord gateway with DISCORD_BOT_TOKEN, so the bot shows
+        as online with a presence, and answers /dashboard over the gateway;
+     2. keeps serving the same signed interactions endpoint as a fallback,
+        using the handler in interactions-worker.js unchanged.
+   It also answers GET /healthz, which is what Railway watches.
+   ========================================================================== */
+
+import { createServer } from 'node:http';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, Events } from 'discord.js';
+import handler from './interactions-worker.js';
+import net from 'node:net';
+import { createHash } from 'node:crypto';
+import {
+  COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
+  setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
+  testAndSaveServer, kitsPanel, bindModal, bindList, bindRoleMenu, emoteGuide,
+  refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
+} from './commands.mjs';
+
+const SITE_URL = (process.env.SITE_URL || 'https://spinback-j7ao5f.camelai.app').replace(/\/+$/, '');
+/* Hosts hand the token in as an environment variable, and the name people give it
+   varies. Look for the usual names, then anything token-shaped, and strip the quotes
+   and stray whitespace that come along when a value is pasted into a web form. The
+   value itself is never logged - only which variable it came from and its shape. */
+const TOKEN_NAMES = ['DISCORD_BOT_TOKEN', 'DISCORD_TOKEN', 'BOT_TOKEN', 'TOKEN', 'DISCORD_BOT', 'DISCORD_APPLICATION_BOT_TOKEN', 'SPINBACK_BOT_TOKEN'];
+function cleanEnvValue(v) {
+  return String(v == null ? '' : v).trim().replace(/^["']+/, '').replace(/["']+$/, '').trim();
+}
+function readToken(envVars) {
+  for (const name of TOKEN_NAMES) {
+    const value = cleanEnvValue(envVars[name]);
+    if (value) return { token: value, source: name };
+  }
+  const loose = Object.keys(envVars).find((k) => /token/i.test(k) && !/SECRET|KEY|PUBLIC/i.test(k));
+  if (loose) return { token: cleanEnvValue(envVars[loose]), source: loose + ' (matched by name)' };
+  return { token: '', source: null };
+}
+const TOKEN_INFO = readToken(process.env);
+
+/* The website asks this service to swap an OAuth code for a token, so the client secret
+   has to live in exactly one place. A code that was not issued to this application fails
+   at Discord before it reaches us, so this route cannot be abused as an open proxy. */
+const CLIENT_ID = cleanEnvValue(process.env.DISCORD_CLIENT_ID) || '1570023832717361213';
+const CLIENT_SECRET = (function () {
+  const names = ['DISCORD_CLIENT_SECRET', 'CLIENT_SECRET', 'DISCORD_OAUTH_SECRET', 'OAUTH_SECRET'];
+  for (const name of names) {
+    const value = cleanEnvValue(process.env[name]);
+    if (value) return value;
+  }
+  for (const key of Object.keys(process.env)) {
+    if (/client.?secret/i.test(key)) {
+      const value = cleanEnvValue(process.env[key]);
+      if (value) return value;
+    }
+  }
+  return '';
+})();
+const TOKEN = TOKEN_INFO.token;
+const tokenShape = !TOKEN ? 'empty'
+  : (/^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}$/.test(TOKEN) ? 'discord-token' : 'unexpected-shape');
+const GUILD_ID = process.env.DISCORD_GUILD_ID || '';
+const OWNER_ID = process.env.DISCORD_GUILD_OWNER_ID || '';
+const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY || '';
+const PORT = Number(process.env.PORT || 8080);
+/* Bind every interface: Railway's proxy reaches the container from outside it, so a
+   server on 127.0.0.1 would answer nothing and the public domain would 502. */
+const HOST = process.env.HOST || '0.0.0.0';
+
+const state = { gateway: 'starting', tag: null, guilds: 0, command: null, since: Date.now(), error: null };
+const log = (...a) => console.log('[spinback]', ...a);
+
+/* -------------------------------------------------------------- settings ---- */
+/* Roles, logging channels, servers and kit settings are kept here and mirrored to the
+   website whenever BOT_SETTINGS_TOKEN is set. A save the website refuses is reported to
+   whoever asked for it, so nothing quietly pretends to have been stored. */
+const settings = {
+  staffRoles: {},
+  logChannels: {},
+  servers: [],
+  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '' },
+  installs: {},
+};
+const cooldowns = new Map();
+
+function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
+
+function panelEmbed(color, title, description) { return { color: color, title: title, description: description }; }
+function panelRow(components) { return { type: 1, components: components }; }
+function panelButton(id, label, style) { return { type: 2, custom_id: id, label: label, style: style || 2 }; }
+
+async function persistSettings() {
+  const token = settingsToken();
+  if (!token) return { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set on this service, so the website cannot be written to' };
+  try {
+    const res = await fetch(SITE_URL + '/api/bot/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-settings-token': token },
+      body: JSON.stringify({ staffRoles: settings.staffRoles, logChannels: settings.logChannels, servers: settings.servers, kits: settings.kits }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const body = await res.json().catch(function () { return {}; });
+    if (res.ok && body && body.ok !== false) return { ok: true, detail: '' };
+    return { ok: false, detail: 'the website answered ' + res.status + (body && body.reason ? ' (' + body.reason + ')' : '') };
+  } catch (error) {
+    return { ok: false, detail: String((error && error.message) || error) };
+  }
+}
+
+
+async function loadSettings() {
+  const token = settingsToken();
+  if (!token) { log('BOT_SETTINGS_TOKEN is not set, so saved settings cannot be read from the website'); return; }
+  try {
+    const res = await fetch(SITE_URL + '/api/bot/settings', {
+      headers: { 'x-settings-token': token, accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) { log('settings read answered ' + res.status); return; }
+    const body = await res.json();
+    if (body && body.staffRoles) settings.staffRoles = body.staffRoles;
+    if (body && body.logChannels) settings.logChannels = body.logChannels;
+    if (body && Array.isArray(body.servers)) settings.servers = body.servers;
+    if (body && body.kits && typeof body.kits === 'object') settings.kits = Object.assign(settings.kits, body.kits);
+    log('loaded ' + Object.keys(settings.staffRoles).length + ' role slot(s), ' + Object.keys(settings.logChannels).length
+      + ' log channel(s), ' + settings.servers.length + ' server(s), ' + settings.kits.binds.length + ' bind(s)');
+  } catch (error) {
+    log('settings read failed:', String((error && error.message) || error));
+  }
+}
+
+async function saveServer(s) {
+  const entry = {
+    id: s.id || 'srv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: String(s.name || 'server').slice(0, 60),
+    host: String(s.host || '').trim(),
+    port: Number(s.port),
+    password: String(s.password || ''),
+  };
+  const at = settings.servers.findIndex(function (x) { return x.id === entry.id; });
+  if (at > -1) settings.servers[at] = entry; else settings.servers.push(entry);
+  return persistSettings();
+}
+
+function installKitCode(raw, text) {
+  const key = createHash('sha1').update(String(raw)).digest('hex').slice(0, 16);
+  settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
+  const keys = Object.keys(settings.installs);
+  if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
+  persistSettings().catch(function () { /* reported the next time settings are saved */ });
+  return Object.keys(settings.installs).length;
+}
+
+function setAuthSpawn(group, kit) {
+  const name = String(group || '').trim();
+  if (!name) return;
+  if (kit && String(kit).trim()) settings.kits.authSpawn[name] = String(kit).trim().slice(0, 60);
+  else delete settings.kits.authSpawn[name];
+  persistSettings().catch(function () {});
+}
+
+function cooldownCount() { return cooldowns.size; }
+
+function clearCooldowns(scope, target) {
+  const wanted = String(target || '').trim().toLowerCase();
+  let cleared = 0;
+  cooldowns.forEach(function (value, key) {
+    const parts = String(key).split('::');
+    const user = parts[0] || '';
+    const kit = parts[1] || '';
+    let hit = false;
+    if (scope === 'all-users' || scope === 'all-kits') hit = true;
+    else if (scope === 'user') hit = !!wanted && user.toLowerCase() === wanted;
+    else if (scope === 'kit') hit = !!wanted && kit.toLowerCase() === wanted;
+    if (hit) { cooldowns.delete(key); cleared += 1; }
+  });
+  return cleared;
+}
+
+function saveBind(data, keepRole, preserve) {
+  const emote = String(data.emote || '').trim().slice(0, 60);
+  if (!emote) return null;
+  const kits = [data.kit1, data.kit2, data.kit3]
+    .map(function (k) { return String(k || '').trim().slice(0, 60); })
+    .filter(Boolean).slice(0, 3);
+  if (!kits.length) return null;
+  const cooldown = Math.max(0, Math.min(86400, Math.round(Number(data.cooldown) || 0)));
+  const at = settings.kits.binds.findIndex(function (b) { return b.emote.toLowerCase() === emote.toLowerCase(); });
+  const previous = at > -1 ? settings.kits.binds[at] : null;
+  let roleId = keepRole || null;
+  if (!roleId && preserve && previous) roleId = previous.roleId || null;
+  const entry = { emote: emote, kits: kits, cooldown: cooldown, roleId: roleId };
+  if (at > -1) settings.kits.binds[at] = entry; else settings.kits.binds.push(entry);
+  persistSettings().catch(function () {});
+  return entry;
+}
+
+function removeBind(emote) {
+  const wanted = String(emote || '').toLowerCase();
+  const before = settings.kits.binds.length;
+  settings.kits.binds = settings.kits.binds.filter(function (b) { return b.emote.toLowerCase() !== wanted; });
+  persistSettings().catch(function () {});
+  return before - settings.kits.binds.length;
+}
+
+function botCtx() {
+  return {
+    siteUrl: SITE_URL,
+    settings: settings,
+    guildInfo: state.guildInfo || null,
+    gateway: state.gateway,
+    ping: function () { return client.ws.ping; },
+    uptime: function () { return (Date.now() - state.since) / 1000; },
+    commandCount: function () { return state.commandNames ? state.commandNames.length : 0; },
+    storeTokenSet: function () { return !!settingsToken(); },
+    servers: function () { return settings.servers; },
+    kits: function () { return settings.kits; },
+    saveServer: saveServer,
+    installKit: installKitCode,
+    setAuthSpawn: setAuthSpawn,
+    clearCooldowns: clearCooldowns,
+    cooldownCount: cooldownCount,
+    rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
+    rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
+  };
+}
+
+/* ----------------------------------------------------------- interactions ---- */
+/* /ping, /setup and /kits, and their buttons, menus and modals. Everything answers only
+   inside the one guild this bot is configured for, and the configuration commands need
+   Administrator or Manage Server. Their panels are ephemeral, so a role list or a channel
+   choice is never posted into the channel. */
+
+function mayConfigure(interaction) {
+  const perms = interaction.memberPermissions;
+  if (!perms) return false;
+  try {
+    return perms.has(PermissionFlagsBits.Administrator) || perms.has(PermissionFlagsBits.ManageGuild);
+  } catch (error) { return false; }
+}
+
+async function answerModal(interaction, payload) {
+  const body = Object.assign({}, payload);
+  if (body.flags === undefined) body.flags = 64;
+  try { await interaction.reply(body); } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
+}
+
+async function answerPanel(interaction, payload) {
+  const body = Object.assign({}, payload);
+  delete body.flags;
+  if (body.components === undefined) body.components = [];
+  try { await interaction.update(body); } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
+}
+
+async function routeInteraction(interaction) {
+  try {
+    const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
+    if (!rightGuild) {
+      if (typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
+        await interaction.reply({ embeds: [wrongGuildNote()], flags: 64 }).catch(function () {});
+      }
+      return;
+    }
+    if (interaction.isChatInputCommand()) return await runCommand(interaction);
+    if (interaction.isModalSubmit()) return await runModal(interaction);
+    if (interaction.isButton()) return await runButton(interaction);
+    if (interaction.isStringSelectMenu()) return await runSelect(interaction);
+    if (typeof interaction.isChannelSelectMenu === 'function' && interaction.isChannelSelectMenu()) return await runSelect(interaction);
+    if (typeof interaction.isRoleSelectMenu === 'function' && interaction.isRoleSelectMenu()) return await runSelect(interaction);
+    return;
+  } catch (error) {
+    const message = String((error && error.message) || error);
+    log('interaction failed:', message);
+    try { await interaction.reply({ content: 'That failed: ' + message.slice(0, 300), flags: 64 }); } catch (e) { /* already answered */ }
+  }
+}
+
+async function runCommand(interaction) {
+  const name = interaction.commandName;
+  if (name !== 'ping' && name !== 'setup' && name !== 'kits') return;
+  if (name !== 'ping' && !mayConfigure(interaction)) {
+    await interaction.reply({ embeds: [permissionNote()], flags: 64 }).catch(function () {});
+    return;
+  }
+  const ctx = botCtx();
+  const opts = optionMap(interaction);
+  const slow = name === 'setup' || name === 'kits';
+  if (slow) await interaction.deferReply({ flags: 64 }).catch(function () {});
+  const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
+    return { embeds: [panelEmbed(0xdc4c4c, 'That did not work', String((error && error.message) || error).slice(0, 400))] };
+  });
+  if (slow) {
+    const body = Object.assign({}, payload);
+    /* flags belong on the first reply only; the deferral already made it ephemeral. */
+    delete body.flags;
+    await interaction.editReply(body).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
+    return;
+  }
+  await interaction.reply(payload).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
+}
+
+async function runButton(interaction) {
+  const id = customId(interaction);
+  const ctx = botCtx();
+  if (id === 'ping:again') return await answerPanel(interaction, await pingReply(ctx));
+  if (!mayConfigure(interaction)) return await answerModal(interaction, { embeds: [permissionNote()] });
+  if (id === 'setup:roles') return await interaction.showModal(rolesModal());
+  if (id === 'setup:linked') return await interaction.showModal(linkedRoleModal());
+  if (id === 'setup:channels') return await answerPanel(interaction, logTypeMenu());
+  if (id === 'setup:server') return await interaction.showModal(serverModal(null));
+  if (id === 'setup:test') return await answerPanel(interaction, serverPicker(ctx));
+  if (id === 'kits:add') return await interaction.showModal(bindModal(null));
+  if (id === 'kits:edit') return await answerPanel(interaction, bindList(ctx, 'edit'));
+  if (id === 'kits:remove') return await answerPanel(interaction, bindList(ctx, 'remove'));
+  if (id === 'kits:config') return await answerPanel(interaction, kitsPanel(ctx));
+  if (id === 'kits:guide') return await answerPanel(interaction, emoteGuide(ctx));
+  if (id === 'kits:refresh') return await answerPanel(interaction, refreshCooldowns(ctx, 'all-kits', ''));
+  if (id === 'kits:lock') {
+    settings.kits.locked = !settings.kits.locked;
+    persistSettings().catch(function () {});
+    return await answerPanel(interaction, kitsPanel(ctx));
+  }
+  if (id.indexOf('kits:role:skip:') === 0) {
+    saveBind({ emote: id.slice('kits:role:skip:'.length) }, null, false);
+    return await answerPanel(interaction, kitsPanel(ctx));
+  }
+  log('unhandled button:', id);
+}
+
+async function runSelect(interaction) {
+  const id = customId(interaction);
+  const ctx = botCtx();
+  if (!mayConfigure(interaction)) return await answerModal(interaction, { embeds: [permissionNote()] });
+  const first = String((interaction.values || [])[0] || '');
+  if (id === 'setup:logtype') return await answerPanel(interaction, channelMenu(first));
+  if (id.indexOf('setup:channel:') === 0) {
+    const typeKey = id.slice('setup:channel:'.length);
+    const found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
+    settings.logChannels[typeKey] = first;
+    const wrote = await persistSettings();
+    return await answerPanel(interaction, {
+      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Log channel set',
+        (found ? found[1] : typeKey) + ' goes to <#' + first + '>.' + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
+      components: [panelRow([panelButton('setup:channels', 'Back to log types', 2), panelButton('setup:test', 'Test a connection', 2)])],
+    });
+  }
+  if (id === 'setup:pick') {
+    const server = settings.servers.filter(function (s) { return s.id === first; })[0];
+    if (!server) return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That server is gone', 'Save it again from the setup panel.')] });
+    return await interaction.showModal(serverModal(server));
+  }
+  if (id === 'kits:pickbind:edit') {
+    const bind = settings.kits.binds.filter(function (b) { return b.emote === first; })[0];
+    if (!bind) return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That bind is gone', 'Open the panel again.')] });
+    return await interaction.showModal(bindModal(bind));
+  }
+  if (id === 'kits:pickbind:remove') {
+    const gone = removeBind(first);
+    return await answerPanel(interaction, {
+      embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Bind removed' : 'Nothing removed', gone ? 'The ' + first + ' bind is gone.' : 'No bind named ' + first + ' was found.')],
+      components: [panelRow([panelButton('kits:config', 'Back to the panel', 2)])],
+    });
+  }
+  if (id.indexOf('kits:role:') === 0) {
+    saveBind({ emote: id.slice('kits:role:'.length) }, first, true);
+    return await answerPanel(interaction, kitsPanel(ctx));
+  }
+  log('unhandled select:', id);
+}
+
+async function runModal(interaction) {
+  const id = customId(interaction);
+  const fields = modalFields(interaction);
+  const ctx = botCtx();
+  if (!mayConfigure(interaction)) return await answerModal(interaction, { embeds: [permissionNote()] });
+  if (id === 'modal:roles' || id === 'modal:linked') {
+    let saved = 0;
+    let skipped = 0;
+    ROLE_SLOTS.forEach(function (slot) {
+      const key = 'role_' + slot[0];
+      if (!(key in fields)) return;
+      const value = String(fields[key] || '').trim();
+      if (!value) { delete settings.staffRoles[slot[0]]; return; }
+      if (/^[0-9]{5,25}$/.test(value)) { settings.staffRoles[slot[0]] = value; saved += 1; }
+      else skipped += 1;
+    });
+    const wrote = await persistSettings();
+    return await answerModal(interaction, {
+      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Roles saved',
+        saved + ' role id(s) stored' + (skipped ? ', ' + skipped + ' value(s) skipped because they were not role ids' : '') + '.' +
+        (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
+      components: [panelRow([panelButton('setup:roles', 'Change them again', 2), panelButton('setup:channels', 'Next: logging channels', 1)])],
+    });
+  }
+  if (id === 'modal:server' || id.indexOf('modal:server:') === 0) {
+    const existingId = id.indexOf('modal:server:') === 0 ? id.slice('modal:server:'.length) : null;
+    return await answerModal(interaction, await testAndSaveServer(ctx, fields, existingId));
+  }
+  if (id === 'modal:bind' || id.indexOf('modal:bind:') === 0) {
+    const entry = saveBind({
+      emote: fields.bind_emote,
+      kit1: fields.bind_kit1,
+      kit2: fields.bind_kit2,
+      kit3: fields.bind_kit3,
+      cooldown: fields.bind_cooldown,
+    }, null, true);
+    if (!entry) {
+      return await answerModal(interaction, { embeds: [panelEmbed(0xdc4c4c, 'Nothing saved', 'A bind needs an emote name and at least one kit.')] });
+    }
+    return await answerModal(interaction, bindRoleMenu(entry.emote));
+  }
+  log('unhandled modal:', id);
+}
+
+/* ---------------------------------------------------------------- gateway -- */
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+  partials: [Partials.Channel],
+});
+
+client.once(Events.ClientReady, async (c) => {
+  state.gateway = 'online';
+  state.tag = c.user.tag;
+  state.guilds = c.guilds.cache.size;
+  log('logged in as ' + c.user.tag + ' — in ' + c.guilds.cache.size + ' guild(s)');
+  try {
+    c.user.setPresence({ status: 'online', activities: [{ name: '/dashboard — Spinback RCE', type: 0 }] });
+    if (!GUILD_ID) {
+      log('WARNING: DISCORD_GUILD_ID is not set, so no command was registered');
+      return;
+    }
+    const guild = c.guilds.cache.get(GUILD_ID) || await c.guilds.fetch(GUILD_ID).catch(() => null);
+    if (!guild) {
+      state.error = 'the bot is not in guild ' + GUILD_ID;
+      log('WARNING: the bot is not in that server yet — invite it with its own invite link');
+      return;
+    }
+    await loadSettings();
+    /* set() replaces the whole list, so a command removed from the module really does
+       disappear from the picker instead of lingering forever. */
+    const applied = await guild.commands.set(COMMANDS.map((cmd) => {
+      const copy = Object.assign({}, cmd, { dm_permission: false });
+      if (cmd.name !== 'ping') copy.default_member_permissions = String(PermissionFlagsBits.Administrator | PermissionFlagsBits.ManageGuild);
+      return copy;
+    }));
+    state.commandNames = applied.map((cmd) => cmd.name);
+    const setupCmd = applied.get('setup');
+    state.command = (setupCmd && setupCmd.id) || (applied.first() && applied.first().id) || null;
+    log(applied.size + ' command(s) registered in ' + guild.name + ': ' + state.commandNames.join(', '));
+    /* The website reads this to turn the role ids Discord gives it into names, so it can
+       tell a staff role from any other. Role names are already visible to every member. */
+    state.guildInfo = {
+      id: guild.id,
+      name: guild.name,
+      ownerId: guild.ownerId,
+      memberCount: guild.memberCount,
+      /* The icon hash, so the website can show a server's real picture. */
+      icon: guild.icon || null,
+      roles: guild.roles.cache
+        .filter((r) => r.name !== '@everyone')
+        .sort((a, b) => b.position - a.position)
+        .map((r) => ({ id: r.id, name: r.name, position: r.position })),
+    };
+    log('exposed ' + state.guildInfo.roles.length + ' role(s) for the website');
+  } catch (e) {
+    state.error = String((e && e.message) || e);
+    log('command registration failed:', state.error);
+  }
+});
+
+client.on(Events.InteractionCreate, (interaction) => routeInteraction(interaction));
+
+client.on(Events.Error, (e) => log('gateway error:', String((e && e.message) || e)));
+client.on(Events.ShardDisconnect, (code) => { state.gateway = 'disconnected'; log('gateway disconnected, code', code); });
+client.on(Events.ShardReconnecting, () => { state.gateway = 'reconnecting'; log('gateway reconnecting'); });
+
+/* ------------------------------------------------ gateway watchdog ---------- */
+/* Discord drops a gateway connection from time to time and discord.js retries by itself.
+   Sometimes a reconnect never completes: the process stays healthy, its HTTP routes answer,
+   but no command can ever arrive. This notices that and forces a fresh login, slowly, so a
+   real Discord outage is not turned into a login storm. */
+
+let forcedLogins = 0;
+let lastForced = 0;
+let gatewayDownSince = 0;
+
+async function relogin(reason) {
+  if (!TOKEN) return;
+  if (Date.now() - lastForced < 120000) {
+    log('relogin skipped for now (' + reason + ') - last attempt was under two minutes ago');
+    return;
+  }
+  lastForced = Date.now();
+  forcedLogins += 1;
+  log('forcing a fresh login: ' + reason + ' (attempt ' + forcedLogins + ')');
+  state.gateway = 'forcing-login';
+  try { client.destroy(); } catch (e) { /* already gone */ }
+  try {
+    await client.login(TOKEN);
+  } catch (e) {
+    state.error = String((e && e.message) || e);
+    state.gateway = /token|unauthor|401/i.test(state.error) ? 'invalid-token' : 'login-failed';
+    log('forced login failed:', state.error);
+  }
+}
+
+setInterval(() => {
+  if (!TOKEN) return;
+  if (state.gateway === 'online') { gatewayDownSince = 0; return; }
+  if (!gatewayDownSince) gatewayDownSince = Date.now();
+  const downFor = Date.now() - gatewayDownSince;
+  if (downFor > 180000) relogin('gateway down for ' + Math.round(downFor / 1000) + ' seconds');
+}, 30000);
+
+
+let loginAttempts = 0;
+async function connect() {
+  if (!TOKEN) {
+    state.gateway = 'no-token';
+    log('no Discord token found on this service. Looked for: ' + TOKEN_NAMES.join(', '));
+    log('Railway -> the service that owns your domain -> Variables -> DISCORD_BOT_TOKEN, then it redeploys.');
+    return;
+  }
+  loginAttempts += 1;
+  state.gateway = 'logging-in';
+  log('logging in (attempt ' + loginAttempts + ') using ' + TOKEN_INFO.source + ', ' + TOKEN.length + ' characters, shape ' + tokenShape);
+  try {
+    await client.login(TOKEN);
+  } catch (e) {
+    state.error = String((e && e.message) || e);
+    state.gateway = /token|unauthor|401/i.test(state.error) ? 'invalid-token' : 'login-failed';
+    log('login attempt ' + loginAttempts + ' failed:', state.error);
+    if (/token|unauthor|401/i.test(state.error)) {
+      log('That reads like a token problem: copy it again from the Discord developer portal (Bot -> Reset Token), and check nothing else is running this bot with the same token.');
+    }
+    if (loginAttempts < 6) {
+      const waitMs = Math.min(60000, 5000 * loginAttempts);
+      log('retrying in ' + Math.round(waitMs / 1000) + 's');
+      const timer = setTimeout(connect, waitMs);
+      if (timer.unref) timer.unref();
+    }
+  }
+}
+connect();
+
+/* ----------------------------------------------- signed interactions route -- */
+
+function toRequest(req, body) {
+  const headers = new Headers();
+  Object.entries(req.headers).forEach(([k, v]) => {
+    if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
+    else if (v != null) headers.set(k, v);
+  });
+  const url = 'http://' + (req.headers.host || 'localhost') + (req.url || '/');
+  const method = req.method || 'GET';
+  return new Request(url, {
+    method,
+    headers,
+    body: method === 'GET' || method === 'HEAD' ? undefined : body,
+  });
+}
+
+const env = {
+  DISCORD_PUBLIC_KEY: PUBLIC_KEY,
+  DISCORD_GUILD_ID: GUILD_ID,
+  DISCORD_GUILD_OWNER_ID: OWNER_ID,
+  SITE_URL,
+};
+
+/* --------------------------------------------------------------- RCON ------ */
+/* Source RCON is what a Rust server speaks when rcon.web is set to 0. A packet is
+   int32 length, int32 id, int32 type, the body, then two null bytes. Type 3 asks to
+   authenticate, 2 is a command (and the answer to one), 0 carries a command's output,
+   and an auth answer with id -1 means the password was wrong.
+
+   Only a fixed list of harmless commands may be sent, only to public addresses, and
+   only a few times a minute: this endpoint is not a port scanner and not a console. */
+const RCON_TIMEOUT_MS = 8000;
+const RCON_IDLE_MS = 450;
+const RCON_ALLOWED = ['serverinfo', 'playerlist', 'status', 'gettime'];
+let rconRecent = [];
+
+function rconAllowed() {
+  const now = Date.now();
+  rconRecent = rconRecent.filter(function (t) { return now - t < 60000; });
+  if (rconRecent.length >= 6) return false;
+  rconRecent.push(now);
+  return true;
+}
+
+/* Packets are little-endian. */
+function rconPacket(id, type, body) {
+  const payload = Buffer.from(String(body), 'utf8');
+  const buf = Buffer.alloc(payload.length + 14);
+  buf.writeInt32LE(payload.length + 10, 0);
+  buf.writeInt32LE(id, 4);
+  buf.writeInt32LE(type, 8);
+  payload.copy(buf, 12);
+  buf.writeInt16LE(0, payload.length + 12);
+  return buf;
+}
+
+/* Pull whatever complete packets have arrived, leaving a partial one for next time. */
+function rconParse(buffer) {
+  const packets = [];
+  let rest = buffer;
+  while (rest.length >= 12) {
+    const size = rest.readInt32LE(0);
+    if (size < 10 || size > 8192) break;
+    if (rest.length < size + 4) break;
+    packets.push({
+      id: rest.readInt32LE(4),
+      type: rest.readInt32LE(8),
+      body: rest.slice(12, size + 2).toString('utf8'),
+    });
+    rest = rest.slice(size + 4);
+  }
+  return { packets: packets, rest: rest };
+}
+
+/* Nothing on the private internet: that keeps this from being pointed at a local service. */
+function rconHostAllowed(host) {
+  const h = String(host || '').trim().toLowerCase();
+  if (!h || h.length > 200) return false;
+  if (h === 'localhost' || /\.local$/.test(h) || /\.internal$/.test(h)) return false;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
+    const parts = h.split('.').map(Number);
+    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return false;
+    const a = parts[0], b = parts[1];
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    return true;
+  }
+  return /^[a-z0-9][a-z0-9.-]*$/.test(h);
+}
+
+function rconRun(options) {
+  return new Promise(function (resolve) {
+    const started = Date.now();
+    const host = String(options.host || '').trim();
+    const port = Number(options.port);
+    const password = String(options.password || '');
+    const asked = String(options.command || 'serverinfo').toLowerCase();
+    /* The fixed list is what the automatic health check may ask for. When an administrator
+       asks for a command they configured themselves - a kit plugin command, for instance -
+       it is passed through as a single line with a hard length cap. */
+    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300).toLowerCase();
+    const command = options.allowAny && requested ? requested : (RCON_ALLOWED.indexOf(asked) > -1 ? asked : 'serverinfo');
+
+    if (!rconHostAllowed(host)) {
+      return resolve({ ok: false, reason: 'refused-host', detail: 'That address is not on the public internet, so the bot will not connect to it.' });
+    }
+    if (!(port >= 1 && port <= 65535)) return resolve({ ok: false, reason: 'refused-port', detail: 'That port number cannot exist.' });
+    if (!password) return resolve({ ok: false, reason: 'no-password', detail: 'No RCON password was given for that server.' });
+
+    let socket = null;
+    let idle = null;
+    let settled = false;
+    let buffer = Buffer.alloc(0);
+    let authed = false;
+    let answer = '';
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(idle);
+      try { if (socket) socket.destroy(); } catch (error) { /* already gone */ }
+      resolve(Object.assign({ ms: Date.now() - started }, result));
+    }
+
+    const timer = setTimeout(function () {
+      finish({ ok: false, reason: 'timeout', detail: 'Nothing answered within ' + Math.round(RCON_TIMEOUT_MS / 1000) + ' seconds. Either the port is closed, RCON is off, or rcon.web is set to 1 (this talks the other kind).' });
+    }, RCON_TIMEOUT_MS);
+
+    try {
+      socket = net.connect({ host: host, port: port });
+    } catch (error) {
+      return finish({ ok: false, reason: 'connect-failed', detail: String(error.message || error) });
+    }
+
+    socket.on('error', function (error) {
+      finish({ ok: false, reason: 'connect-failed', detail: String((error && (error.code || error.message)) || error) });
+    });
+
+    socket.on('connect', function () {
+      socket.write(rconPacket(1, 3, password));
+    });
+
+    socket.on('close', function () {
+      if (!settled) finish({ ok: authed, authenticated: authed, command: command, answer: answer.trim().slice(0, 1200), reason: authed ? 'closed' : 'closed-before-auth' });
+    });
+
+    socket.on('data', function (chunk) {
+      buffer = Buffer.concat([buffer, chunk]);
+      const parsed = rconParse(buffer);
+      buffer = parsed.rest;
+      parsed.packets.forEach(function (packet) {
+        if (!authed) {
+          if (packet.id === -1) return finish({ ok: false, reason: 'bad-password', detail: 'The server refused that RCON password.' });
+          if (packet.type === 2) {
+            authed = true;
+            socket.write(rconPacket(2, 2, command));
+          }
+          return;
+        }
+        if (packet.type === 0) {
+          answer += packet.body;
+          /* Rust answers in one or more packets; a short silence means it is finished. */
+          clearTimeout(idle);
+          idle = setTimeout(function () {
+            finish({ ok: true, authenticated: true, command: command, answer: answer.trim().slice(0, 1200) });
+          }, RCON_IDLE_MS);
+        }
+      });
+    });
+  });
+}
+
+createServer(async (req, res) => {
+  const url = (req.url || '/').split('?')[0];
+  const statusPaths = ['/', '/health', '/healthz', '/status', '/api/status', '/api/health'];
+  /* Every server the bot is in right now. The website asks this before it will set anything
+     up: a server Spinback is not in cannot be configured, so the page says so plainly and
+     offers the invite instead of pretending otherwise. */
+  if (req.method === 'GET' && url === '/api/guilds') {
+    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    const guilds = [...client.guilds.cache.values()].map((g) => ({
+      id: g.id,
+      name: g.name,
+      memberCount: g.memberCount,
+      ownerId: g.ownerId || null,
+    }));
+    res.writeHead(200, cors);
+    res.end(JSON.stringify({ ready: state.gateway === 'online', gateway: state.gateway, count: guilds.length, guilds }));
+    return;
+  }
+
+  if (req.method === 'GET' && url === '/api/guild') {
+    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (!state.guildInfo) { res.writeHead(503, cors); res.end(JSON.stringify({ ready: false, reason: state.gateway })); return; }
+    res.writeHead(200, cors);
+    res.end(JSON.stringify({ ready: true, guild: state.guildInfo }));
+    return;
+  }
+  /* The status page asks this endpoint straight from the browser as well as through the
+     site's own proxy, so the read-only status routes have to allow cross-origin reads. */
+  const CORS = {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'content-type, x-signature-ed25519, x-signature-timestamp',
+  };
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, CORS);
+    res.end();
+    return;
+  }
+  /* A stuck gateway cannot ask for help itself, so this exists for a poke. It is rate
+     limited inside relogin() and it only ever makes the bot try to log in again. */
+  /* Ask a Rust server, over RCON, whether it is really there. The website never sends a
+     password to a browser: it calls this with the connection it has stored. */
+  if (req.method === 'POST' && url === '/api/rcon/test') {
+    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json', 'cache-control': 'no-store' };
+    if (!rconAllowed()) {
+      res.writeHead(429, cors);
+      res.end(JSON.stringify({ ok: false, reason: 'rate-limited', detail: 'Six checks a minute is the limit. Try again shortly.' }));
+      return;
+    }
+    let raw = '';
+    req.on('data', function (chunk) {
+      raw += chunk;
+      if (raw.length > 4096) { try { req.destroy(); } catch (error) { /* already gone */ } }
+    });
+    req.on('end', async function () {
+      let body = {};
+      try { body = JSON.parse(raw || '{}'); } catch (error) { body = {}; }
+      let answer;
+      try {
+        answer = await rconRun({ host: body.host, port: body.port, password: body.password, command: body.command });
+      } catch (error) {
+        answer = { ok: false, reason: 'unexpected', detail: String(error && error.message ? error.message : error) };
+      }
+      res.writeHead(200, cors);
+      res.end(JSON.stringify(answer));
+    });
+    return;
+  }
+
+  /* Read-only settings hand-off, so the panels in the dashboard actually take effect.
+     It stays shut until BOT_SETTINGS_TOKEN is set on this service, because an open
+     settings endpoint would be a way to read a server's credentials. */
+  if (req.method === 'GET' && url === '/api/site-settings') {
+    const cors = { 'content-type': 'application/json', 'cache-control': 'no-store' };
+    const expected = cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || '');
+    if (!expected) {
+      res.writeHead(503, cors);
+      res.end(JSON.stringify({ ok: false, reason: 'no-token', detail: 'Set BOT_SETTINGS_TOKEN on this service to the same value as on the website.' }));
+      return;
+    }
+    const given = String(req.headers['x-settings-token'] || '');
+    if (given !== expected) {
+      res.writeHead(403, cors);
+      res.end(JSON.stringify({ ok: false, reason: 'bad-token' }));
+      return;
+    }
+    const origin = cleanEnvValue(process.env.SITE_ORIGIN || 'https://spinback-j7ao5f.camelai.app');
+    try {
+      const response = await fetch(origin + '/api/bot/settings', { headers: { 'x-settings-token': given, accept: 'application/json' } });
+      const text = await response.text();
+      res.writeHead(response.status, cors);
+      res.end(text);
+    } catch (error) {
+      res.writeHead(502, cors);
+      res.end(JSON.stringify({ ok: false, reason: 'site-unreachable', detail: String(error && error.message ? error.message : error) }));
+    }
+    return;
+  }
+
+  if (url === '/api/reconnect') {
+    const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+    req.resume();
+    if (!TOKEN) { res.writeHead(503, cors); res.end(JSON.stringify({ ok: false, reason: 'no-token' })); return; }
+    if (state.gateway === 'online') { res.writeHead(200, cors); res.end(JSON.stringify({ ok: true, already: 'online', gateway: state.gateway })); return; }
+    await relogin('asked by a request');
+    res.writeHead(200, cors);
+    res.end(JSON.stringify({ ok: true, gateway: state.gateway, forcedLogins: forcedLogins }));
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/oauth/exchange') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', async () => {
+      const cors = Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS);
+      if (!CLIENT_SECRET) {
+        res.writeHead(503, cors);
+        res.end(JSON.stringify({ ok: false, error: 'no_client_secret', message: 'this service has no DISCORD_CLIENT_SECRET set' }));
+        return;
+      }
+      let parsed = {};
+      try { parsed = JSON.parse(body || '{}'); } catch (e) { parsed = {}; }
+      const code = String(parsed.code || '');
+      const redirectUri = String(parsed.redirectUri || '');
+      if (!code || !redirectUri) {
+        res.writeHead(400, cors);
+        res.end(JSON.stringify({ ok: false, error: 'bad_request', message: 'send code and redirectUri' }));
+        return;
+      }
+      try {
+        const form = new URLSearchParams();
+        form.set('grant_type', 'authorization_code');
+        form.set('code', code);
+        form.set('redirect_uri', redirectUri);
+        const upstream = await fetch('https://discord.com/api/oauth2/token', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: 'Basic ' + Buffer.from(CLIENT_ID + ':' + CLIENT_SECRET).toString('base64'),
+          },
+          body: form.toString(),
+        });
+        const data = await upstream.json().catch(() => ({}));
+        if (!upstream.ok || !data.access_token) {
+          res.writeHead(upstream.status || 502, cors);
+          res.end(JSON.stringify({ ok: false, error: data.error || 'exchange_failed', status: upstream.status, description: data.error_description || null }));
+          return;
+        }
+        res.writeHead(200, cors);
+        res.end(JSON.stringify({ ok: true, access_token: data.access_token, token_type: data.token_type, expires_in: data.expires_in, scope: data.scope }));
+      } catch (e) {
+        res.writeHead(502, cors);
+        res.end(JSON.stringify({ ok: false, error: 'unreachable', message: String((e && e.message) || e).slice(0, 140) }));
+      }
+    });
+    return;
+  }
+  if (req.method === 'GET' && statusPaths.indexOf(url) !== -1) {
+    res.writeHead(200, Object.assign({ 'content-type': 'application/json', 'cache-control': 'no-store' }, CORS));
+    res.end(JSON.stringify({
+      service: 'spinback-rce-bot',
+      /* online is the field the status page reads. Without it the page assumed the bot
+         was up whenever it got an answer at all, which is how a tokenless process could
+         be announced as online. */
+      online: state.gateway === 'online',
+      ok: state.gateway === 'online',
+      gateway: state.gateway,
+      tag: state.tag,
+      guilds: state.guilds,
+      command: state.command,
+      port: PORT,
+      host: HOST,
+      tokenPresent: !!TOKEN,
+      tokenSource: TOKEN_INFO.source,
+      oauthExchange: !!CLIENT_SECRET,
+      clientIdPresent: !!CLIENT_ID,
+      tokenShape: tokenShape,
+      tokenLength: TOKEN.length,
+      loginAttempts: loginAttempts,
+      lookedFor: TOKEN_NAMES,
+      siteUrl: SITE_URL,
+      interactions: !!PUBLIC_KEY,
+      guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
+      ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
+      ownerSource: OWNER_ID ? 'DISCORD_GUILD_OWNER_ID' : (state.guildInfo && state.guildInfo.ownerId ? 'the guild owner record' : null),
+      forcedLogins: forcedLogins,
+      gatewayDownSeconds: gatewayDownSince ? Math.round((Date.now() - gatewayDownSince) / 1000) : 0,
+      error: state.error,
+      uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
+      /* Only what this process really knows, so the site never shows invented numbers. */
+      stats: { guilds: state.guilds, gateway: state.gateway },
+      guildInfo: state.guildInfo || null,
+    }));
+    return;
+  }
+  let raw = '';
+  req.on('data', (c) => { raw += c; });
+  req.on('end', async () => {
+    try {
+      const response = await handler.fetch(toRequest(req, raw), env);
+      const text = await response.text();
+      const headers = {};
+      response.headers.forEach((v, k) => { headers[k] = v; });
+      res.writeHead(response.status, headers);
+      res.end(text);
+    } catch (e) {
+      log('interaction failed:', String((e && e.message) || e));
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end('{"error":"handler failed"}');
+    }
+  });
+}).listen(PORT, HOST, () => {
+  log('listening on ' + HOST + ':' + PORT + ' — health at /healthz');
+  log('config: token=' + (TOKEN ? 'set' : 'MISSING') + ' guild=' + (GUILD_ID || 'unset') + ' owner=' + (OWNER_ID || 'unset') + ' publicKey=' + (PUBLIC_KEY ? 'set' : 'unset'));
+  log('PORT was provided by the platform as "' + String(process.env.PORT || '(not set, defaulted to 8080)') + '"');
+  if (!TOKEN) log('the bot has no token, so it will not come online — set DISCORD_BOT_TOKEN on this Railway service');
+});
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    log('shutting down');
+    Promise.resolve(client.destroy()).catch(() => {}).finally(() => process.exit(0));
+  });
+}
