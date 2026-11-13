@@ -315,7 +315,7 @@ function addLink(userId, gamertag, by) {
   settings.pending = settings.pending.filter(function (p) {
     return p.userId !== id && p.gamertag.toLowerCase() !== tag.toLowerCase();
   });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag, userId: id };
 }
 function removeLink(which) {
@@ -325,7 +325,7 @@ function removeLink(which) {
     return l.gamertag.toLowerCase() !== wanted.toLowerCase() && l.userId !== wanted;
   });
   settings.pending = settings.pending.filter(function (p) { return p.userId !== wanted; });
-  persistSettings().catch(function () {});
+  persistSettings(['links', 'pending']).catch(function () {});
   return before - settings.links.length;
 }
 function moveLink(gamertag, newUserId, newGamertag) {
@@ -346,7 +346,7 @@ function moveLink(gamertag, newUserId, newGamertag) {
   }
   settings.links = settings.links.filter(function (l) { return l !== current; });
   settings.links.push({ userId: id, gamertag: tag, at: current.at, by: current.by || id, movedAt: new Date().toISOString() });
-  persistSettings().catch(function () {});
+  persistSettings(['links']).catch(function () {});
   return { ok: true, gamertag: tag, userId: id };
 }
 function requestLink(userId, gamertag) {
@@ -361,7 +361,7 @@ function requestLink(userId, gamertag) {
   }
   settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
   settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
-  persistSettings().catch(function () {});
+  persistSettings(['pending']).catch(function () {});
   return { ok: true, gamertag: tag };
 }
 
@@ -600,7 +600,7 @@ async function createLogChannels(keys) {
       failed.push(name + ': ' + String((error && error.message) || error).slice(0, 140));
     }
   }
-  const wrote = await persistSettings();
+  const wrote = await persistSettings(['logChannels']);
   return { created: created, failed: failed, wrote: wrote };
 }
 
@@ -925,7 +925,7 @@ async function runButton(interaction) {
       return await answerPanel(interaction, fresh);
     }
     const applied = applyProposal(proposal);
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['staffRoles', 'logChannels']);
     pendingSuggest.delete(interaction.user.id);
     return await answerPanel(interaction, suggestApplied(ctx, applied.roleLines, applied.channelLines, wrote, { roleMisses: applied.roleMisses }));
   }
@@ -1025,7 +1025,7 @@ async function runSelect(interaction) {
     const roleId = first || null;
     if (roleId) settings.staffRoles[slotKey] = String(roleId);
     else delete settings.staffRoles[slotKey];
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['staffRoles']);
     return await answerPanel(interaction, roleSlotResult(ctx, slotKey, roleId, wrote));
   }
   if (id === 'setup:channels:build:pick') {
@@ -1036,11 +1036,11 @@ async function runSelect(interaction) {
   if (id.indexOf('setup:channel:') === 0) {
     const typeKey = id.slice('setup:channel:'.length);
     const found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
-    settings.logChannels[typeKey] = first;
-    const wrote = await persistSettings();
+    settings.logChannels[typeKey] = first || null;
+    const wrote = await persistSettings(['logChannels']);
     return await answerPanel(interaction, {
-      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Log channel set',
-        (found ? found[1] : typeKey) + ' goes to <#' + first + '>.' + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
+      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, first ? 'Log channel set' : 'Log channel switched off',
+        (found ? found[1] : typeKey) + (first ? ' goes to <#' + first + '>.' : ' logging is switched off.') + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
       components: [panelRow([panelButton('setup:channels', 'Back to log types', 2), panelButton('setup:test', 'Test a connection', 2)])],
     });
   }
@@ -1201,7 +1201,7 @@ async function runModal(interaction) {
     if ('kit_give' in fields) values.give = fields.kit_give;
     if ('kit_install' in fields) values.install = fields.kit_install;
     const change = setKitCommands(values);
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['kits']);
     return await answerModal(interaction, kitCommandsResult(ctx, change.changed.length ? change.changed.join(', ') + ' updated.' : 'Nothing was changed.', wrote));
   }
   if (id === 'modal:reset') {
@@ -1211,7 +1211,7 @@ async function runModal(interaction) {
         components: [panelRow([panelButton('setup:reset', 'Try again', 1), panelButton('setup:status', 'Status', 2)])] });
     }
     const cleared = clearAllSettings();
-    const wrote = await persistSettings();
+    const wrote = await persistSettings(['staffRoles', 'logChannels', 'servers', 'kits', 'installs']);
     return await answerModal(interaction, setupResetDone(ctx, cleared, wrote));
   }
   log('unhandled modal:', id);
