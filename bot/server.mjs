@@ -832,11 +832,12 @@ async function runSelect(interaction) {
     await interaction.deferUpdate().catch(function () {});
     const typeKey = id.slice('setup:channel:'.length);
     const found = LOG_TYPES.filter(function (p) { return p[0] === typeKey; })[0];
-    settings.logChannels[typeKey] = first;
+    settings.logChannels[typeKey] = first || null;
     const wrote = await persistSettings(['logChannels']);
     return await answerPanel(interaction, {
-      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, 'Log channel set',
-        (found ? found[1] : typeKey) + ' goes to <#' + first + '>.' + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
+      embeds: [panelEmbed(wrote.ok ? 0x3ba55d : 0xfaa81a, first ? 'Log channel set' : 'Log channel disabled',
+        (found ? found[1] : typeKey) + (first ? ' goes to <#' + first + '>.' : ' logging is now switched off.')
+          + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
       components: [panelRow([panelButton('setup:channels', 'Back to log types', 2), panelButton('setup:test', 'Test a connection', 2)])],
     });
   }
