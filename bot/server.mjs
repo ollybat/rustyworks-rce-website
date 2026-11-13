@@ -26,11 +26,12 @@ import {
   testAndSaveServer, kitsPanel, bindModal, bindList, bindRoleMenu, emoteGuide,
   helpHome, helpDetail, setupStatus, cooldownsPanel, serverSnapshot,
   setupState, gatePayload, staffRoleNames, userPanel, linkPanelPayload, linkModal,
-  forcelinkPicker, forcelinkModal, adviceOnGamertag, unlinkPicker, unlinkConfirm,
+  forcelinkPicker, forcelinkModal, adviceOnGamertag, unlinkPicker, unlinkConfirm, whoisReply,
   transferPicker, transferModal, rosterPanel, pendingPanel, channelPickerForPanel,
   kitGivePanel, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
+  testPicker, setupRefresh, whoisPanel, whoisModal,
   setupRolePanel, setupRoleSlot, roleSlotResult, channelSetupPanel, logChannelBuilder,
   logChannelPlan, logChannelBuilt, serverStepPanel, setupSuggest, suggestApplied, setupDoctor,
   setupImportPanel, setupImportModal, parseServerText, setupImportResult, setupExport,
@@ -626,6 +627,7 @@ async function runButton(interaction) {
   }
   if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'user:config') return await answerPanel(interaction, userPanel(ctx));
+  if (id === 'user:whois:go') return await interaction.showModal(whoisModal());
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
   if (id === 'user:transfer') return await answerPanel(interaction, transferPicker(ctx));
@@ -666,7 +668,9 @@ async function runButton(interaction) {
     return await answerPanel(interaction, logChannelBuilt(result.created, result.failed, result.wrote));
   }
   if (id === 'setup:server') return await interaction.showModal(serverModal(null));
-  if (id === 'setup:test') return await answerPanel(interaction, serverPicker(ctx));
+  /* One saved server is tested straight away; several get a list; none gets the guidance. */
+  if (id === 'setup:test') return await answerPanel(interaction, await setupRefresh(ctx));
+  if (id === 'setup:edit:pick') return await answerPanel(interaction, serverPicker(ctx));
   if (id === 'setup:status') return await answerPanel(interaction, setupStatus(ctx));
   if (id === 'setup:doctor') return await answerPanel(interaction, await setupDoctor(ctx));
   if (id === 'setup:suggest') {
@@ -788,6 +792,11 @@ async function runSelect(interaction) {
         (found ? found[1] : typeKey) + ' goes to <#' + first + '>.' + (wrote.ok ? '' : ' Kept in this bot memory only: ' + wrote.detail))],
       components: [panelRow([panelButton('setup:channels', 'Back to log types', 2), panelButton('setup:test', 'Test a connection', 2)])],
     });
+  }
+  if (id === 'setup:pick:test') {
+    const chosen = settings.servers.filter(function (s) { return s.id === first; })[0];
+    if (!chosen) return await answerPanel(interaction, { embeds: [panelEmbed(0xdc4c4c, 'That server is gone', 'Save it again from the setup panel.')] });
+    return await answerPanel(interaction, await testServerByName(ctx, chosen.name));
   }
   if (id === 'setup:pick') {
     const server = settings.servers.filter(function (s) { return s.id === first; })[0];
@@ -921,6 +930,9 @@ async function runModal(interaction) {
     return await answerModal(interaction, authSpawnNote(ctx, id.slice('modal:spawn:'.length), fields.spawn_kit));
   }
   if (id === 'modal:kitcode') return await answerModal(interaction, installKit(ctx, fields.install_code));
+  if (id === 'modal:whois') {
+    return await answerModal(interaction, whoisReply(ctx, fields.whois_tag));
+  }
   if (id === 'modal:import') {
     const parsed = parseServerText(fields.import_text);
     pendingImport.set(interaction.user.id, parsed);
