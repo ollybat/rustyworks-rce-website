@@ -107,13 +107,13 @@ const settings = {
   staffRoles: {},
   logChannels: {},
   servers: [],
-  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '' },
-  installs: {},
+  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '', giveCooldownSeconds: 30, installCodes: {} },
   links: [],
   pending: [],
   linkPanel: null,
 };
 const cooldowns = new Map();
+const activeKitGives = new Set();
 let settingsTimer = null;
 /* How often settings edited on the website are read back (SETTINGS_RELOAD_MS, default two
    minutes; the simulator shortens it). */
@@ -151,7 +151,7 @@ function panelButton(id, label, style) { return { type: 2, custom_id: id, label:
    holds, and its Settings page edits the same sections, so sending everything would put this
    bot's older copy of a section back over a newer edit made on the website. */
 let lastPersistAt = 0;
-async function persistSettings(sections) {
+async function persistSettingsNow(sections) {
   const token = settingsToken();
   if (!token) return { ok: false, detail: 'BOT_SETTINGS_TOKEN is not set on this service, so the website cannot be written to' };
   const everything = {
@@ -181,6 +181,16 @@ async function persistSettings(sections) {
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
   }
+}
+
+let persistQueue = Promise.resolve();
+function persistSettings(sections) {
+  /* The Worker merges by section. Serialising writes prevents two quick changes to
+     the same section from arriving out of order and restoring an older snapshot. */
+  const run = () => persistSettingsNow(sections);
+  const pending = persistQueue.then(run, run);
+  persistQueue = pending.then(() => undefined, () => undefined);
+  return pending;
 }
 
 
@@ -227,12 +237,15 @@ async function saveServer(s) {
 }
 
 function installKitCode(raw, text) {
-  const key = createHash('sha1').update(String(raw)).digest('hex').slice(0, 16);
-  settings.installs[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
-  const keys = Object.keys(settings.installs);
-  if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete settings.installs[k]; });
-  persistSettings(['kits']).catch(function () { /* reported the next time settings are saved */ });
-  return Object.keys(settings.installs).length;
+  const key = createHash('sha256').update(String(raw)).digest('hex').slice(0, 20);
+  const records = settings.kits.installCodes || (settings.kits.installCodes = {});
+  records[key] = { at: new Date().toISOString(), chars: text.length, head: text.slice(0, 400) };
+  const keys = Object.keys(records).sort(function (a, b) {
+    return String(records[a].at).localeCompare(String(records[b].at));
+  });
+  if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete records[k]; });
+  persistSettings(['kits']).catch(function () { /* the next successful save includes this record */ });
+  return Object.keys(records).length;
 }
 
 function setAuthSpawn(group, kit) {
@@ -243,18 +256,52 @@ function setAuthSpawn(group, kit) {
   persistSettings(['kits']).catch(function () {});
 }
 
-function cooldownCount() { return cooldowns.size; }
+function pruneCooldowns() {
+  const now = Date.now();
+  cooldowns.forEach(function (expiresAt, key) {
+    if (!Number.isFinite(Number(expiresAt)) || Number(expiresAt) <= now) cooldowns.delete(key);
+  });
+}
+
+function cooldownCount() { pruneCooldowns(); return cooldowns.size; }
 
 function cooldownList() {
+  pruneCooldowns();
   const rows = [];
   cooldowns.forEach(function (value, key) {
     const parts = String(key).split('::');
     const user = parts[0] || 'unknown';
-    const kit = parts[1] || 'unknown';
-    const left = Math.max(0, Math.round(((Number(value) || 0) - Date.now()) / 1000));
-    rows.push(user + ' -> ' + kit + (left ? ' (' + left + 's left)' : ''));
+    const kit = parts.slice(1).join('::') || 'unknown';
+    const left = Math.max(0, Math.ceil((Number(value) - Date.now()) / 1000));
+    rows.push({ sort: Number(value), text: user + ' -> ' + kit + ' (' + left + 's left)' });
   });
-  return rows;
+  return rows.sort(function (a, b) { return a.sort - b.sort; }).map(function (row) { return row.text; });
+}
+
+function reserveKitGive(gamertag, kit, cooldownSeconds) {
+  pruneCooldowns();
+  const user = String(gamertag || '').trim().toLowerCase();
+  const item = String(kit || '').trim().toLowerCase();
+  const key = user + '::' + item;
+  const seconds = Math.max(0, Math.min(86400, Math.floor(Number(cooldownSeconds) || 0)));
+  const now = Date.now();
+  const expiresAt = Number(cooldowns.get(key) || 0);
+  if (expiresAt > now) {
+    return { ok: false, key: key, remainingSeconds: Math.max(1, Math.ceil((expiresAt - now) / 1000)), inProgress: false };
+  }
+  if (activeKitGives.has(key)) {
+    return { ok: false, key: key, remainingSeconds: 1, inProgress: true };
+  }
+  activeKitGives.add(key);
+  return { ok: true, key: key, cooldownSeconds: seconds };
+}
+
+function finishKitGive(reservation, succeeded) {
+  if (!reservation || !reservation.key) return;
+  activeKitGives.delete(reservation.key);
+  if (succeeded && Number(reservation.cooldownSeconds) > 0) {
+    cooldowns.set(reservation.key, Date.now() + Number(reservation.cooldownSeconds) * 1000);
+  }
 }
 
 function clearCooldowns(scope, target) {
@@ -303,11 +350,13 @@ function removeBind(emote) {
 /* A link is a Discord account with the gamertag it belongs to. Everything player-facing
    hangs off it: kits by role, auth groups, the roster. Storage is honest about limits: an
    unconfirmed request is a request, not proof, and the panels say so. */
-function normaliseGamertag(value) { return String(value || '').trim().slice(0, 40); }
+function normaliseGamertag(value) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
 
 function findLinkByGamertag(gamertag) {
   const wanted = normaliseGamertag(gamertag).toLowerCase();
-  return settings.links.filter(function (l) { return l.gamertag.toLowerCase() === wanted; })[0] || null;
+  return settings.links.filter(function (l) { return String(l && l.gamertag || '').toLowerCase() === wanted; })[0] || null;
 }
 function findLinkByUser(userId) {
   return settings.links.filter(function (l) { return l.userId === String(userId); })[0] || null;
@@ -316,6 +365,7 @@ function addLink(userId, gamertag, by) {
   const tag = normaliseGamertag(gamertag);
   const id = String(userId || '').trim();
   if (!tag || !id) return { ok: false, reason: 'empty' };
+  if (!/^[0-9]{15,25}$/.test(id)) return { ok: false, reason: 'bad-user-id', detail: 'That Discord account id does not look valid.' };
   settings.links = settings.links.filter(function (l) {
     return l.gamertag.toLowerCase() !== tag.toLowerCase() && l.userId !== id;
   });
@@ -359,7 +409,9 @@ function moveLink(gamertag, newUserId, newGamertag) {
 }
 function requestLink(userId, gamertag) {
   const tag = normaliseGamertag(gamertag);
+  const id = String(userId || '').trim();
   if (!tag) return { ok: false, reason: 'empty' };
+  if (!/^[0-9]{15,25}$/.test(id)) return { ok: false, reason: 'bad-user-id', detail: 'Discord did not provide a valid account id.' };
   const taken = findLinkByGamertag(tag);
   if (taken) {
     const mine = taken.userId === String(userId);
@@ -367,8 +419,17 @@ function requestLink(userId, gamertag) {
       ? 'That gamertag is already linked to your account.'
       : 'That gamertag is already linked. If it is yours, ask staff to move it with /user transfer.' };
   }
-  settings.pending = settings.pending.filter(function (p) { return p.userId !== String(userId); });
-  settings.pending.push({ userId: String(userId), gamertag: tag, at: new Date().toISOString() });
+  const otherRequest = settings.pending.filter(function (p) {
+    return String(p.userId) !== id && String(p.gamertag || '').toLowerCase() === tag.toLowerCase();
+  })[0];
+  if (otherRequest) {
+    return { ok: false, reason: 'pending-taken', detail: 'That gamertag is already waiting for confirmation from another Discord account.' };
+  }
+  settings.pending = settings.pending.filter(function (p) { return String(p.userId) !== id; });
+  if (settings.pending.length >= 500) {
+    return { ok: false, reason: 'queue-full', detail: 'The waiting list is full. Ask staff to clear old requests before trying again.' };
+  }
+  settings.pending.push({ userId: id, gamertag: tag, at: new Date().toISOString() });
   persistSettings(['links', 'pending']).catch(function () {});
   return { ok: true, gamertag: tag };
 }
@@ -473,6 +534,8 @@ function botCtx(interaction) {
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
     cooldownList: cooldownList,
+    reserveKitGive: reserveKitGive,
+    finishKitGive: finishKitGive,
     setKnownKits: function (names) {
       settings.kits.known = names.slice(0, 100);
       persistSettings(['kits']).catch(function () {});
@@ -480,6 +543,7 @@ function botCtx(interaction) {
     setDelivery: function (d) {
       settings.kits.listCommand = d.listCommand;
       settings.kits.giveCommand = d.giveCommand;
+      settings.kits.giveCooldownSeconds = Math.max(0, Math.min(86400, Math.floor(Number(d.giveCooldownSeconds) || 0)));
       logLater('admin', 'Kit delivery changed', who(actor) + ' set the list command to `' + (d.listCommand || 'none') + '` and the give template to `' + (d.giveCommand || 'none') + '`.');
       return persistSettings(['kits']).then(function (wrote) {
         return wrote && wrote.ok ? { ok: true } : { ok: false, detail: (wrote && wrote.detail) || 'the website did not accept the save' };
