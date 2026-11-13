@@ -1,0 +1,57 @@
+{
+  "name": "Spinback RCE - Halloween",
+  "short_name": "Spinback Halloween",
+  "description": "The all-in-one free Discord bot for Rust Console Edition servers.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#09060f",
+  "theme_color": "#09060f",
+  "lang": "en",
+  "categories": [
+    "games",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "/media/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/media/spinback-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/media/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Status",
+      "short_name": "Status",
+      "description": "Live uptime, players and servers",
+      "url": "/status.html"
+    },
+    {
+      "name": "Kit Studio",
+      "short_name": "Kits",
+      "description": "Build a kit in the browser",
+      "url": "/dashboard/kitbuilder.html"
+    },
+    {
+      "name": "Colour Studio",
+      "short_name": "Colours",
+      "description": "Gradient text for your server",
+      "url": "/dashboard/colortext.html"
+    }
+  ]
+}
