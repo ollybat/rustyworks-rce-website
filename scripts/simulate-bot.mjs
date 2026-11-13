@@ -48,7 +48,7 @@ const store = JSON.parse(JSON.stringify(initial));
 function merge(into, body) {
   for (const key of ["staffRoles", "logChannels", "kits"]) if (body[key] && typeof body[key] === "object") into[key] = Object.assign({}, into[key], body[key]);
   for (const key of ["servers", "links", "pending"]) if (Array.isArray(body[key])) into[key] = body[key];
-  if (body.installs && typeof body.installs === "object") into.installs = Object.assign({}, into.installs || {}, body.installs);
+  if (body.installs && typeof body.installs === "object") into.installs = Object.assign({}, body.installs);
   if ("linkPanel" in body) into.linkPanel = body.linkPanel;
 }
 const writes = [];
