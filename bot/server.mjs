@@ -95,7 +95,7 @@ const settings = {
   staffRoles: {},
   logChannels: {},
   servers: [],
-  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '', giveCooldownSeconds: 30, installCodes: {} },
+  kits: { binds: [], locked: false, authSpawn: {}, giveCommand: '', listCommand: '', giveCooldownSeconds: 30, installCodes: {}, known: [] },
   installs: {},
   links: [],
   pending: [],
@@ -515,6 +515,19 @@ function botCtx() {
       settings.kits.giveCooldownSeconds = Math.max(0, Math.min(86400, Math.floor(Number(delivery.giveCooldownSeconds) || 0)));
       return persistSettings(['kits']);
     },
+    setKnownKits: function (names) {
+      const seen = new Set();
+      settings.kits.known = (Array.isArray(names) ? names : [])
+        .map((name) => String(name || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 60))
+        .filter((name) => {
+          const key = name.toLowerCase();
+          if (!name || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(0, 100);
+      persistSettings(['kits']).catch(function () {});
+      return settings.kits.known.length;
+    },
     rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
     rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
   };
@@ -547,15 +560,71 @@ async function answerPanel(interaction, payload) {
   try { await interaction.update(body); } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
 }
 
+function autocompleteChoicesFor(interaction, ctx) {
+  const focused = interaction.options && typeof interaction.options.getFocused === 'function'
+    ? interaction.options.getFocused(true)
+    : null;
+  if (!focused || !focused.name) return [];
+  const query = String(focused.value || '').trim().toLowerCase();
+  const opts = optionMap(interaction);
+  const source = [];
+
+  function add(name, value) {
+    const label = String(name || '').trim().slice(0, 100);
+    const item = String(value == null ? '' : value).trim().slice(0, 100);
+    if (label && item) source.push({ name: label, value: item });
+  }
+
+  if (interaction.commandName === 'setup' && opts.__sub === 'refresh' && focused.name === 'server') {
+    (ctx.servers() || []).forEach((server) => add(server.name, server.name));
+  } else if (interaction.commandName === 'kits' && opts.__sub === 'grab' && focused.name === 'server') {
+    (ctx.servers() || []).forEach((server) => add(server.name, server.name));
+  } else if (interaction.commandName === 'kits' && (opts.__sub === 'give' || opts.__sub === 'auth-spawn')) {
+    if (focused.name === 'kit') {
+      (ctx.kits().known || []).forEach((kit) => add(kit, kit));
+    } else if (focused.name === 'gamertag') {
+      (ctx.links() || []).forEach((link) => add(link.gamertag, link.gamertag));
+    }
+  } else if (interaction.commandName === 'user' && (opts.__sub === 'whois' || opts.__sub === 'roster')) {
+    if (focused.name === 'gamertag' || focused.name === 'search') {
+      (ctx.links() || []).forEach((link) => add(link.gamertag, link.gamertag));
+    }
+  }
+
+  const matches = source.filter((choice) => choice.name.toLowerCase().includes(query));
+  matches.sort((a, b) => {
+    const ap = a.name.toLowerCase().startsWith(query) ? 0 : 1;
+    const bp = b.name.toLowerCase().startsWith(query) ? 0 : 1;
+    return ap - bp || a.name.localeCompare(b.name);
+  });
+  const seen = new Set();
+  return matches.filter((choice) => {
+    const key = choice.value.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 25);
+}
+
+async function runAutocomplete(interaction) {
+  const ctx = botCtx();
+  if (!permitted(interaction, ctx)) return await interaction.respond([]);
+  const choices = autocompleteChoicesFor(interaction, ctx);
+  return await interaction.respond(choices);
+}
+
 async function routeInteraction(interaction) {
   try {
     const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
     if (!rightGuild) {
-      if (typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
+      if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) {
+        await interaction.respond([]).catch(function () {});
+      } else if (typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
         await interaction.reply({ embeds: [wrongGuildNote()], flags: 64 }).catch(function () {});
       }
       return;
     }
+    if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) return await runAutocomplete(interaction);
     if (interaction.isChatInputCommand()) return await runCommand(interaction);
     if (interaction.isModalSubmit()) return await runModal(interaction);
     if (interaction.isButton()) return await runButton(interaction);
