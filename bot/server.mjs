@@ -937,7 +937,8 @@ async function runButton(interaction) {
         components: [panelRow([panelButton('link:start', 'Link account', 1)])] };
     })());
   }
-  if (!permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
+  const publicHelp = id === 'help:home' || id.indexOf('help:cmd:') === 0;
+  if (!publicHelp && !permitted(interaction, ctx)) return await answerModal(interaction, { embeds: [permissionNote(ctx)] });
   if (id === 'user:config') return await answerPanel(interaction, userPanel(ctx));
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
