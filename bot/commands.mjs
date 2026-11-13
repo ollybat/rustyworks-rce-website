@@ -42,6 +42,7 @@ export const COMMANDS = [
           { type: 3, name: "kit", description: "Kit name (leave blank to open the panel)", autocomplete: true },
           { type: 3, name: "gamertag", description: "In-game name to give it to", autocomplete: true },
           { type: 6, name: "user", description: "Discord user whose linked gamertag receives it" },
+          { type: 3, name: "server", description: "Saved Rust server to use (blank chooses the first)", autocomplete: true },
         ] },
       { type: 1, name: "refresh", description: "Clear kit cooldowns",
         options: [
@@ -101,6 +102,8 @@ export function autocompleteChoices(ctx, commandName, subcommand, focused, optio
   if (commandName === "setup" && subcommand === "refresh" && focused.name === "server") {
     (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
   } else if (commandName === "kits" && subcommand === "grab" && focused.name === "server") {
+    (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
+  } else if (commandName === "kits" && subcommand === "give" && focused.name === "server") {
     (ctx.servers() || []).forEach(function (server) { add(server.name, server.name); });
   } else if (commandName === "kits" && (subcommand === "give" || subcommand === "auth-spawn")) {
     if (focused.name === "kit") (ctx.kits().known || []).forEach(function (kit) { add(kit, kit); });
@@ -919,8 +922,13 @@ export async function giveKit(ctx, opts) {
   }
   var target = String(opts.gamertag || (linked && linked.gamertag) || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40);
   if (!target) return { embeds: [embed(0xdc4c4c, "Who should get it?", "Name a gamertag, or choose a Discord account that already has a confirmed link.")], flags: EPH };
-  var server = ctx.servers()[0];
-  if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
+  var availableServers = ctx.servers() || [];
+  var serverName = String(opts.server || "").trim();
+  var server = serverName
+    ? availableServers.find(function (entry) { return String(entry.name || "").toLowerCase() === serverName.toLowerCase() || String(entry.id || "") === serverName; })
+    : availableServers[0];
+  if (!server) return { embeds: [embed(0xdc4c4c, serverName ? "Saved server not found" : "No server linked",
+    serverName ? "That saved server is no longer available. Choose a server from autocomplete and try again." : "Link one first with /setup run.")], flags: EPH };
   if (!command || command.indexOf("{player}") < 0 || command.indexOf("{kit}") < 0) {
     return { embeds: [embed(0xfaa81a, "Delivery needs one more setting",
       "Configure a Rust plugin give template containing both {player} and {kit}. The bot will not invent the plugin's command syntax.")], flags: EPH };
@@ -1012,7 +1020,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (sub === "config") return kitsPanel(ctx);
     if (sub === "give") {
       if (!options.kit && !options.gamertag && !options.user) return kitGivePanel(ctx);
-      return giveKit(ctx, { kit: options.kit, gamertag: options.gamertag, user: options.user });
+      return giveKit(ctx, { kit: options.kit, gamertag: options.gamertag, user: options.user, server: options.server });
     }
     if (sub === "refresh") {
       if (!options.scope) return kitRefreshPanel(ctx);
