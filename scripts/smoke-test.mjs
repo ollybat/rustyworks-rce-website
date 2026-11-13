@@ -129,6 +129,17 @@ for (const [path, from] of refs) {
   check("/api/bot/settings refuses without the shared token", settings.status === 503 || settings.status === 403, "got " + settings.status);
 }
 
+/* ---- the website API proxy is read-only ---- */
+{
+  const r = await get("/api/status", {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: "{}",
+  });
+  const data = await r.json().catch(() => ({}));
+  check("the website API proxy rejects write methods", r.status === 405 && data.error === "method_not_allowed", "got " + r.status + " " + JSON.stringify(data));
+}
+
 /* ---- the status monitor's arithmetic ---- */
 {
   const hour = (t) => {
