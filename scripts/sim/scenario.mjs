@@ -196,6 +196,9 @@ export async function run({ world, make, interact }) {
   const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
   it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "preview a kit code");
   expect("the kit names in an install code are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  w = await writes();
+  expect("kit-code preview metadata is written to the website installs section", (latest(w).installs || {}) && Object.keys(latest(w).installs || {}).length === 1, text(latest(w)));
   it = await go(make.command(ADMIN, "kits", "give", { kit: "rai" }, "kit"), "autocomplete an installed kit");
   expect("an installed kit is suggested straight away", [].concat(last(it) || []).some((c) => c.value === "RAIDER"), text(last(it)));
 
