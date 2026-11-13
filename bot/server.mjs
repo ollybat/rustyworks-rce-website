@@ -513,6 +513,20 @@ function simulatedRconResult(options) {
   return { ok: true, authenticated: true, command, answer: 'Simulation response', ms: 25 };
 }
 
+async function writeCommandAudit(actorId, commandName, subcommand) {
+  const channelId = String((settings.logChannels || {}).command || '');
+  if (!channelId) return;
+  const name = '/' + String(commandName || 'unknown') + (subcommand ? ' ' + String(subcommand) : '');
+  const embed = panelEmbed(0x5865f2, 'Command used',
+    name + '\nRequested by: ' + (actorId ? '<@' + actorId + '>' : 'unknown'));
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel && typeof channel.send === 'function') await channel.send({ embeds: [embed] });
+  } catch (error) {
+    log('command log could not be posted:', String((error && error.message) || error).slice(0, 200));
+  }
+}
+
 async function writeRconAudit(actorId, options, result) {
   const channelId = String((settings.logChannels || {}).rcon || '');
   if (!channelId) return;
@@ -700,7 +714,7 @@ async function runCommand(interaction) {
   const opts = optionMap(interaction);
   /* Everything that changes something carries a panel, so the first reply is deferred while
      a panel is assembled or a server is asked a question. */
-  const slow = name !== 'ping' && name !== 'help';
+  const slow = name !== 'help';
   if (slow) await interaction.deferReply({ flags: 64 }).catch(function () {});
   const payload = await Promise.resolve(dispatchCommand(ctx, name, opts.__sub, opts)).catch(function (error) {
     const reference = Date.now().toString(36);
@@ -708,6 +722,7 @@ async function runCommand(interaction) {
     return { embeds: [panelEmbed(0xdc4c4c, 'That did not work',
       'The bot could not complete this action. Please try again. Reference: ' + reference)] };
   });
+  void writeCommandAudit(ctx.actorId, name, opts.__sub).catch(function () {});
   if (payload && payload.postPanelTo) {
     const posted = await postLinkPanel(payload.postPanelTo);
     const body = posted.ok
@@ -732,6 +747,22 @@ async function runButton(interaction) {
   const id = customId(interaction);
   const ctx = botCtx();
   ctx.actorId = String((interaction.user && interaction.user.id) || '');
+  if (id.indexOf('setup:logtest:') === 0) {
+    await interaction.deferUpdate().catch(function () {});
+    const typeKey = id.slice('setup:logtest:'.length);
+    const channelId = String((settings.logChannels || {})[typeKey] || '');
+    if (!channelId) {
+      return await answerPanel(interaction, { embeds: [panelEmbed(0xfaa81a, 'No log channel set', 'Choose a channel for this log type first.')] });
+    }
+    try {
+      const channel = await client.channels.fetch(channelId);
+      if (!channel || typeof channel.send !== 'function') throw new Error('The channel cannot receive messages.');
+      await channel.send({ embeds: [panelEmbed(0x3ba55d, 'Test message', 'Spinback RCE successfully sent a test message to the ' + typeKey + ' log channel.')] });
+      return await answerPanel(interaction, { embeds: [panelEmbed(0x3ba55d, 'Test log sent', 'A test message reached <#' + channelId + '>.')] });
+    } catch (error) {
+      return await answerPanel(interaction, { embeds: [panelEmbed(0xdc4c4c, 'Test log failed', String((error && error.message) || error).slice(0, 300))] });
+    }
+  }
   if (id === 'ping:again') {
     await interaction.deferUpdate().catch(function () {});
     return await answerPanel(interaction, await pingReply(ctx));
@@ -754,8 +785,10 @@ async function runButton(interaction) {
         components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
   if (id === 'link:unlink:go') {
+    await interaction.deferUpdate().catch(function () {});
     const gone = removeLink(interaction.user.id);
-    return await answerModal(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Unlinked' : 'Nothing to unlink',
+    await persistQueue;
+    return await answerPanel(interaction, { embeds: [panelEmbed(gone ? 0x3ba55d : 0xfaa81a, gone ? 'Unlinked' : 'Nothing to unlink',
       gone ? 'Your link is removed. Press Link account on the panel whenever you want it back.' : 'No link was on record for your account.')],
       components: [panelRow([panelButton('link:start', 'Link account', 1)])] });
   }
@@ -765,7 +798,13 @@ async function runButton(interaction) {
   if (id === 'user:forcelink') return await answerPanel(interaction, forcelinkPicker());
   if (id === 'user:unlink') return await answerPanel(interaction, unlinkPicker(ctx));
   if (id === 'user:transfer') return await answerPanel(interaction, transferPicker(ctx));
-  if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx));
+  if (id === 'user:roster') return await answerPanel(interaction, rosterPanel(ctx, 1, ''));
+  if (id.indexOf('user:roster:') === 0) {
+    const parts = id.split(':');
+    const page = Number(parts[2]) || 1;
+    const search = parts[3] ? decodeURIComponent(parts.slice(3).join(':')) : '';
+    return await answerPanel(interaction, rosterPanel(ctx, page, search));
+  }
   if (id === 'user:pending') return await answerPanel(interaction, pendingPanel(ctx));
   if (id === 'user:panel') return await answerPanel(interaction, channelPickerForPanel());
   if (id.indexOf('user:unlink:go:') === 0) {
@@ -819,6 +858,10 @@ async function runButton(interaction) {
     return await answerPanel(interaction, kitsPanel(ctx));
   }
   log('unhandled button:', id);
+  return await answerPanel(interaction, {
+    embeds: [panelEmbed(0xfaa81a, 'This panel is out of date', 'That button belongs to an older Spinback panel. Open the current command again to get a fresh set of buttons.')],
+    components: [panelRow([panelButton('help:home', 'Open help', 2), panelButton('kits:config', 'Kit settings', 2)])],
+  });
 }
 
 async function runSelect(interaction) {
@@ -859,7 +902,9 @@ async function runSelect(interaction) {
     });
   }
   if (id.indexOf('kits:role:') === 0) {
+    await interaction.deferUpdate().catch(function () {});
     saveBind({ emote: id.slice('kits:role:'.length) }, first, true);
+    await persistQueue;
     return await answerPanel(interaction, kitsPanel(ctx));
   }
   if (id === 'user:forcelink:user') return await interaction.showModal(forcelinkModal(first));
@@ -883,6 +928,7 @@ async function runSelect(interaction) {
     return await interaction.showModal(kitGiveModal());
   }
   log('unhandled select:', id);
+  return await answerModal(interaction, { embeds: [panelEmbed(0xfaa81a, 'That menu has expired', 'Open the current command again and choose from its latest menu.')] });
 }
 
 async function runModal(interaction) {
@@ -894,6 +940,8 @@ async function runModal(interaction) {
      on the website. Acknowledge these modal submissions before their slow work. */
   const slowModal = id === 'modal:server' || id.indexOf('modal:server:') === 0
     || id === 'modal:kitdelivery'
+    || id === 'modal:kitcode'
+    || id === 'modal:link:self'
     || id === 'modal:kitgive'
     || id === 'modal:roles' || id === 'modal:linked'
     || id.indexOf('modal:forcelink:') === 0
@@ -902,6 +950,7 @@ async function runModal(interaction) {
   /* A member linking themselves is not a staff action. */
   if (id === 'modal:link:self') {
     const answer = requestLink(interaction.user.id, fields.link_gamertag);
+    await persistQueue;
     return await answerModal(interaction, answer.ok
       ? { embeds: [panelEmbed(0x3ba55d, 'Request recorded', 'You asked to link ' + answer.gamertag + '. It is waiting for confirmation:\n\n'
           + '- staff confirm it with /user forcelink, or\n- your server own in-game verification command does it automatically.\n\nThe bot will not treat an unconfirmed request as proof, so nothing player-facing uses it yet.')],
@@ -960,12 +1009,14 @@ async function runModal(interaction) {
         components: [panelRow([panelButton('user:transfer', 'Transfer it instead', 1), panelButton('user:config', 'Cancel', 2)])] });
     }
     const done = addLink(userId, gamertag, interaction.user.id);
+    await persistQueue;
     return await answerModal(interaction, { embeds: [panelEmbed(0x3ba55d, 'Linked', '<@' + userId + '> is now linked to ' + done.gamertag + '.')],
       components: [panelRow([panelButton('user:config', 'Back to links', 2), panelButton('user:panel', 'Post the link panel', 1)])] });
   }
   if (id.indexOf('modal:transfer:') === 0) {
     const gamertag = id.slice('modal:transfer:'.length);
     const moved = moveLink(gamertag, fields.move_user, fields.move_gamertag);
+    await persistQueue;
     return await answerModal(interaction, moved.ok
       ? { embeds: [panelEmbed(0x3ba55d, 'Link moved', gamertag + ' now belongs to <@' + moved.userId + '>'
           + (moved.gamertag.toLowerCase() !== gamertag.toLowerCase() ? ', under the gamertag ' + moved.gamertag : '') + '.')],
@@ -983,7 +1034,11 @@ async function runModal(interaction) {
   if (id.indexOf('modal:spawn:') === 0) {
     return await answerModal(interaction, authSpawnNote(ctx, id.slice('modal:spawn:'.length), fields.spawn_kit));
   }
-  if (id === 'modal:kitcode') return await answerModal(interaction, installKit(ctx, fields.install_code));
+  if (id === 'modal:kitcode') {
+    const preview = installKit(ctx, fields.install_code);
+    await persistQueue;
+    return await answerModal(interaction, preview);
+  }
   log('unhandled modal:', id);
 }
 
