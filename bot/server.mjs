@@ -551,19 +551,7 @@ function botCtx() {
       settings.kits.giveCooldownSeconds = Math.max(0, Math.min(86400, Math.floor(Number(delivery.giveCooldownSeconds) || 0)));
       return persistSettings(['kits']);
     },
-    setKnownKits: function (names) {
-      const seen = new Set();
-      settings.kits.known = (Array.isArray(names) ? names : [])
-        .map((name) => String(name || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 60))
-        .filter((name) => {
-          const key = name.toLowerCase();
-          if (!name || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        }).slice(0, 100);
-      persistSettings(['kits']).catch(function () {});
-      return settings.kits.known.length;
-    },
+
     rconTest: async function (o) {
       const result = await rconRun(Object.assign({}, o, { allowAny: false }));
       await writeRconAudit(this.actorId, o, result);
