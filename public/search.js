@@ -17,6 +17,7 @@
     ['Status', '/status.html', 'Live uptime, checks and how the bot is behaving'],
     ['Servers', '/servers.html', 'Every Rust server the bot has saved, with its state, population and map'],
     ['Get started', '/start.html', 'The seven steps from adding the bot to a finished setup'],
+    ['Something not working', '/start.html#trouble', 'What each problem means: the website check timing out, settings that are not kept, no servers listed, RCON required, a step not set up yet, the bot offline'],
     ['Commands', '/commands.html', 'Every command and subcommand, who may run it and what it needs set up first'],
     ['/ping', '/commands.html#ping', 'Live bot and website health, measured when you run it'],
     ['/setup', '/commands.html#setup', 'Roles, logging channels and your Rust server RCON connection'],

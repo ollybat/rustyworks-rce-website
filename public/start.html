@@ -209,7 +209,62 @@
         </div>
       </section>
 
-      <section class="st-section st-section--last">
+<section class="st-section" id="trouble">
+        <div class="wrap">
+          <h2>If something is not working</h2>
+          <p class="sp-lede">Six things people actually run into, what each one means, and where to look next.
+            Nothing here guesses: where the bot cannot know an answer it says so, and so does this page.</p>
+          <div class="st-cards">
+            <article class="st-card">
+              <h3>"The website is not answering" in /ping</h3>
+              <ul class="st-list">
+                <li>That line is a live request from the bot to this site, with a 2.5 second limit on it.</li>
+                <li>This site answers in tens of milliseconds, and in under two seconds even on the first request from a place it has never been asked before, so a timeout means that one check was slow, not that the site is down.</li>
+                <li>The <a href="status.html">status page</a> shows the same measurement, so you can compare it yourself. If it keeps happening, that is worth reporting: it is not something you did.</li>
+              </ul>
+            </article>
+            <article class="st-card">
+              <h3>The settings store is "not kept"</h3>
+              <ul class="st-list">
+                <li>The bot has nowhere durable to put what you save: it needs the settings token set on its own host, with the same value here, or a disk attached to it.</li>
+                <li>Until that is set, saved servers, staff role slots and kits are forgotten the next time the bot restarts or is redeployed.</li>
+                <li>That is a setting on the bot’s host, not something this website can change. The <a href="servers.html">servers page</a> says so plainly when it is the case.</li>
+              </ul>
+            </article>
+            <article class="st-card">
+              <h3>No servers are listed here</h3>
+              <ul class="st-list">
+                <li>Two honest reasons, and the page tells you which: the bot is up and has no Rust server saved yet, or it had one and forgot it because of the point above.</li>
+                <li>The step that adds one is <a href="commands.html#sub-setup-server">/setup server</a>: it tests the address before saving, so a wrong port or password never lands in your settings.</li>
+                <li>This site never shows an RCON address or a password, and it never guesses a server’s state: anything the bot has not reported says so.</li>
+              </ul>
+            </article>
+            <article class="st-card">
+              <h3>A panel asks for RCON</h3>
+              <ul class="st-list">
+                <li>Kits and emblems reach your Rust server, so the connection has to exist first: <a href="commands.html#sub-setup-server">/setup server</a> is that step.</li>
+                <li>A private address (192.168.x.x, 10.x.x.x, 127.0.0.1) cannot be reached from a host on the internet, so it is named as private instead of failing silently.</li>
+              </ul>
+            </article>
+            <article class="st-card">
+              <h3>A button says this has not been set up yet</h3>
+              <ul class="st-list">
+                <li><a href="commands.html#sub-setup-run">/setup run</a> walks the whole thing: roles, log channels, the Rust server, then kits.</li>
+                <li>Nothing is created until you press Create, no step needs an earlier one to be finished, and you can stop halfway without leaving anything broken.</li>
+              </ul>
+            </article>
+            <article class="st-card">
+              <h3>The bot itself shows as offline</h3>
+              <ul class="st-list">
+                <li>This site reads the bot’s own public status, so "not answering" means the bot process could not be reached, which is a restart on its host rather than anything on these pages.</li>
+                <li>There is no invite link on this site by request, and nothing here has a login: every change to your server happens in Discord, where the permissions already are.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+            <section class="st-section st-section--last">
         <div class="wrap">
           <h2>Next</h2>
           <div class="st-cards">
