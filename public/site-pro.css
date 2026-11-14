@@ -22,3 +22,9 @@
 .sp-pro-skip { position: absolute; left: -9999px; top: 0; z-index: 200; padding: 10px 16px; background: #17120e; color: #f4ece4; border: 1px solid #3a2f25; border-radius: 0 0 10px 0; }
 .sp-pro-skip:focus { left: 0; }
 @media (prefers-reduced-motion: reduce) { .sp-pro-strip, .sp-pro-search, .spx-panel { transition: none !important; } }
+
+/* Servers page: the sort row sits beside the filter row and behaves the same way - a chip
+   you press, and the one currently in force is the pressed one. aria-pressed carries the
+   same fact to a screen reader, which is why the chips are buttons and not text. */
+.sv-sort-label { font-size: 0.8rem; color: var(--text-dim); align-self: center; letter-spacing: 0.02em; }
+.sv-filters + .sv-filters { margin-left: 4px; }
