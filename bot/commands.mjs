@@ -346,7 +346,7 @@ export function rconRequiredPanel(ctx, status, wanted) {
     built.fields.push(field("What the check said", code(status.reason) + (status.detail ? "\n" + String(status.detail).slice(0, 300) : ""), false));
   }
   built.fields.push(field("Where the details are",
-    "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + " and " + code("rcon.password") + ", with " + code("rcon.web") + " set to " + code("0") + ". The bot tests the address and the password before it saves anything.", false));
+    "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + " and " + code("rcon.password") + ". " + code("rcon.web") + " can be 0 or 1 - the bot speaks both kinds of RCON. It tests the address and the password before it saves anything.", false));
   return { embeds: [built], components: [
     row([button(server ? "setup:test" : "setup:server", server ? "Test the connection now" : "Enter the details", 1), button("setup:import", "Paste server.cfg", 2)]),
     row([button("setup:run", "Guided setup", 2), button("setup:doctor", "Health check", 2)]),
@@ -575,9 +575,9 @@ export async function testAndSaveServer(ctx, data, existingId) {
     /* Each failure names its usual cause, so the next try changes the right thing. */
     var why = {
       "connect-failed": "Nothing is listening on that port, or the host blocks this cloud address. Check that RCON is on, that the port is open in the host firewall, and that the address is the one players connect to.",
-      "timeout": "The address and port look right but nothing answered in time. RCON is usually switched off, or " + code("rcon.web") + " is set to 1.",
+      "timeout": "Nothing answered in time. Most often the port is the game or query port instead of " + code("rcon.port") + ", RCON is switched off, or the host only lets listed IPs in (this bot runs from a cloud address).",
       "bad-password": "The server answered and refused the password, so the address and port are right. Compare " + code("rcon.password") + " in server.cfg with what you typed, character for character.",
-      "closed-before-auth": "The server closed the connection before it accepted the password. That is normally " + code("rcon.web") + " being set to 1, or an RCON ban on this address.",
+      "closed-before-auth": "The server closed the connection before it accepted the password. That is normally a wrong port, or an RCON ban on this address.",
       "refused-host": "The bot only connects to public internet addresses, and this one is not (or did not resolve safely). Use the public IP or the hostname from server.cfg.",
     }[(answer && answer.reason) || ""] || "";
     return { embeds: [embed(0xdc4c4c, "Not saved - the connection failed",
@@ -668,7 +668,7 @@ export async function serverSnapshot(ctx, which, serverWanted) {
     down.embeds[0].fields.push(field("What it asked", code(question[1]) + " - " + question[2].toLowerCase() + ", read-only", false));
     down.embeds[0].fields.push(field("What usually causes this", [
       "- The RCON port is not the game or query port",
-      "- rcon.web is set to 1 on the server (this speaks the other kind)",
+      "- the host only accepts listed IPs (the bot runs from a cloud address)",
       "- The host refuses connections from the wider internet, or an IP allowlist is on",
     ].join("\n"), false));
     down.components.unshift(row([button("server:" + question[0] + ":" + sid, "Ask again", 1)]));
@@ -817,8 +817,8 @@ export function serverStepPanel(ctx) {
     + (servers.length ? "\n\nAlready saved: " + servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port); }).join(", ") : ""));
   built.fields = [
     field("What you can type", "The address on its own, or with the port on the end - " + code("51.38.1.2") + ", " + code("51.38.1.2:28015") + ", " + code("[2606:4700::1]:28015") + " and " + code("eu01.example.net") + " are all read correctly. A private address (192.168.x.x, 10.x.x.x, 127.0.0.1) cannot be reached from a cloud host, and the panel says so in those words.", false),
-    field("Where the details are", "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + ", " + code("rcon.password") + ". " + code("rcon.web") + " must be " + code("0") + ", because this bot speaks the classic source RCON protocol."),
-    field("If it will not answer", "The port is the thing people get wrong most: it is the RCON port from server.cfg, not the game or query port. Then rcon.web. Then an IP allowlist on the host, because the bot runs from a cloud address that can change."),
+    field("Where the details are", "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + ", " + code("rcon.password") + ". " + code("rcon.web") + " can be 0 or 1: the bot speaks classic RCON and WebRCON, and picks the right one itself."),
+    field("If it will not answer", "The port is the thing people get wrong most: it is the RCON port from server.cfg, not the game or query port. Then the password. Then an IP allowlist on the host, because the bot runs from a cloud address that can change."),
     field("Two ways in", "Type the details, or paste the RCON lines from server.cfg and let the bot read them."),
   ];
   return { embeds: [built], components: [
@@ -953,7 +953,7 @@ export function suggestApplied(ctx, roles, channels, wrote, proposal) {
 /* ------------------------------------------------ health check: the doctor --- */
 function rconAdvice(reason) {
   var table = {
-    timeout: "nothing answered in time. The port is usually the game or query port rather than the RCON port, or RCON is off, or rcon.web is 1 (this bot speaks the other kind: set rcon.web 0). A host that only accepts listed IPs looks exactly like this too, because the bot runs from a cloud address that can change.",
+    timeout: "nothing answered in time. The port is usually the game or query port rather than the RCON port, or RCON is off. A host that only accepts listed IPs looks exactly like this too, because the bot runs from a cloud address that can change.",
     "bad-password": "the server answered and refused the password, so the address and port are right. Compare rcon.password in server.cfg with what is saved here, character for character.",
     "refused-host": "that address is not on the public internet, so the bot will not connect to it. Use the public IP or hostname from server.cfg.",
     "refused-port": "that port number cannot exist. rcon.port is normally a five digit number.",
@@ -963,7 +963,7 @@ function rconAdvice(reason) {
     closed: "the server closed the connection while it was answering, so the reply is incomplete.",
     unexpected: "the connection failed in an unexpected way; the detail above comes from the operating system.",
   };
-  return table[String(reason || "")] || "the reason is above. If it repeats, the port, the address and rcon.web are the three things worth re-reading in server.cfg.";
+  return table[String(reason || "")] || "the reason is above. If it repeats, the port, the address and the password are the three things worth re-reading in server.cfg.";
 }
 export async function setupDoctor(ctx) {
   var guild = ctx.guildInfo;
@@ -1122,7 +1122,7 @@ export function parseServerText(text) {
   if (!out.host) out.missing.push("the address (" + code("rcon.ip") + ")");
   if (!out.port) out.missing.push("the port (" + code("rcon.port") + ")");
   if (!out.password) out.missing.push("the password (" + code("rcon.password") + ")");
-  if (out.web === "1") out.notes.push("**rcon.web is 1** in what you pasted. This bot speaks the classic source RCON protocol, so set " + code("rcon.web 0") + " on the server, or the connection will look like a timeout.");
+  if (out.web === "1") out.notes.push("**rcon.web is 1** in what you pasted, so the server speaks WebRCON. That is fine: the bot speaks it too.");
   var portNumber = Number(out.port);
   if (out.port && !(portNumber >= 1 && portNumber <= 65535)) out.notes.push("**" + code(String(out.port)) + " is not a port number** that can exist, so nothing will be sent to it.");
   return out;
@@ -1338,7 +1338,7 @@ export function helpDetail(name, ctx) {
       ].join("\n"), false),
       field("Saving", "Settings are kept on the website (with BOT_SETTINGS_TOKEN), or in a file on a Railway volume attached to the bot. With neither, /setup says so in red: changes then last only until the next redeploy.", false),
       field("Permissions", STAFF_RULE + " Panels are only visible to you.", false),
-      field("Needs first", "The RCON port and password from server.cfg, with rcon.web set to 0.", false),
+      field("Needs first", "The RCON port and password from server.cfg (rcon.web 0 or 1 both work).", false),
     ],
     kits: [
       field("Subcommands", [

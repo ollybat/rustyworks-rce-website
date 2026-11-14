@@ -6,7 +6,12 @@
 import net from "node:net";
 
 const [silentHost, silentPort] = String(process.env.SIM_SILENT_RCON || "").split(":");
+const [webHost, webPort] = String(process.env.SIM_WEB_RCON || "").split(":");
 function connect(options, ...rest) {
+  /* 203.0.113.20 is a pretend Rust server with rcon.web 1 (WebRCON only) */
+  if (webPort && options && typeof options === "object" && String(options.host || "") === "203.0.113.20") {
+    return net.connect(Object.assign({}, options, { host: webHost || "127.0.0.1", port: Number(webPort) }), ...rest);
+  }
   if (silentPort && options && typeof options === "object" && /^203\.0\.113\.\d+$/.test(String(options.host || ""))) {
     return net.connect(Object.assign({}, options, { host: silentHost || "127.0.0.1", port: Number(silentPort) }), ...rest);
   }

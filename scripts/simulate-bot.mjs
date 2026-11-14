@@ -15,6 +15,7 @@
    never answers, so those checks fail on purpose and exercise the slow path. */
 import { createServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { mkdtempSync, readFileSync, rmSync, existsSync, statSync } from "node:fs";
@@ -88,6 +89,42 @@ const silentRcon = createNetServer((socket) => { silentSockets.add(socket); sock
 await new Promise((r) => silentRcon.listen(0, "127.0.0.1", r));
 const SIM_SILENT_RCON = "127.0.0.1:" + silentRcon.address().port;
 
+/* A pretend Rust server with rcon.web 1: WebRCON only, password "webpass". Like Rust it
+   accepts the websocket and then closes it at once when the password is wrong, chatters
+   console lines nobody asked for, and answers each command with the caller's Identifier.
+   Classic RCON bytes get no answer at all, as on a real WebRCON port. */
+const webSockets = new Set();
+const webRcon = createNetServer((socket) => {
+  webSockets.add(socket); socket.on("error", () => {}); socket.on("close", () => webSockets.delete(socket));
+  let buf = Buffer.alloc(0); let open = false;
+  const send = (obj) => { const body = Buffer.from(JSON.stringify(obj)); socket.write(Buffer.concat([Buffer.from([0x81, body.length < 126 ? body.length : 126]), body.length < 126 ? Buffer.alloc(0) : Buffer.from([body.length >> 8, body.length & 255]), body])); };
+  socket.on("data", (chunk) => {
+    buf = Buffer.concat([buf, chunk]);
+    if (!open) {
+      const end = buf.indexOf("\r\n\r\n"); if (end === -1) return;
+      const head = buf.subarray(0, end).toString(); buf = buf.subarray(end + 4);
+      if (!/^GET \//.test(head)) return;                     /* classic RCON: say nothing */
+      const key = (head.match(/Sec-WebSocket-Key: (.+)/i) || [])[1] || "";
+      const accept = createHash("sha1").update(key.trim() + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+      socket.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n");
+      open = true;
+      if (head.split(" ")[1] !== "/webpass") { socket.end(); return; }
+      send({ Message: "[chat] someone said hi", Identifier: 0, Type: "Chat" });
+    }
+    while (buf.length >= 6) {
+      let len = buf[1] & 0x7f, at = 2;
+      if (len === 126) { len = buf.readUInt16BE(2); at = 4; }
+      if (buf.length < at + 4 + len) return;
+      const mask = buf.subarray(at, at + 4); const data = Buffer.from(buf.subarray(at + 4, at + 4 + len).map((b, i) => b ^ mask[i % 4]));
+      buf = buf.subarray(at + 4 + len);
+      const msg = JSON.parse(data.toString());
+      send({ Message: "hostname: Web Test Server | players: 3 | ran " + msg.Message, Identifier: msg.Identifier, Type: "Generic" });
+    }
+  });
+});
+await new Promise((r) => webRcon.listen(0, "127.0.0.1", r));
+const SIM_WEB_RCON = "127.0.0.1:" + webRcon.address().port;
+
 /* The bot keeps a copy of its settings in a file; the simulation gives it a fresh one. */
 const settingsDir = mkdtempSync(join(tmpdir(), "spinback-sim-"));
 const SETTINGS_FILE = join(settingsDir, "settings.json");
@@ -111,6 +148,7 @@ function runBot(extraEnv, scenario, { stopWith } = {}) {
       RCON_WATCH_MS: "4000",
       SETTINGS_FILE,
       SIM_SILENT_RCON,
+      SIM_WEB_RCON,
       SIM_OWNER_ID: "100000000000000999",
       SIM_SCENARIO: join(repo, "scripts", "sim", scenario),
     }, extraEnv),
@@ -207,6 +245,15 @@ async function apiChecks() {
   const oversizedRcon = await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
     body: JSON.stringify({ command: "x".repeat(5000) }) });
   out.push(["oversized RCON requests receive HTTP 413", oversizedRcon.status === 413]);
+  /* (the bot allows six RCON checks a minute: the two above, the one before, these three) */
+  const rconTest = async (body) => (await request("/api/rcon/test", { signal: AbortSignal.timeout(12000), method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify(body) })).json().catch(() => ({}));
+  const web = await rconTest({ host: "203.0.113.20", port: 28016, password: "webpass", command: "serverinfo" });
+  out.push(["a WebRCON server (rcon.web 1) is reached and answers", web.ok === true && /Web Test Server/.test(web.answer || "") && !/someone said hi/.test(web.answer || "")]);
+  const webAgain = await rconTest({ host: "203.0.113.20", port: 28016, password: "webpass", command: "playerlist" });
+  out.push(["the second call goes straight to WebRCON (no probe wait)", webAgain.ok === true && /ran playerlist/.test(webAgain.answer || "") && (webAgain.ms || 9999) < 1000]);
+  const webWrong = await rconTest({ host: "203.0.113.20", port: 28016, password: "nope", command: "serverinfo" });
+  out.push(["a wrong WebRCON password says so", webWrong.ok === false && webWrong.reason === "bad-password"]);
   const oversizedOAuth = await request("/api/oauth/exchange", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
     body: "x".repeat(17000) });
   out.push(["oversized OAuth requests receive HTTP 413", oversizedOAuth.status === 413]);
@@ -251,6 +298,8 @@ between.push(["an empty preview snapshot clears website-side metadata", clearIns
 site.close();
 for (const socket of silentSockets) socket.destroy();
 silentRcon.close();
+for (const socket of webSockets) socket.destroy();
+webRcon.close();
 rmSync(settingsDir, { recursive: true, force: true });
 
 for (const a of api) between.push(["HTTP API: " + a[0], a[1]]);
