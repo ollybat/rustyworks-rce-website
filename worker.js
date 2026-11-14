@@ -697,7 +697,8 @@ function redirect(location, headers = {}) {
      STAFF_USER_IDS    comma-separated user ids
      STAFF_USERS       comma-separated usernames or display names
    The built-in defaults name the role or person this console was asked to admit; set any
-   of those variables to change it without touching this file. */const DEFAULT_STAFF_NAMES = ["astronomator"];
+   of those variables to change it without touching this file. */
+const DEFAULT_STAFF_NAMES = ["astronomator"];
 const PERM_ADMINISTRATOR = 0x8n;
 const PERM_MANAGE_GUILD = 0x20n;
 
@@ -1396,7 +1397,8 @@ async function botSettingsWrite(request, env) {
   if (!body || typeof body !== "object") return json({ ok: false, reason: "bad-body" }, 400);
   const wrote = [];
   if (body.staffRoles && typeof body.staffRoles === "object") {
-    const current = (await readJson(env, ROLES_KEY)) || {};    if (await writeJson(env, ROLES_KEY, Object.assign({}, current, body.staffRoles))) wrote.push("staffRoles");
+    const current = (await readJson(env, ROLES_KEY)) || {};
+    if (await writeJson(env, ROLES_KEY, Object.assign({}, current, body.staffRoles))) wrote.push("staffRoles");
   }
   if (body.logChannels && typeof body.logChannels === "object") {
     const current = (await readJson(env, LOGCHANNELS_KEY)) || {};
@@ -2095,7 +2097,8 @@ export default {
       });
     }
     if (url.pathname === "/api/history") return statusHistory(request, env);
-    if (url.pathname === "/api/setup") return authSetup(request, env);    if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
+    if (url.pathname === "/api/setup") return authSetup(request, env);
+    if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
     /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
     if (url.pathname === "/api/setup-status") return setupStatus(request, env);
     if (url.pathname === "/api/bot/settings") return botSettings(request, env);
