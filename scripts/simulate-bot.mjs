@@ -118,7 +118,8 @@ const webRcon = createNetServer((socket) => {
       const mask = buf.subarray(at, at + 4); const data = Buffer.from(buf.subarray(at + 4, at + 4 + len).map((b, i) => b ^ mask[i % 4]));
       buf = buf.subarray(at + 4 + len);
       const msg = JSON.parse(data.toString());
-      send({ Message: "hostname: Web Test Server | players: 3 | ran " + msg.Message, Identifier: msg.Identifier, Type: "Generic" });
+      /* like Rust, a command that prints nothing gets no reply at all */
+      if (msg.Message !== "status") send({ Message: "hostname: Web Test Server | players: 3 | ran " + msg.Message, Identifier: msg.Identifier, Type: "Generic" });
     }
   });
 });
@@ -250,8 +251,9 @@ async function apiChecks() {
     body: JSON.stringify(body) })).json().catch(() => ({}));
   const web = await rconTest({ host: "203.0.113.20", port: 28016, password: "webpass", command: "serverinfo" });
   out.push(["a WebRCON server (rcon.web 1) is reached and answers", web.ok === true && /Web Test Server/.test(web.answer || "") && !/someone said hi/.test(web.answer || "")]);
-  const webAgain = await rconTest({ host: "203.0.113.20", port: 28016, password: "webpass", command: "playerlist" });
-  out.push(["the second call goes straight to WebRCON (no probe wait)", webAgain.ok === true && /ran playerlist/.test(webAgain.answer || "") && (webAgain.ms || 9999) < 1000]);
+  const webAgain = await rconTest({ host: "203.0.113.20", port: 28016, password: "webpass", command: "status" });
+  out.push(["a WebRCON command that prints nothing counts as sent, not failed", webAgain.ok === true && webAgain.quiet === true && !webAgain.answer]);
+  out.push(["the second call goes straight to WebRCON (no probe wait)", webAgain.protocol === "web" && (webAgain.ms || 9999) < 3000, String(webAgain.ms)]);
   const webWrong = await rconTest({ host: "203.0.113.20", port: 28016, password: "nope", command: "serverinfo" });
   out.push(["a wrong WebRCON password says so", webWrong.ok === false && webWrong.reason === "bad-password"]);
   const oversizedOAuth = await request("/api/oauth/exchange", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
@@ -276,6 +278,10 @@ between.push(["it holds the saved roles and servers", !!(saved && saved.staffRol
 between.push(["kit-code previews survive in the settings file", !!(saved && saved.installs && Object.keys(saved.installs).length)]);
 between.push(["it is readable by the bot's own user only (0600)", process.platform === "win32" || (existsSync(SETTINGS_FILE) && (statSync(SETTINGS_FILE).mode & 0o077) === 0)]);
 between.push(["no half-written temp file is left", !existsSync(SETTINGS_FILE + ".tmp")]);
+/* the service log says what every RCON attempt did, and never prints a password */
+const rconLines = first.output.split("\n").filter((l) => / rcon \S+:\d+ .* via /.test(l));
+between.push(["each RCON attempt is one line in the service log", rconLines.some((l) => /via web: ok/.test(l)) && rconLines.some((l) => /: timeout in \d+ ms/.test(l))]);
+between.push(["the service log never prints an RCON password", !/webpass|nope/.test(first.output)]);
 
 /* Run 2: a restart with no BOT_SETTINGS_TOKEN and a volume: settings come back from the file,
    the traffic guards work, and SIGTERM lets the bot finish and leave cleanly. */

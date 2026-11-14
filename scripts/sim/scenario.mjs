@@ -405,6 +405,16 @@ export async function run({ world, make, interact }) {
   const logPost = world.sent.filter((m) => m.channelId === "100000000000000401").slice(-1)[0];
   expect("log posts carry the same footer, and say which log they are on top", logPost && text(logPost.payload).includes("Support - Spinback 5X EU") && text(logPost.payload).includes("Command log"), text(logPost && logPost.payload).slice(0, 300));
 
+  /* 37. a WebRCON server (rcon.web 1) is linked from the form, and remembered as WebRCON */
+  it = await go(make.modal(ADMIN, "modal:server", { srv_name: "Web", srv_host: "203.0.113.20:28016", srv_port: "", srv_pass: "webpass" }), "link a WebRCON server");
+  expect("a WebRCON server links from the form", text(last(it)).includes("Server linked and tested") && text(last(it)).includes("over WebRCON"), text(last(it)).slice(0, 400));
+  let webSaved = null;
+  for (let i = 0; i < 40 && !webSaved; i++) {
+    webSaved = ((latest(await writes()).servers) || []).find((x) => x.host === "203.0.113.20");
+    if (!webSaved) await new Promise((r) => setTimeout(r, 150));
+  }
+  expect("it is saved as WebRCON, so a restart skips the probe", webSaved && webSaved.protocol === "web", text(webSaved && Object.assign({}, webSaved, { password: "-" })));
+
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
     expect("answered in time: " + label, one.firstAckAt !== null && one.firstAckAt < 3000, "first answer at " + one.firstAckAt + " ms");

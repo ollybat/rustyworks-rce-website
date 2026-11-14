@@ -331,6 +331,8 @@ async function saveServer(s) {
     port: Number(s.port),
     password: String(s.password || ''),
   };
+  /* which kind of RCON the server answered on, so a restart skips the probe */
+  if (s.protocol === 'web' || s.protocol === 'classic') entry.protocol = s.protocol;
   const at = settings.servers.findIndex(function (x) { return x.id === entry.id; });
   if (at > -1) settings.servers[at] = entry; else settings.servers.push(entry);
   return persistSettings(['servers']);
@@ -807,6 +809,7 @@ function botCtx(interaction) {
     commandCount: function () { return state.commandNames ? state.commandNames.length : 0; },
     storeTokenSet: function () { return storeKind() !== 'memory'; },
     storeKind: storeKind,
+    outgoingIp: outgoingIp,
     servers: function () { return settings.servers; },
     kits: function () { return settings.kits; },
     links: function () { return settings.links; },
@@ -926,6 +929,20 @@ async function watchServers() {
 }
 setInterval(function () { if ((settings.servers || []).length) watchServers().catch(function () {}); }, WATCH_MS).unref();
 
+/* The public address this bot connects from, for hosts that only let listed IPs in.
+   Asked once and kept for ten minutes; a failure just means the line is left out. */
+let egress = { ip: null, at: 0 };
+async function outgoingIp() {
+  if (egress.ip && Date.now() - egress.at < 600000) return egress.ip;
+  if (process.env.SIM_SCENARIO) return null;
+  try {
+    const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2500) });
+    const body = await res.json();
+    if (body && /^[0-9a-f.:]{3,45}$/i.test(String(body.ip || ''))) egress = { ip: String(body.ip), at: Date.now() };
+  } catch (error) { /* left out */ }
+  return egress.ip;
+}
+
 async function rconLogged(options, actor) {
   const started = Date.now();
   const answer = await rconRun(options);
@@ -934,7 +951,7 @@ async function rconLogged(options, actor) {
     who(actor) + ' sent `' + String(answer && answer.command ? answer.command : options.command || 'serverinfo').slice(0, 300) + '` to **' +
       (server ? server.name : options.host + ':' + options.port) + '**.',
     [
-      { name: 'Result', value: answer && answer.ok ? 'answered in ' + (answer.ms || Date.now() - started) + ' ms' : String((answer && (answer.reason + ': ' + (answer.detail || ''))) || 'no answer').slice(0, 300), inline: true },
+      { name: 'Result', value: answer && answer.ok ? 'answered in ' + (answer.ms || Date.now() - started) + ' ms' + (answer.protocol === 'web' ? ' (WebRCON)' : answer.protocol === 'classic' ? ' (classic RCON)' : '') : String((answer && (answer.reason + ': ' + (answer.detail || ''))) || 'no answer').slice(0, 300), inline: true },
       { name: 'Answer', value: answer && answer.answer ? '```\n' + String(answer.answer).slice(0, 900) + '\n```' : '-', inline: false },
     ]);
   return answer;
@@ -2130,13 +2147,19 @@ async function rconRun(options) {
        what cannot be reached with its own reason, then let the network guard vet what is
        left - including every address a hostname resolves to. */
     const shape = parseRconTarget(options.host, options.port);
-    if (!shape.ok) return { ok: false, reason: shape.reason, detail: shape.detail };
+    if (!shape.ok) { log('rcon refused before connecting: ' + shape.reason); return { ok: false, reason: shape.reason, detail: shape.detail }; }
     options = Object.assign({}, options, { host: shape.host, port: shape.port });
     const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
     if (!target) {
       return { ok: false, reason: 'refused-host', detail: 'That address is not a public internet host (or did not resolve safely), so the bot will not connect to it.' };
     }
-    return await rconBothWays(Object.assign({}, options, { address: target }));
+    const result = await rconBothWays(Object.assign({}, options, { address: target }));
+    /* one line per attempt in the service log, so a connection problem can be read from
+       Railway without asking anyone to retry. Never the password. */
+    log('rcon ' + options.host + ':' + options.port + ' ' + String(result.command || options.command || 'serverinfo').slice(0, 60)
+      + ' via ' + (result.protocol || '?') + ': ' + (result.ok ? 'ok' : (result.reason || 'failed')) + ' in ' + (result.ms || 0) + ' ms'
+      + (result.ok ? '' : ' - ' + String(result.detail || '').slice(0, 160)));
+    return result;
   } finally {
     release();
   }
@@ -2152,6 +2175,10 @@ const RCON_SILENT_MS = Math.max(1500, Math.min(3000, Math.round(RCON_TIMEOUT_MS 
 async function rconBothWays(options) {
   const key = String(options.address || options.host) + ':' + Number(options.port);
   const tag = function (result, via) { return Object.assign(result, { protocol: via }); };
+  if (!rconProtocol.has(key)) {
+    const saved = (settings.servers || []).filter(function (x) { return String(x.host).toLowerCase() === String(options.host).toLowerCase() && Number(x.port) === Number(options.port) && x.protocol; })[0];
+    if (saved) rconProtocol.set(key, saved.protocol);
+  }
   if (rconProtocol.get(key) === 'web') {
     const web = await webRconConnect(options);
     if (web.reason !== 'not-webrcon') return tag(web, 'web');
@@ -2197,6 +2224,7 @@ function webRconConnect(options) {
     let pieces = [];
     let answer = '';
     let idle = null;
+    let quietAfterSend = null;
 
     function finish(result) {
       if (settled) return;
@@ -2204,6 +2232,7 @@ function webRconConnect(options) {
       clearTimeout(timer);
       clearTimeout(idle);
       clearTimeout(handshake);
+      clearTimeout(quietAfterSend);
       try { if (socket) socket.destroy(); } catch (error) { /* already gone */ }
       resolve(Object.assign({ ms: Date.now() - started }, result));
     }
@@ -2305,7 +2334,14 @@ function webRconConnect(options) {
             : { ok: false, reason: 'not-webrcon', detail: 'answered HTTP ' + (status || '?') + ', not a websocket' });
         }
         upgraded = true;
+        clearTimeout(handshake);
         socket.write(frame(1, JSON.stringify({ Identifier: ID, Message: command, Name: 'SpinbackRCE' })));
+        /* The password was accepted (Rust closes straight away when it is not) and the command
+           went out. A command that prints nothing gets no WebRCON reply at all, so after a
+           quiet spell it counts as sent rather than failed. */
+        quietAfterSend = setTimeout(function () {
+          if (!answer) finish({ ok: true, authenticated: true, command: command, answer: '', quiet: true });
+        }, Math.min(RCON_TIMEOUT_MS - 250, 3000));
       }
       readFrames();
     });

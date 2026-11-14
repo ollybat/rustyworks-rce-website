@@ -585,10 +585,10 @@ export async function testAndSaveServer(ctx, data, existingId) {
       code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 400) + (why ? "\n\n" + why : ""))],
       components: [row([button(existingId ? "setup:edit" : "setup:server", "Try again", 1), button("setup:import", "Paste server.cfg", 2), button("setup:home", "Back to setup", 2)])], flags: EPH };
   }
-  var saved = await ctx.saveServer({ id: existingId, name: name, host: host, port: port, password: password });
+  var saved = await ctx.saveServer({ id: existingId, name: name, host: host, port: port, password: password, protocol: answer.protocol });
   var lines = String(answer.answer || "").split("\n").slice(0, 6).join("\n");
   var built = embed(0x3ba55d, existingId ? "Server updated" : "Server linked and tested",
-    "**" + name + "** answered " + code(answer.command || "serverinfo") + " in " + ms(answer.ms) + ".\n" +
+    "**" + name + "** answered " + code(answer.command || "serverinfo") + " in " + ms(answer.ms) + via(answer) + ".\n" +
     (saved.ok ? (saved.where === "file" ? "Saved to the data file on the volume." : "Saved to the website.") : "Kept in this bot memory only: " + saved.detail));
   if (lines) built.fields = [field("What the server said", block(lines.slice(0, 900)), false)];
   return { embeds: [built], components: [row([button("setup:test", "Test connections", 2), button("setup:server", "Add another", 2), button("setup:home", "Back to setup", 2)])], flags: EPH };
@@ -613,7 +613,7 @@ export async function testServers(ctx, wanted) {
     var a = answers[i];
     var said = a && a.ok && a.answer ? "\n" + block(String(a.answer).split("\n").slice(0, 5).join("\n").slice(0, room)) : "";
     return field((s.name + " (" + s.host + ":" + s.port + ")").slice(0, 250),
-      a && a.ok ? "answered in " + ms(a.ms) + said : "did not answer: " + code((a && a.reason) || "unknown") + "\n" + String((a && a.detail) || "").slice(0, 300), false);
+      a && a.ok ? "answered in " + ms(a.ms) + via(a) + said : "did not answer: " + code((a && a.reason) || "unknown") + "\n" + String((a && a.detail) || "").slice(0, 300), false);
   });
   return { embeds: [built], components: [row([button(list.length === 1 && wanted ? "setup:test" : "setup:testall", "Test again", 2), button("setup:edit", "Edit a server", 2)])], flags: EPH };
 }
@@ -652,7 +652,7 @@ export async function serverSnapshot(ctx, which, serverWanted) {
   var built = embed(ok ? 0x5865f2 : 0xdc4c4c,
     "/server " + question[0] + (ok ? "" : " - no answer"),
     (ok ? "🟢 " : "🔴 ") + "**" + server.name + "** (" + server.host + ":" + server.port + ")\nAsked " + code(question[1]) +
-    (ok ? " and it answered in " + ms(answer.ms) + "." : " and it did not answer."));
+    (ok ? " and it answered in " + ms(answer.ms) + via(answer) + "." : " and it did not answer."));
   built.fields = [];
   if (ok && answer.answer) {
     var text = String(answer.answer).replace(new RegExp(BT, "g"), "'").trim();
@@ -951,6 +951,10 @@ export function suggestApplied(ctx, roles, channels, wrote, proposal) {
 }
 
 /* ------------------------------------------------ health check: the doctor --- */
+/* which kind of RCON answered, as a few words for a reply */
+function via(answer) {
+  return answer && answer.protocol === "web" ? " over WebRCON" : answer && answer.protocol === "classic" ? " over classic RCON" : "";
+}
 function rconAdvice(reason) {
   var table = {
     timeout: "nothing answered in time. The port is usually the game or query port rather than the RCON port, or RCON is off. A host that only accepts listed IPs looks exactly like this too, because the bot runs from a cloud address that can change.",
@@ -1016,9 +1020,13 @@ export async function setupDoctor(ctx) {
     var server = probes[i];
     var answer = await ctx.rconTest({ host: server.host, port: server.port, password: server.password, command: "serverinfo" });
     if (answer && answer.ok === true) {
-      probeLines.push("**" + server.name + "** answered in " + ms(answer.ms) + ": " + String(answer.answer || "").split("\n")[0].slice(0, 90));
+      probeLines.push("**" + server.name + "** answered in " + ms(answer.ms) + via(answer) + ": " + String(answer.answer || "").split("\n")[0].slice(0, 90));
     } else {
       probeLines.push("**" + server.name + "** did not answer -> " + code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 220) + "\n" + rconAdvice(answer && answer.reason));
+      if (answer && (answer.reason === "timeout" || answer.reason === "connect-failed") && ctx.outgoingIp) {
+        var ip = await Promise.resolve(ctx.outgoingIp()).catch(function () { return null; });
+        if (ip) probeLines[probeLines.length - 1] += "\nIf your host has an RCON IP allowlist, this bot connects from " + code(ip) + " right now (cloud addresses can change).";
+      }
       todo.push("Fix the connection to " + server.name + " (" + server.host + ":" + server.port + "): " + rconAdvice(answer && answer.reason).slice(0, 220));
     }
   }
@@ -1042,10 +1050,11 @@ export async function setupDoctor(ctx) {
   if (giveIssues.length) todo.push("The give template needs both {player} and {kit} in it, otherwise the bot has nothing to put the target and the kit into.");
 
   /* 5 - where settings are stored */
-  fields.push(field("Storage", ctx.storeTokenSet()
-    ? "The website accepts saves, so settings survive a restart."
-    : "BOT_SETTINGS_TOKEN is not set, so anything saved stays in this bot memory until it restarts.", false));
-  if (!ctx.storeTokenSet()) todo.push("Set BOT_SETTINGS_TOKEN to the same value on the website service and this one, or every save lives in memory only.");
+  var kind = ctx.storeKind ? ctx.storeKind() : (ctx.storeTokenSet() ? "website" : "memory");
+  fields.push(field("Storage", kind === "website" ? "The website accepts saves, so settings survive a restart."
+    : kind === "file" ? "Saved to a file on the attached volume, so settings survive a restart and a redeploy."
+    : "Kept by this running bot only: a restart or redeploy forgets everything saved since.", false));
+  if (kind === "memory") todo.push("Make saves last: attach a Volume to the bot's service on Railway (the bot finds it itself), or set BOT_SETTINGS_TOKEN to the same value on the bot and the website.");
 
   /* 6 - the gate itself */
   var state = setupState(ctx);
@@ -2037,6 +2046,7 @@ export async function giveKit(ctx, opts) {
     code(kit) + " to " + code(target) + via + " on **" + server.name + "**.\nCommand: " + code(final));
   built.fields = [field("Server answer", answer && answer.answer
     ? block(String(answer.answer).slice(0, 900))
+    : answer && answer.quiet ? "The server took the command and printed nothing back, which is normal for many kit plugins. Check in game or in the plugin's own log."
     : String((answer && (answer.detail || answer.reason)) || "no answer").slice(0, 900), false)];
   return { embeds: [built], components: [row([button("kits:give", "Give another", 2)])], flags: EPH };
 }
