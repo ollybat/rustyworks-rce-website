@@ -34,7 +34,7 @@ import {
   testPicker, setupRefresh, whoisPanel, whoisModal,
   setupRolePanel, setupRoleSlot, roleSlotResult, channelSetupPanel, logChannelBuilder,
   logChannelPlan, logChannelBuilt, serverStepPanel, setupSuggest, suggestApplied, setupDoctor,
-  runSetupPanel, roleBuildPanel, roleBuildResult,
+  runSetupPanel, roleBuildPanel, roleBuildResult, rconRequiredPanel,
   setupImportPanel, setupImportModal, parseServerText, setupImportResult, setupExport,
   setupResetPanel, setupResetModal, setupResetDone,
   kitCommandsPanel, kitCommandsModal, kitCommandsResult, kitsDoctor,
@@ -111,6 +111,103 @@ const cooldowns = new Map();
 function settingsToken() { return cleanEnvValue(process.env.BOT_SETTINGS_TOKEN || ''); }
 
 function panelEmbed(color, title, description) { return { color: color, title: title, description: description }; }
+
+/* Every embed the bot sends ends the same way and carries the same picture, and both are
+   stamped here rather than typed into each panel, so no panel can drift from the others.
+   One line, nothing after it. */
+const PANEL_FOOTER = 'Support - Spinback 5X EU \u2022 2026';
+
+function botAvatarUrl() {
+  try {
+    if (client.user && typeof client.user.displayAvatarURL === 'function') {
+      return client.user.displayAvatarURL({ extension: 'png', size: 128 });
+    }
+  } catch (error) { /* not logged in yet, so there is nothing to show */ }
+  return null;
+}
+
+function stampEmbed(embed) {
+  if (!embed || typeof embed !== 'object' || Array.isArray(embed)) return embed;
+  const out = Object.assign({}, embed);
+  out.footer = { text: PANEL_FOOTER };
+  const avatar = botAvatarUrl();
+  if (avatar && !out.thumbnail) out.thumbnail = { url: avatar };
+  return out;
+}
+
+/* Components, flags and content are left exactly as they are: only the embeds change. */
+function stampPayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const out = Object.assign({}, payload);
+  if (Array.isArray(out.embeds)) out.embeds = out.embeds.map(stampEmbed);
+  else if (out.embed) out.embed = stampEmbed(out.embed);
+  return out;
+}
+
+/* The last time a Rust server answered, or refused, an RCON command. Anything that talks to
+   the game reads this instead of paying for a fresh connection on every press, and the
+   website reads it through /api/status. */
+let rconState = { checkedAt: 0, server: null, serverName: null, host: null, port: null, ok: null, reason: null, detail: null, ms: null };
+
+function rememberRcon(options, answer) {
+  const previous = rconState.server ? rconState.server.name : null;
+  rconState = {
+    checkedAt: Date.now(),
+    server: { name: String((options && options.name) || previous || 'server'), host: String((options && options.host) || ''), port: Number((options && options.port) || 0) },
+    serverName: String((options && options.name) || previous || 'server'),
+    host: String((options && options.host) || ''),
+    port: Number((options && options.port) || 0),
+    ok: !!(answer && answer.ok === true),
+    reason: (answer && answer.reason) || null,
+    detail: (answer && answer.detail) || null,
+    ms: (answer && answer.ms) || null,
+  };
+  return rconState;
+}
+
+/* RCON cannot stream a server's own log to a client, so this does the one thing that is
+   honest and useful: it says when the connection itself goes up or down, in the server log
+   channel if one has been set. Nothing at all is posted until that channel exists. */
+async function announceServerState(now, answer) {
+  const channelId = settings.logChannels && settings.logChannels.server;
+  if (!channelId) return;
+  const previous = announceServerState.last;
+  announceServerState.last = now.ok;
+  if (previous === now.ok) return;
+  const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
+  if (!guild) return;
+  const channel = guild.channels.cache.get(String(channelId)) || await guild.channels.fetch(String(channelId)).catch(function () { return null; });
+  if (!channel || typeof channel.send !== 'function') return;
+  const said = String((answer && answer.answer) || '').split('\n').filter(Boolean).slice(0, 4).join('\n');
+  const built = panelEmbed(now.ok ? 0x3ba55d : 0xdc4c4c,
+    now.ok ? 'Rust server connected' : 'Rust server connection lost',
+    '**' + String(now.serverName || 'server') + '** (' + String(now.host) + ':' + String(now.port) + ') '
+    + (now.ok ? 'answered in ' + String(now.ms) + ' ms.' : 'did not answer: ' + String(now.reason || 'unknown') + '. ' + String(now.detail || '').slice(0, 200)));
+  if (said) built.fields = [{ name: 'What it said', value: said.slice(0, 900), inline: false }];
+  await channel.send(stampPayload({ embeds: [built] }));
+}
+
+/* A cached answer. force asks the server again; otherwise a check from the last minute is
+   reused, so a panel does not open a socket every time somebody presses a button. */
+async function rconStatus(force) {
+  const server = (settings.servers || [])[0] || null;
+  if (!server) return { checkedAt: Date.now(), server: null, serverName: null, ok: false, reason: 'no-server', detail: 'No Rust server is saved yet.' };
+  const stale = Date.now() - rconState.checkedAt > 60000;
+  const sameTarget = rconState.server && String(rconState.host) === String(server.host) && Number(rconState.port) === Number(server.port);
+  if (!force && !stale && sameTarget) return rconState;
+  const options = { name: server.name, host: server.host, port: server.port, password: server.password, command: 'serverinfo' };
+  const answer = await rconRun(options);
+  rememberRcon(options, answer);
+  await announceServerState(rconState, answer).catch(function () {});
+  return rconState;
+}
+
+/* One quiet poll, so what the panels and the website report is never more than a couple of
+   minutes old. It opens nothing at all until a server has been saved. */
+setInterval(function () {
+  if (!(settings.servers || []).length) return;
+  rconStatus(true).catch(function () {});
+}, 120000).unref();
 function panelRow(components) { return { type: 1, components: components }; }
 function panelButton(id, label, style) { return { type: 2, custom_id: id, label: label, style: style || 2 }; }
 
@@ -373,7 +470,7 @@ async function postLinkPanel(channelId) {
   try {
     const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
-    const message = await channel.send(linkPanelPayload());
+    const message = await channel.send(stampPayload(linkPanelPayload()));
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
     const wrote = await persistSettings();
     return { ok: true, saved: wrote.ok, detail: wrote.detail || '' };
@@ -588,7 +685,11 @@ function botCtx() {
     cooldownCount: cooldownCount,
     cooldownList: cooldownList,
     target: function (host, port) { return parseRconTarget(host, port); },
-    rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
+    rconStatus: function (force) { return rconStatus(force); },
+    rconState: function () { return rconState; },
+    rconTest: function (o) {
+      return rconRun(Object.assign({}, o, { allowAny: false })).then(function (result) { rememberRcon(o, result); return result; });
+    },
     rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
   };
 }
@@ -608,13 +709,13 @@ function mayConfigure(interaction) {
 }
 
 async function answerModal(interaction, payload) {
-  const body = Object.assign({}, payload);
+  const body = stampPayload(payload);
   if (body.flags === undefined) body.flags = 64;
   try { await interaction.reply(body); } catch (error) { log('modal reply failed:', String((error && error.message) || error)); }
 }
 
 async function answerPanel(interaction, payload) {
-  const body = Object.assign({}, payload);
+  const body = stampPayload(payload);
   delete body.flags;
   if (body.components === undefined) body.components = [];
   try { await interaction.update(body); } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
@@ -626,12 +727,12 @@ async function answerPanel(interaction, payload) {
 async function staleComponent(interaction, kind, id) {
   log('unhandled ' + kind + ':', id);
   if (typeof interaction.isRepliable !== 'function' || !interaction.isRepliable()) return;
-  const body = {
+  const body = stampPayload({
     embeds: [panelEmbed(0xfaa81a, 'That one is out of date',
       'This ' + kind + ' was posted by an earlier version of Spinback, so there is nothing left for it to do.\n\n'
       + 'Run /help for the panels that are current, and post a fresh one if it was pinned.')],
     flags: 64,
-  };
+  });
   try {
     if (interaction.deferred || interaction.replied) await interaction.followUp(body);
     else await interaction.reply(body);
@@ -643,7 +744,7 @@ async function routeInteraction(interaction) {
     const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
     if (!rightGuild) {
       if (typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
-        await interaction.reply({ embeds: [wrongGuildNote()], flags: 64 }).catch(function () {});
+        await interaction.reply(stampPayload({ embeds: [wrongGuildNote()], flags: 64 })).catch(function () {});
       }
       return;
     }
@@ -657,8 +758,19 @@ async function routeInteraction(interaction) {
   } catch (error) {
     const message = String((error && error.message) || error);
     log('interaction failed:', message);
-    try { await interaction.reply({ content: 'That failed: ' + message.slice(0, 300), flags: 64 }); } catch (e) { /* already answered */ }
+    try {
+      await interaction.reply(stampPayload({ embeds: [panelEmbed(0xdc4c4c, 'That did not work',
+        String(message).slice(0, 300) + '\n\nNothing was changed by the step that failed. /setup doctor measures everything the bot can reach.')], flags: 64 }));
+    } catch (e) { /* already answered */ }
   }
+}
+
+/* Which commands cannot work without a live Rust connection. /help, /ping, /user and the
+   configuration side of /setup do not need one, so they are never blocked by it. */
+function needsRcon(name, sub) {
+  if (name === 'server') return true;
+  if (name === 'kits') return sub === 'give' || sub === 'grab' || sub === 'spawn' || sub === 'auth-spawn';
+  return false;
 }
 
 async function runCommand(interaction) {
@@ -666,10 +778,20 @@ async function runCommand(interaction) {
   if (name !== 'ping' && name !== 'help' && name !== 'setup' && name !== 'kits' && name !== 'user' && name !== 'server') return;
   const ctx = botCtx();
   if (name !== 'ping' && !permitted(interaction, ctx)) {
-    await interaction.reply({ embeds: [permissionNote(ctx)], flags: 64 }).catch(function () {});
+    await interaction.reply(stampPayload({ embeds: [permissionNote(ctx)], flags: 64 })).catch(function () {});
     return;
   }
   const opts = optionMap(interaction);
+  /* The connection is checked first: a feature that needs the game says so in plain words,
+     with the way to fix it, instead of failing halfway through and leaving a half-done step. */
+  if (needsRcon(name, opts.__sub)) {
+    const status = await ctx.rconStatus(false);
+    if (!status || status.ok !== true) {
+      const label = '/' + name + (opts.__sub ? ' ' + opts.__sub : '');
+      await interaction.reply(stampPayload(rconRequiredPanel(ctx, status, label))).catch(function () {});
+      return;
+    }
+  }
   /* Everything that changes something carries a panel, so the first reply is deferred while
      a panel is assembled or a server is asked a question. */
   const slow = name !== 'ping' && name !== 'help';
@@ -686,18 +808,18 @@ async function runCommand(interaction) {
       ? { embeds: [panelEmbed(0x3ba55d, 'Link panel posted', 'It is in <#' + payload.postPanelTo + '> now. Members press **Link account** there; staff can always confirm one by hand with /user forcelink.'
         + (posted.saved ? '' : ' Note: the website could not be told, so the panel id lives in this bot memory only.'))] }
       : { embeds: [panelEmbed(0xdc4c4c, 'Could not post it there', String(posted.detail || '').slice(0, 300))] };
-    if (slow) { await interaction.editReply(body).catch(function () {}); return; }
-    await interaction.reply(body).catch(function () {});
+    if (slow) { await interaction.editReply(stampPayload(body)).catch(function () {}); return; }
+    await interaction.reply(stampPayload(body)).catch(function () {});
     return;
   }
   if (slow) {
     const body = Object.assign({}, payload);
     /* flags belong on the first reply only; the deferral already made it ephemeral. */
     delete body.flags;
-    await interaction.editReply(body).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
+    await interaction.editReply(stampPayload(body)).catch(function (e) { log('editReply failed:', String((e && e.message) || e)); });
     return;
   }
-  await interaction.reply(payload).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
+  await interaction.reply(stampPayload(payload)).catch(function (e) { log('reply failed:', String((e && e.message) || e)); });
 }
 
 async function runButton(interaction) {
@@ -1655,6 +1777,17 @@ createServer(async (req, res) => {
       command: state.command,
       port: PORT,
       host: HOST,
+      /* The bot's own picture, and whether its Rust server is answering. The website shows
+         both, so it never has to guess either one. */
+      avatar: botAvatarUrl(),
+      rcon: rconState.server ? {
+        connected: rconState.ok === true,
+        serverName: rconState.serverName,
+        host: rconState.host,
+        port: rconState.port,
+        checkedAt: rconState.checkedAt,
+        reason: rconState.reason,
+      } : null,
       tokenPresent: !!TOKEN,
       tokenSource: TOKEN_INFO.source,
       oauthExchange: !!CLIENT_SECRET,
