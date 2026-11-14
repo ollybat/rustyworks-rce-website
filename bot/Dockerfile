@@ -10,6 +10,11 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY bot/ ./
 
+# A folder the bot may write its settings file to. Without it the app (which runs as the
+# node user) cannot create /app/data, and nothing it saves survives even a reconnect.
+# For settings that outlive a redeploy, attach a Railway volume (the bot finds it itself).
+RUN mkdir -p /app/data && chown node:node /app/data
+
 USER node
 
 # Do NOT pin PORT here. Railway assigns the port it routes the public domain to and

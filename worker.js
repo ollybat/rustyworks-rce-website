@@ -1749,7 +1749,7 @@ async function ownerApi(request, env) {
       servers: held.servers.map(publicServer),
       max: MAX_SERVERS,
       canEdit: guard.level === "owner",
-      note: "RCON is the console Rust servers speak when rcon.web is 0. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check says so instead of guessing.",
+      note: "RCON is the console Rust servers speak - classic (rcon.web 0) or WebRCON (rcon.web 1); the bot speaks both. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check says so instead of guessing.",
     }, 200);
   }
 
@@ -1936,7 +1936,7 @@ const CONSOLE_PAGE = `<!DOCTYPE html>
 
     <section id="panel-rcon" class="sbc-panel sbc-hidden">
       <div class="sbc-head"><h1>Rust server connections</h1><span class="sbc-pill" id="rcon-count">0/3 connected</span></div>
-      <p class="sbc-sub">Connect a Rust server over RCON and the bot can ask it things. RCON is what a Rust server speaks when it is started with <span class="mono">rcon.web 0</span>. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check tells you exactly what happened rather than pretending.</p>
+      <p class="sbc-sub">Connect a Rust server over RCON and the bot can ask it things. The bot speaks both kinds of RCON a Rust server offers - classic (<span class="mono">rcon.web 0</span>) and WebRCON (<span class="mono">rcon.web 1</span>) - and picks the right one itself. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check tells you exactly what happened rather than pretending.</p>
       <div id="rcon-list" class="sbc-conns"></div>
       <h2 style="margin-top:22px">Add a connection</h2>
       <form class="sbc-grid" id="rcon-form" autocomplete="off">

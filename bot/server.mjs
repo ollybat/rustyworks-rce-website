@@ -19,11 +19,12 @@ import { createServer } from 'node:http';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, ChannelType, Events } from 'discord.js';
 import handler from './interactions-worker.js';
 import net from 'node:net';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual, randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isPublicAddress, rconHostAllowed as hostAllowedByGuard } from './network-guard.mjs';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
@@ -153,7 +154,7 @@ function requireSettingsAuth(req, res) {
    container and only outlives a crash-restart of the same container. The file holds RCON
    passwords, so it is written owner-only (0600), whole, and swapped in atomically. */
 const VOLUME_DIR = cleanEnvValue(process.env.RAILWAY_VOLUME_MOUNT_PATH || '');
-const SETTINGS_FILE = cleanEnvValue(process.env.SETTINGS_FILE || '') || (VOLUME_DIR ? join(VOLUME_DIR, 'spinback-settings.json') : join(process.cwd(), 'data', 'spinback-settings.json'));
+let SETTINGS_FILE = cleanEnvValue(process.env.SETTINGS_FILE || '') || (VOLUME_DIR ? join(VOLUME_DIR, 'spinback-settings.json') : join(process.cwd(), 'data', 'spinback-settings.json'));
 const FILE_IS_DURABLE = !!(cleanEnvValue(process.env.SETTINGS_FILE || '') || VOLUME_DIR);
 const FILE_SECTIONS = ['staffRoles', 'logChannels', 'servers', 'kits', 'installs', 'links', 'pending', 'linkPanel'];
 let fileTimer = null;
@@ -163,7 +164,14 @@ function writeSettingsFileNow() {
   try {
     const out = { version: 1, savedAt: new Date().toISOString() };
     FILE_SECTIONS.forEach(function (k) { out[k] = settings[k]; });
-    mkdirSync(dirname(SETTINGS_FILE), { recursive: true });
+    try { mkdirSync(dirname(SETTINGS_FILE), { recursive: true }); } catch (error) {
+      /* The image's own folder is not writable: fall back to the system temp folder so the
+         bot at least keeps what it saves until its next restart. A volume keeps it for good. */
+      if (FILE_IS_DURABLE || !error || (error.code !== 'EACCES' && error.code !== 'EROFS' && error.code !== 'EPERM')) throw error;
+      SETTINGS_FILE = join(tmpdir(), 'spinback', 'spinback-settings.json');
+      mkdirSync(dirname(SETTINGS_FILE), { recursive: true });
+      log('settings folder is not writable here, using ' + dirname(SETTINGS_FILE) + ' until the next restart');
+    }
     const tmp = SETTINGS_FILE + '.tmp';
     writeFileSync(tmp, JSON.stringify(out), { mode: 0o600 });
     renameSync(tmp, SETTINGS_FILE);
@@ -211,7 +219,12 @@ let lastPersistAt = 0;
    one request, not a backlog. */
 let persistQueue = Promise.resolve();
 let waitingSave = null;
+/* Every local change bumps this; a website read that started before a change, or that would
+   land while a save is still on its way, is thrown away instead of putting old values back. */
+let localEdits = 0;
+let savesInFlight = 0;
 function persistSettings(sections) {
+  localEdits++;
   writeSettingsFileSoon();
   const wanted = Array.isArray(sections) && sections.length ? sections : null;
   if (waitingSave) {
@@ -251,6 +264,7 @@ async function persistSettingsNow(sections) {
     if (key in everything) outgoing[key] = everything[key];
   });
   lastPersistAt = Date.now();
+  savesInFlight++;
   try {
     const res = await fetch(SITE_URL + '/api/bot/settings', {
       method: 'POST',
@@ -263,6 +277,9 @@ async function persistSettingsNow(sections) {
     return { ok: false, detail: 'the website answered ' + res.status + (body && body.reason ? ' (' + body.reason + ')' : '') };
   } catch (error) {
     return { ok: false, detail: String((error && error.message) || error) };
+  } finally {
+    savesInFlight--;
+    lastPersistAt = Date.now();
   }
 }
 
@@ -282,6 +299,8 @@ function applySettings(body) {
 async function loadSettings(quiet) {
   const token = settingsToken();
   if (!token) { if (!quiet) log('BOT_SETTINGS_TOKEN is not set, so saved settings cannot be read from the website'); return; }
+  if (quiet && (savesInFlight || waitingSave)) return;
+  const editsBefore = localEdits;
   try {
     /* full=1 asks for the RCON passwords: only this service talks to RCON, and the website
        hides them from anything running in a browser. */
@@ -291,6 +310,7 @@ async function loadSettings(quiet) {
     });
     if (!res.ok) { log('settings read answered ' + res.status); return; }
     const body = await res.json();
+    if (localEdits !== editsBefore || savesInFlight || waitingSave) return;   /* something changed here meanwhile */
     applySettings(body);
     writeSettingsFileSoon();
     if (!quiet) {
@@ -899,7 +919,7 @@ async function watchServers() {
       const now = serverChecks[server.id];
       logLater('server', now.ok ? 'Rust server connected' : 'Rust server connection lost',
         '**' + server.name + '** ' + (now.ok ? 'answered again, in ' + now.ms + ' ms.' : 'stopped answering: `' + now.reason + '`. ' + (now.detail || '')),
-        now.ok ? [] : [{ name: 'What to check', value: 'The host is up, RCON is on with rcon.web 0, and the RCON port is open to the internet. **/setup doctor** measures it from here.' }]);
+        now.ok ? [] : [{ name: 'What to check', value: 'The host is up, RCON is on, and the RCON port is open to the internet. **/setup doctor** measures it from here.' }]);
     }
   }
   updatePresence();
@@ -2116,10 +2136,180 @@ async function rconRun(options) {
     if (!target) {
       return { ok: false, reason: 'refused-host', detail: 'That address is not a public internet host (or did not resolve safely), so the bot will not connect to it.' };
     }
-    return await rconConnect(Object.assign({}, options, { address: target }));
+    return await rconBothWays(Object.assign({}, options, { address: target }));
   } finally {
     release();
   }
+}
+
+/* Which way each server spoke last time ('classic' or 'web'), so later calls skip the probe. */
+const rconProtocol = new Map();
+const RCON_SILENT_MS = Math.max(1500, Math.min(3000, Math.round(RCON_TIMEOUT_MS / 3)));
+
+/* Rust speaks two kinds of RCON on its RCON port: classic (Source) RCON when rcon.web is 0,
+   and WebRCON - a websocket - when rcon.web is 1, which is the default. Both are tried:
+   classic first, and WebRCON when the port is open but quiet. What worked is remembered. */
+async function rconBothWays(options) {
+  const key = String(options.address || options.host) + ':' + Number(options.port);
+  const tag = function (result, via) { return Object.assign(result, { protocol: via }); };
+  if (rconProtocol.get(key) === 'web') {
+    const web = await webRconConnect(options);
+    if (web.reason !== 'not-webrcon') return tag(web, 'web');
+    rconProtocol.delete(key);
+  }
+  const classic = await rconConnect(Object.assign({}, options, { silentMs: RCON_SILENT_MS }));
+  const quiet = classic.reason === 'silent' || (classic.reason === 'closed-before-auth' && !classic.heard) || (classic.reason === 'timeout' && classic.connected);
+  if (!quiet) {
+    if (classic.ok || classic.reason === 'bad-password') rconProtocol.set(key, 'classic');
+    return tag(classic, 'classic');
+  }
+  const web = await webRconConnect(options);
+  if (web.ok || web.reason === 'bad-password') {
+    rconProtocol.set(key, 'web');
+    return tag(web, 'web');
+  }
+  return tag({ ok: false, reason: 'timeout', connected: true, ms: (classic.ms || 0) + (web.ms || 0),
+    detail: 'The port is open, but it answered neither classic RCON (rcon.web 0) nor WebRCON (rcon.web 1). Check that this is rcon.port and not the game or query port.'
+      + (web.detail ? ' WebRCON said: ' + String(web.detail).slice(0, 120) : '') }, 'none');
+}
+
+/* A small websocket client for Rust's WebRCON: ws://host:port/password, one JSON message
+   per command, answered with a JSON message carrying the same Identifier. It runs on the
+   same vetted address as classic RCON, so the network guard covers it too. */
+function webRconConnect(options) {
+  return new Promise(function (resolve) {
+    const started = Date.now();
+    const host = String(options.host || '').trim();
+    const port = Number(options.port);
+    const password = String(options.password || '');
+    const asked = String(options.command || 'serverinfo').toLowerCase();
+    const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
+    const command = options.allowAny && requested ? requested : (RCON_ALLOWED.indexOf(asked) > -1 ? asked : 'serverinfo');
+    if (!rconHostAllowed(host)) return resolve({ ok: false, reason: 'refused-host', detail: 'That address is not on the public internet, so the bot will not connect to it.' });
+    if (!password) return resolve({ ok: false, reason: 'no-password', detail: 'No RCON password was given for that server.' });
+
+    const ID = 1000 + Math.floor(Math.random() * 8000);
+    let socket = null;
+    let settled = false;
+    let upgraded = false;
+    let heard = false;
+    let raw = Buffer.alloc(0);
+    let pieces = [];
+    let answer = '';
+    let idle = null;
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(idle);
+      clearTimeout(handshake);
+      try { if (socket) socket.destroy(); } catch (error) { /* already gone */ }
+      resolve(Object.assign({ ms: Date.now() - started }, result));
+    }
+    const timer = setTimeout(function () {
+      finish(upgraded
+        ? { ok: false, reason: 'timeout', detail: 'WebRCON connected but did not answer the command within ' + Math.round(RCON_TIMEOUT_MS / 1000) + ' seconds.' }
+        : { ok: false, reason: 'not-webrcon', detail: 'no websocket handshake' });
+    }, RCON_TIMEOUT_MS);
+    /* A WebRCON port answers the handshake at once; waiting the full time for one that
+       never comes would only make a dead port look slower. */
+    const handshake = setTimeout(function () {
+      if (!upgraded) finish({ ok: false, reason: 'not-webrcon', detail: 'no websocket handshake' });
+    }, RCON_SILENT_MS);
+
+    function frame(opcode, payload) {
+      const body = Buffer.from(payload || '');
+      const mask = randomBytes(4);
+      let head;
+      if (body.length < 126) head = Buffer.from([0x80 | opcode, 0x80 | body.length]);
+      else if (body.length < 65536) { head = Buffer.alloc(4); head[0] = 0x80 | opcode; head[1] = 0x80 | 126; head.writeUInt16BE(body.length, 2); }
+      else { head = Buffer.alloc(10); head[0] = 0x80 | opcode; head[1] = 0x80 | 127; head.writeBigUInt64BE(BigInt(body.length), 2); }
+      const masked = Buffer.alloc(body.length);
+      for (let i = 0; i < body.length; i++) masked[i] = body[i] ^ mask[i % 4];
+      return Buffer.concat([head, mask, masked]);
+    }
+    function onMessage(text) {
+      let msg = null;
+      try { msg = JSON.parse(text); } catch (error) { return; }
+      if (!msg || Number(msg.Identifier) !== ID) return;   /* other console lines go by */
+      answer = (answer + (answer ? '\n' : '') + String(msg.Message || '')).slice(0, 4000);
+      clearTimeout(idle);
+      idle = setTimeout(function () {
+        finish({ ok: true, authenticated: true, command: command, answer: answer.trim().slice(0, 1200) });
+      }, RCON_IDLE_MS);
+    }
+    function readFrames() {
+      while (raw.length >= 2) {
+        const fin = (raw[0] & 0x80) !== 0;
+        const opcode = raw[0] & 0x0f;
+        const isMasked = (raw[1] & 0x80) !== 0;
+        let len = raw[1] & 0x7f;
+        let at = 2;
+        if (len === 126) { if (raw.length < 4) return; len = raw.readUInt16BE(2); at = 4; }
+        else if (len === 127) { if (raw.length < 10) return; len = Number(raw.readBigUInt64BE(2)); at = 10; }
+        if (len > RCON_MAX_BUFFER_BYTES) return finish({ ok: false, reason: 'response-too-large', detail: 'The server response exceeded the bot safety limit.' });
+        const maskAt = at;
+        if (isMasked) at += 4;
+        if (raw.length < at + len) return;
+        let data = raw.subarray(at, at + len);
+        if (isMasked) { const m = raw.subarray(maskAt, maskAt + 4); data = Buffer.from(data.map(function (b, i) { return b ^ m[i % 4]; })); }
+        raw = raw.subarray(at + len);
+        heard = true;
+        if (opcode === 8) return finish({ ok: false, reason: 'bad-password', detail: 'WebRCON closed the connection - this is what Rust does when the RCON password is wrong.' });
+        if (opcode === 9) { socket.write(frame(10, data)); continue; }
+        if (opcode === 1 || opcode === 0 || opcode === 2) {
+          pieces.push(data);
+          if (fin) { const text = Buffer.concat(pieces).toString('utf8'); pieces = []; onMessage(text); }
+        }
+      }
+    }
+
+    try {
+      socket = net.connect({ host: options.address || host, port: port });
+    } catch (error) {
+      return finish({ ok: false, reason: 'connect-failed', detail: String(error.message || error) });
+    }
+    socket.on('error', function (error) {
+      finish({ ok: false, reason: upgraded ? 'connect-failed' : 'not-webrcon', detail: String((error && (error.code || error.message)) || error) });
+    });
+    socket.on('connect', function () {
+      /* Rust compares the path with the password as written, so it is sent as is; only
+         characters that cannot appear in a request line are escaped. */
+      const path = '/' + password.replace(/[\x00-\x20\x7f%#?]/g, function (c) { return encodeURIComponent(c); });
+      const hostHeader = (host.indexOf(':') > -1 ? '[' + host + ']' : host) + ':' + port;
+      socket.write('GET ' + path + ' HTTP/1.1\r\nHost: ' + hostHeader + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+        + 'Sec-WebSocket-Key: ' + randomBytes(16).toString('base64') + '\r\nSec-WebSocket-Version: 13\r\nUser-Agent: SpinbackRCE\r\n\r\n');
+    });
+    socket.on('close', function () {
+      if (settled) return;
+      if (!upgraded) return finish({ ok: false, reason: 'not-webrcon', detail: 'closed before a websocket handshake' });
+      if (answer) return finish({ ok: true, authenticated: true, command: command, answer: answer.trim().slice(0, 1200) });
+      finish(heard
+        ? { ok: false, reason: 'closed', detail: 'WebRCON closed the connection before answering.' }
+        : { ok: false, reason: 'bad-password', detail: 'WebRCON opened and closed straight away - this is what Rust does when the RCON password is wrong.' });
+    });
+    socket.on('data', function (chunk) {
+      if (settled) return;
+      if (raw.length + chunk.length > RCON_MAX_BUFFER_BYTES) return finish({ ok: false, reason: 'response-too-large', detail: 'The server response exceeded the bot safety limit.' });
+      raw = Buffer.concat([raw, chunk]);
+      if (!upgraded) {
+        const end = raw.indexOf('\r\n\r\n');
+        if (end === -1) { if (raw.length > 8192) finish({ ok: false, reason: 'not-webrcon', detail: 'not a websocket answer' }); return; }
+        const head = raw.subarray(0, end).toString('latin1');
+        raw = raw.subarray(end + 4);
+        if (!/^HTTP\/1\.[01] 101/.test(head)) {
+          const status = (head.match(/^HTTP\/1\.[01] (\d{3})/) || [])[1];
+          return finish(status === '401' || status === '403'
+            ? { ok: false, reason: 'bad-password', detail: 'WebRCON refused that RCON password.' }
+            : { ok: false, reason: 'not-webrcon', detail: 'answered HTTP ' + (status || '?') + ', not a websocket' });
+        }
+        upgraded = true;
+        socket.write(frame(1, JSON.stringify({ Identifier: ID, Message: command, Name: 'SpinbackRCE' })));
+      }
+      readFrames();
+    });
+  });
 }
 
 function rconConnect(options) {
@@ -2156,12 +2346,17 @@ function rconConnect(options) {
       settled = true;
       clearTimeout(timer);
       clearTimeout(idle);
+      clearTimeout(silent);
       try { if (socket) socket.destroy(); } catch (error) { /* already gone */ }
       resolve(Object.assign({ ms: Date.now() - started }, result));
     }
 
+    let connected = false;
+    let silent = null;
     const timer = setTimeout(function () {
-      finish({ ok: false, reason: 'timeout', detail: 'Nothing answered within ' + Math.round(RCON_TIMEOUT_MS / 1000) + ' seconds. Either the port is closed, RCON is off, or rcon.web is set to 1 (this talks the other kind).' });
+      finish(connected
+        ? { ok: false, reason: 'timeout', connected: true, detail: 'The port accepted the connection but the server said nothing within ' + Math.round(RCON_TIMEOUT_MS / 1000) + ' seconds.' }
+        : { ok: false, reason: 'timeout', connected: false, detail: 'Nothing accepted the connection within ' + Math.round(RCON_TIMEOUT_MS / 1000) + ' seconds: the server is off, the port is wrong, or a firewall drops it.' });
     }, RCON_TIMEOUT_MS);
 
     try {
@@ -2175,15 +2370,24 @@ function rconConnect(options) {
     });
 
     socket.on('connect', function () {
+      connected = true;
       socket.write(rconPacket(1, 3, password));
+      /* A classic RCON server answers the login at once. An open port that stays quiet is
+         almost always WebRCON (rcon.web 1, Rust's default), which waits for a web handshake. */
+      if (options.silentMs) {
+        silent = setTimeout(function () {
+          if (!buffer.length && !authed) finish({ ok: false, reason: 'silent', connected: true, detail: 'The port is open but did not answer classic RCON.' });
+        }, options.silentMs);
+      }
     });
 
     socket.on('close', function () {
-      if (!settled) finish({ ok: authed, authenticated: authed, command: command, answer: answer.trim().slice(0, 1200), reason: authed ? 'closed' : 'closed-before-auth' });
+      if (!settled) finish({ ok: authed, authenticated: authed, command: command, answer: answer.trim().slice(0, 1200), reason: authed ? 'closed' : 'closed-before-auth', connected: connected, heard: buffer.length > 0 });
     });
 
     socket.on('data', function (chunk) {
       if (settled) return;
+      clearTimeout(silent);
       if (buffer.length + chunk.length > RCON_MAX_BUFFER_BYTES) {
         return finish({ ok: false, reason: 'response-too-large', detail: 'The server response exceeded the bot safety limit.' });
       }
