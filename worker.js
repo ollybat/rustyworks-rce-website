@@ -697,8 +697,7 @@ function redirect(location, headers = {}) {
      STAFF_USER_IDS    comma-separated user ids
      STAFF_USERS       comma-separated usernames or display names
    The built-in defaults name the role or person this console was asked to admit; set any
-   of those variables to change it without touching this file. */
-const DEFAULT_STAFF_NAMES = ["astronomator"];
+   of those variables to change it without touching this file. */const DEFAULT_STAFF_NAMES = ["astronomator"];
 const PERM_ADMINISTRATOR = 0x8n;
 const PERM_MANAGE_GUILD = 0x20n;
 
@@ -1071,5 +1070,1097 @@ async function appendLog(env, entry) {
   } catch (error) { return false; }
 }
 
+async function recentLogs(env, limit) {
+  if (!env || !env.STATUS_LOG) return [];
+  try {
+    const list = await env.STATUS_LOG.list({ prefix: LOG_PREFIX, limit: 1000 });
+    const keys = list.objects.map((o) => o.key).sort().reverse().slice(0, Math.max(1, Math.min(200, limit)));
+    const out = [];
+    for (const key of keys) {
+      const object = await env.STATUS_LOG.get(key);
+      if (!object) continue;
+      try { out.push(await object.json()); } catch (error) { /* skip a broken entry, keep the rest */ }
+    }
+    return out;
+  } catch (error) { return []; }
+}
 
-[Showing lines 1-1073 of 2170. Use offset=1074 to continue.]
+/* The staff rules in force: the STAFF_* variables plus whatever the owner saved from the
+   dashboard. Both are read on every sign-in, so a change takes effect on next refresh. */
+async function accessRules(env) {
+  const stored = (await readJson(env, STAFF_KEY)) || {};
+  const join = (a, b) => a.concat(b).map((x) => String(x).toLowerCase()).filter(Boolean);
+  return {
+    roleIds: join(csv(env.STAFF_ROLE_IDS), stored.roleIds || []),
+    roleNames: join(csv(env.STAFF_ROLE_NAMES), stored.roleNames || []).concat(DEFAULT_STAFF_NAMES),
+    userIds: join(csv(env.STAFF_USER_IDS), stored.userIds || []),
+    users: join(csv(env.STAFF_USERS), stored.users || []).concat(DEFAULT_STAFF_NAMES),
+  };
+}
+
+/* A small, strict cleaner for anything the console accepts from a form. */
+function tidy(value, max) {
+  return String(value == null ? "" : value).replace(/<[^>]*>/g, "").trim().slice(0, max || 200);
+}
+
+/* Encrypt-free secret handling: a Bearer token box would be a liability, so the console
+   accepts only an address to probe and reports what it really got back. */
+async function probeUrl(url) {
+  if (!/^https?:\/\//i.test(url)) return { ok: false, reason: "not a web address" };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(url, { method: "GET", headers: { accept: "application/json, text/plain, */*" }, signal: controller.signal });
+    clearTimeout(timer);
+    return { ok: response.ok, status: response.status, at: Date.now() };
+  } catch (error) {
+    return { ok: false, reason: String((error && error.message) || error).slice(0, 120), at: Date.now() };
+  }
+}
+/* ------------------------- sign-in secrets, resolved -------------------------
+   The two secrets come from the app's own variables when they are set. If they are not,
+   the owner can paste the Discord client secret once on this site's setup page: it is
+   verified against Discord before being stored, and the session secret is generated here
+   rather than asked for. Variables always win, so setting them later simply takes over. */
+const SECRETS_KEY = "spinback-rce/settings/auth.json";
+let secretsCache = { at: 0, value: null };
+
+/* Whether the bot's service can swap an OAuth code. The secret only ever had to exist in
+   one place, and that place is the bot, so this is checked once a minute and cached. */
+const EXCHANGE_CACHE = { at: 0, value: null };
+
+async function botExchangeReady(env) {
+  const now = Date.now();
+  if (EXCHANGE_CACHE.value !== null && now - EXCHANGE_CACHE.at < 60000) return EXCHANGE_CACHE.value;
+  const base = botApiBase(env);
+  let ready = false;
+  if (base) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+      const response = await fetch(base + "/api/status", { headers: { accept: "application/json" }, signal: controller.signal });
+      clearTimeout(timer);
+      if (response.ok) {
+        const data = await response.json().catch(function () { return {}; });
+        ready = Boolean(data && data.oauthExchange === true);
+      }
+    } catch (error) { ready = false; }
+  }
+  EXCHANGE_CACHE.at = now;
+  EXCHANGE_CACHE.value = ready;
+  return ready;
+}
+
+async function botExchange(env, code, redirectUri) {
+  const base = botApiBase(env);
+  if (!base) return { error: "bot_not_configured" };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+    const response = await fetch(base + "/api/oauth/exchange", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ code: code, redirectUri: redirectUri }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = await response.json().catch(function () { return {}; });
+    if (data && data.access_token) return data;
+    return { error: (data && data.error) || ("bot_http_" + response.status) };
+  } catch (error) { return { error: "bot_unreachable" }; }
+}
+
+/* Sessions need a signing key even when nobody pasted one, so it is generated here and kept
+   in this app's own storage. An app variable always wins if it is set. */
+let sessionSecretCache = null;
+
+async function ensureSessionSecret(env) {
+  if (env.SESSION_SECRET) return env.SESSION_SECRET;
+  if (sessionSecretCache) return sessionSecretCache;
+  const stored = await readJson(env, SECRETS_KEY);
+  if (stored && stored.sessionSecret) { sessionSecretCache = stored.sessionSecret; return sessionSecretCache; }
+  const fresh = base64url(crypto.getRandomValues(new Uint8Array(48)));
+  const merged = Object.assign({}, stored || {});
+  merged.sessionSecret = fresh;
+  await writeJson(env, SECRETS_KEY, merged);
+  sessionSecretCache = fresh;
+  return fresh;
+}
+
+async function resolveSecrets(env) {
+  const now = Date.now();
+  if (secretsCache.value && now - secretsCache.at < 60000) return secretsCache.value;
+  let stored = null;
+  if (!env.DISCORD_CLIENT_SECRET || !env.SESSION_SECRET) stored = await readJson(env, SECRETS_KEY);
+  const botExchange = await botExchangeReady(env);
+  const value = {
+    clientId: env.DISCORD_CLIENT_ID || DEFAULT_CLIENT_ID,
+    clientSecret: env.DISCORD_CLIENT_SECRET || (stored && stored.clientSecret) || null,
+    sessionSecret: env.SESSION_SECRET || (stored && stored.sessionSecret) || sessionSecretCache || null,
+    botExchange: botExchange,
+    source: env.DISCORD_CLIENT_SECRET && env.SESSION_SECRET
+      ? "this app's variables"
+      : (stored && stored.clientSecret ? "this site's own storage" : (botExchange ? "the bot's service" : "nowhere yet")),
+  };
+  secretsCache = { at: now, value: value };
+  return value;
+}
+
+function forgetSecrets() { secretsCache = { at: 0, value: null }; }
+
+async function authReady(env) {
+  const sec = await resolveSecrets(env);
+  if (!sec.clientId || !env.DISCORD_GUILD_ID) return false;
+  if (sec.clientSecret) return Boolean(await ensureSessionSecret(env));
+  /* No secret here: the bot holds it, so delegating is enough. */
+  if (sec.botExchange) { await ensureSessionSecret(env); return true; }
+  return false;
+}
+
+/* Ask Discord whether the pasted secret belongs to this application. A wrong secret comes
+   back as invalid_client; a right one fails later with invalid_grant, because the code we
+   send is deliberately not real. Nothing is stored until Discord has confirmed it. */
+async function verifyClientSecret(env, clientSecret, request) {
+  const origin = new URL(request.url).origin;
+  try {
+    const body = new URLSearchParams();
+    body.set("grant_type", "authorization_code");
+    body.set("code", "spinback-setup-check");
+    body.set("redirect_uri", origin + "/auth/callback");
+    const response = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: "Basic " + base64url(new TextEncoder().encode(clientId(env) + ":" + clientSecret)),
+      },
+      body: body.toString(),
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (error) { data = {}; }
+    if (data.error === "invalid_client" || response.status === 401) {
+      return { ok: false, message: "Discord rejected that client secret (invalid_client). Copy it again from OAuth2 - Client Secret." };
+    }
+    return { ok: true, detail: "Discord answered " + response.status + (data.error ? " / " + data.error : "") };
+  } catch (error) {
+    return { ok: false, message: "Discord could not be reached from the worker: " + String((error && error.message) || error).slice(0, 120) };
+  }
+}
+
+async function authSetup(request, env) {
+  if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  if (env.DISCORD_CLIENT_SECRET && env.SESSION_SECRET) {
+    return json({ error: "already_configured", note: "this app's own variables already provide the sign-in secrets" }, 409);
+  }
+  const type = request.headers.get("content-type") || "";
+  let clientSecret = "";
+  let next = "/dashboard";
+  if (type.indexOf("application/json") !== -1) {
+    const body = await request.json().catch(function () { return {}; });
+    clientSecret = tidy(body.clientSecret, 200);
+    next = safeNext(tidy(body.next, 200) || next);
+  } else {
+    const form = await request.formData().catch(function () { return null; });
+    if (form) {
+      clientSecret = tidy(form.get("clientSecret"), 200);
+      next = safeNext(tidy(form.get("next"), 200) || next);
+    }
+  }
+  const wantsJson = type.indexOf("application/json") !== -1;
+  const fail = async function (message) {
+    if (wantsJson) return json({ error: "not_saved", message: message }, 400);
+    return needsSetup(env, request, message);
+  };
+  if (!clientSecret) return fail("Paste the client secret first.");
+  const verdict = await verifyClientSecret(env, clientSecret, request);
+  if (!verdict.ok) return fail(verdict.message);
+  const sessionSecret = base64url(crypto.getRandomValues(new Uint8Array(48)));
+  const saved = await writeJson(env, SECRETS_KEY, { clientSecret: clientSecret, sessionSecret: sessionSecret, at: Date.now(), verified: verdict.detail });
+  if (!saved) return fail("The value could not be stored. Try again.");
+  forgetSecrets();
+  await appendLog(env, { kind: "auth_setup", by: { id: "setup-page", name: "sign-in setup page" }, detail: "Discord client secret verified and stored; session secret generated" });
+  if (wantsJson) return json({ ok: true, verified: verdict.detail, sessionSecretGenerated: true }, 200);
+  return redirect("/auth/login?next=" + encodeURIComponent(next));
+}
+/* ------------------------------- owner API ----------------------------------
+   Read by the console pages. Everything below needs a signed-in staff session;
+   anything that changes stored data needs the owner, and every change writes a log
+   entry naming who made it. */
+async function ownerGuard(request, env, needOwner) {
+  if (!(await authReady(env))) return { error: json({ error: "not_configured" }, 503) };
+  const session = await readSession(request, env);
+  if (!session) return { error: json({ error: "unauthorized" }, 401) };
+  const level = session.level || "none";
+  if (level !== "owner" && level !== "staff") return { error: json({ error: "forbidden", level: level }, 403) };
+  if (needOwner && level !== "owner") return { error: json({ error: "owner_only", level: level }, 403) };
+  return { session: session, level: level };
+}
+
+async function botJson(env, path) {
+  const base = botApiBase(env);
+  if (!base) return null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+    const response = await fetch(base + path, { headers: { accept: "application/json" }, signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) { return null; }
+}
+
+/* What the setup page is allowed to know: whether you are signed in, which servers you can
+   manage, and for each of those whether Spinback is already in it. Read-only, and it only
+   ever describes servers the person asking can already see in their own Discord client. */
+/* What the bot reads, with the shared token, so the panels actually take effect. It holds
+   the RCON passwords, so it stays shut until BOT_SETTINGS_TOKEN is set on both sides. */
+async function botSettings(request, env) {
+  const expected = String(env.BOT_SETTINGS_TOKEN || "").trim();
+  if (!expected) {
+    return json({ ok: false, reason: "no-token", detail: "Set BOT_SETTINGS_TOKEN on the website and the same value on the bot." }, 503);
+  }
+  const given = String(request.headers.get("x-settings-token") || "");
+  if (given !== expected) return json({ ok: false, reason: "bad-token" }, 403);
+  /* The bot's panels write the same sections the site's own assignment tools read. */
+  if (request.method === "POST") return botSettingsWrite(request, env);
+  /* RCON passwords are write-only for anything running in a browser. The bot asks for the
+     full copy on its own token (?full=1) because it is the only thing that speaks RCON. */
+  const wantsFull = new URL(request.url).searchParams.get("full") === "1";
+  const servers = await storedServers(env);
+  const storedLinks = (await readJson(env, LINKS_KEY)) || {};
+  return json({
+    ok: true,
+    readAt: Date.now(),
+    staffRoles: (await readJson(env, ROLES_KEY)) || null,
+    logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
+    kits: (await readJson(env, KITS_KEY)) || null,
+    /* Flat lists, because this is the shape the bot loads and writes back. */
+    links: Array.isArray(storedLinks.links) ? storedLinks.links : [],
+    pending: Array.isArray(storedLinks.pending) ? storedLinks.pending : [],
+    linkPanel: storedLinks.linkPanel || null,
+    staffRules: await accessRules(env),
+    servers: servers.servers.map(function (row) {
+      return {
+        id: row.id,
+        name: row.name,
+        host: row.host,
+        port: row.port,
+        hasPassword: Boolean(row.password),
+        password: wantsFull ? String(row.password || "") : "",
+      };
+    }),
+  }, 200);
+}
+
+async function setupStatus(request, env) {
+  const session = await readSession(request, env);
+  const known = await botGuilds(env);
+  const manageable = (session && Array.isArray(session.adminGuilds) ? session.adminGuilds : []).map(function (g) {
+    const inIt = known === null ? null : known.some(function (k) { return k.id === g.id; });
+    return {
+      id: g.id,
+      name: g.name,
+      owner: Boolean(g.owner),
+      access: g.access || (g.owner ? "owner" : "manage"),
+      icon: g.icon || null,
+      botPresent: inIt,
+      invite: inviteUrl(env, g.id),
+    };
+  });
+  return json({
+    signedIn: Boolean(session),
+    you: session ? { name: session.globalName || session.username, level: session.level } : null,
+    configuredGuildId: String(env.DISCORD_GUILD_ID || ""),
+    botReporting: known !== null,
+    botGuildCount: known === null ? null : known.length,
+    manageable: manageable,
+    invite: inviteUrl(env),
+  }, 200);
+}
+
+/* Named staff roles, the log channels, and the RCON connections a server owner keeps.
+   These live in R2 beside the other settings, and one endpoint hands them to the bot when
+   it asks with the shared token. */
+const ROLES_KEY = "spinback-rce/settings/roles.json";
+const LOGCHANNELS_KEY = "spinback-rce/settings/logchannels.json";
+const SERVERS_KEY = "spinback-rce/settings/servers.json";
+const KITS_KEY = "spinback-rce/settings/kits.json";
+const LINKS_KEY = "spinback-rce/settings/links.json";
+
+/* What the bot's own panels collect. Sections it does not send are left alone, and servers
+   are merged by id rather than replaced, so a save can never quietly drop a server that was
+   already set up here. */
+async function botSettingsWrite(request, env) {
+  let body = null;
+  try { body = await request.json(); } catch (error) { return json({ ok: false, reason: "bad-json" }, 400); }
+  if (!body || typeof body !== "object") return json({ ok: false, reason: "bad-body" }, 400);
+  const wrote = [];
+  if (body.staffRoles && typeof body.staffRoles === "object") {
+    const current = (await readJson(env, ROLES_KEY)) || {};    if (await writeJson(env, ROLES_KEY, Object.assign({}, current, body.staffRoles))) wrote.push("staffRoles");
+  }
+  if (body.logChannels && typeof body.logChannels === "object") {
+    const current = (await readJson(env, LOGCHANNELS_KEY)) || {};
+    if (await writeJson(env, LOGCHANNELS_KEY, Object.assign({}, current, body.logChannels))) wrote.push("logChannels");
+  }
+  if (Array.isArray(body.servers)) {
+    const held = (await storedServers(env)).servers.slice();
+    body.servers.forEach(function (row) {
+      if (!row || typeof row !== "object") return;
+      const id = row.id ? String(row.id) : "";
+      if (id && row.remove === true) {
+        const gone = held.findIndex(function (x) { return x.id === id; });
+        if (gone > -1) held.splice(gone, 1);
+        return;
+      }
+      /* A server sent without an id is new: the site issues the id so the same row can be
+         edited later instead of being added again on every save. */
+      const newId = id || ("web-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7));
+      const at = held.findIndex(function (x) { return x.id === newId; });
+      const before = at > -1 ? held[at] : null;
+      const typed = String(row.password || "");
+      const clean = {
+        id: newId,
+        name: String(row.name || "server").slice(0, 60),
+        host: String(row.host || ""),
+        port: Number(row.port),
+        /* Blank means "leave the saved password alone", so a form can never wipe a
+           working RCON connection by saving an untouched field. */
+        password: typed || (before ? String(before.password || "") : ""),
+      };
+      if (at > -1) held[at] = clean; else held.push(clean);
+    });
+    if (await writeJson(env, SERVERS_KEY, { servers: held, updatedAt: Date.now() })) wrote.push("servers");
+  }
+  /* Player links: the Discord account to gamertag pairs everything player-facing uses. */
+  if (Array.isArray(body.links) || Array.isArray(body.pending) || body.linkPanel) {
+    const current = (await readJson(env, LINKS_KEY)) || {};
+    const next = Object.assign({}, current);
+    if (Array.isArray(body.links)) next.links = body.links;
+    if (Array.isArray(body.pending)) next.pending = body.pending;
+    if (body.linkPanel && typeof body.linkPanel === "object") next.linkPanel = body.linkPanel;
+    next.updatedAt = Date.now();
+    if (await writeJson(env, LINKS_KEY, next)) wrote.push("links");
+  }
+  if (body.kits && typeof body.kits === "object") {
+    const current = (await readJson(env, KITS_KEY)) || {};
+    if (await writeJson(env, KITS_KEY, Object.assign({}, current, body.kits, { updatedAt: Date.now() }))) wrote.push("kits");
+  }
+  /* The saved servers are handed back (without passwords) so a form can pick up the ids
+     the site just issued instead of guessing them. */
+  const after = (await storedServers(env)).servers.map(function (row) {
+    return { id: row.id, name: row.name, host: row.host, port: row.port, hasPassword: Boolean(row.password) };
+  });
+  return json({ ok: true, wrote: wrote, servers: after, at: Date.now() }, 200);
+}
+
+const ROLE_SLOTS = [
+  ["owner", "Owner role", true],
+  ["coOwner", "Co-Owner role", false],
+  ["headAdmin", "Head Admin role", false],
+  ["admin", "Admin role", false],
+  ["moderator", "Moderator role", false],
+  ["linked", "Linked role", true],
+];
+const LOG_SLOTS = [
+  ["server", "Server log"],
+  ["console", "Console log"],
+  ["command", "Command log"],
+  ["rcon", "RCON command usage"],
+  ["linking", "Linking log"],
+  ["killfeed", "Killfeed log"],
+  ["eventfeed", "EventFeed log"],
+  ["emoteKits", "Emote Kits log"],
+  ["admin", "Admin log"],
+  ["zorp", "Zorp log"],
+  ["teleport", "Teleport log"],
+  ["clan", "Clan log"],
+  ["catchARide", "Catch-A-Ride log"],
+  ["joinLeave", "Join/Leave log"],
+  ["errors", "Error log"],
+];
+const MAX_SERVERS = 3;
+
+function isSnowflake(value) {
+  return /^\d{5,25}$/.test(String(value || "").trim());
+}
+
+async function storedServers(env) {
+  const stored = await readJson(env, SERVERS_KEY);
+  return { servers: (stored && Array.isArray(stored.servers)) ? stored.servers : [] };
+}
+
+/* A connection as the dashboard may see it: never the password itself, only whether one is held. */
+function publicServer(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    host: row.host,
+    port: row.port,
+    passwordSet: Boolean(row.password),
+    addedAt: row.addedAt || null,
+    lastTest: row.lastTest || null,
+  };
+}
+
+async function ownerApi(request, env) {
+
+  const url = new URL(request.url);
+  const route = url.pathname.replace("/api/owner/", "");
+  const method = request.method === "HEAD" ? "GET" : request.method;
+  const mutating = method !== "GET";
+  const guard = await ownerGuard(request, env, mutating);
+  if (guard.error) return guard.error;
+  const session = guard.session;
+  const actor = { id: session.userId, name: session.globalName || session.username };
+
+  if (route === "overview" && method === "GET") {
+    const results = await Promise.all([
+      botJson(env, "/api/status"),
+      botJson(env, "/api/guild"),
+      readJson(env, SETTINGS_KEY),
+      accessRules(env),
+    ]);
+    const guild = results[1];
+    return json({
+      you: { id: session.userId, name: session.globalName || session.username, level: guard.level, roles: session.roleNames || [], roleIds: session.roleIds || [] },
+      bot: results[0] || null,
+      guild: (guild && guild.guild) || null,
+      server: results[2] || null,
+      staffRules: results[3],
+      canEdit: guard.level === "owner",
+    }, 200);
+  }
+
+  if (route === "logs" && method === "GET") {
+    const entries = await recentLogs(env, Number(url.searchParams.get("limit") || 40));
+    return json({ entries: entries, count: entries.length }, 200);
+  }
+
+  if (route === "staff" && method === "GET") {
+    const stored = (await readJson(env, STAFF_KEY)) || {};
+    return json({
+      saved: { roleIds: stored.roleIds || [], roleNames: stored.roleNames || [], userIds: stored.userIds || [], users: stored.users || [] },
+      fromEnv: { roleIds: csv(env.STAFF_ROLE_IDS), roleNames: csv(env.STAFF_ROLE_NAMES), userIds: csv(env.STAFF_USER_IDS), users: csv(env.STAFF_USERS) },
+      builtIn: DEFAULT_STAFF_NAMES,
+    }, 200);
+  }
+
+  if (route === "staff" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const kinds = ["roleIds", "roleNames", "userIds", "users"];
+    const kind = kinds.indexOf(String(body.kind || "")) !== -1 ? String(body.kind) : null;
+    const value = tidy(body.value, 120);
+    if (!kind || !value) return json({ error: "bad_request", message: "send kind and value" }, 400);
+    const stored = (await readJson(env, STAFF_KEY)) || {};
+    const list = Array.isArray(stored[kind]) ? stored[kind] : [];
+    const lower = value.toLowerCase();
+    if (list.map(function (x) { return String(x).toLowerCase(); }).indexOf(lower) === -1) list.push(value);
+    stored[kind] = list;
+    await writeJson(env, STAFF_KEY, stored);
+    await appendLog(env, { kind: "staff_add", by: actor, detail: kind + ": " + value });
+    return json({ ok: true, saved: stored }, 200);
+  }
+
+  if (route === "staff" && method === "DELETE") {
+    const body = await request.json().catch(function () { return {}; });
+    const kind = String(body.kind || "");
+    const value = tidy(body.value, 120).toLowerCase();
+    const stored = (await readJson(env, STAFF_KEY)) || {};
+    if (!Array.isArray(stored[kind])) return json({ error: "bad_request" }, 400);
+    stored[kind] = stored[kind].filter(function (x) { return String(x).toLowerCase() !== value; });
+    await writeJson(env, STAFF_KEY, stored);
+    await appendLog(env, { kind: "staff_remove", by: actor, detail: kind + ": " + value });
+    return json({ ok: true, saved: stored }, 200);
+  }
+
+  if (route === "server" && method === "GET") {
+    const known = await botGuilds(env);
+    const configured = String(env.DISCORD_GUILD_ID || "");
+    return json({
+      settings: (await readJson(env, SETTINGS_KEY)) || null,
+      /* Server settings mean nothing while the bot is not in the server, so this tells the
+         panel the truth about that and how to fix it. null = could not ask, not "absent". */
+      botInGuild: known === null ? null : known.some(function (g) { return g.id === configured; }),
+      botReporting: known !== null,
+      guildId: configured,
+      invite: inviteUrl(env, configured),
+    }, 200);
+  }
+
+  if (route === "server" && method === "POST") {
+    /* Nothing can be set up in a server the bot is not in: the settings would save and do
+       nothing. Refused outright, with the invite, rather than stored and forgotten. */
+    const knownNow = await botGuilds(env);
+    const configuredNow = String(env.DISCORD_GUILD_ID || "");
+    if (knownNow !== null && !knownNow.some(function (g) { return g.id === configuredNow; })) {
+      return json({
+        error: "bot_missing",
+        message: "Spinback is not in that server yet, so there is nothing to set up.",
+        invite: inviteUrl(env, configuredNow),
+      }, 409);
+    }
+    const body = await request.json().catch(function () { return {}; });
+    const previous = (await readJson(env, SETTINGS_KEY)) || {};
+    const settings = {
+      name: tidy(body.name, 80),
+      platform: tidy(body.platform, 30),
+      region: tidy(body.region, 40),
+      rate: tidy(body.rate, 20),
+      wipe: tidy(body.wipe, 120),
+      connect: tidy(body.connect, 120),
+      joinUrl: tidy(body.joinUrl, 300),
+      statusUrl: tidy(body.statusUrl, 300),
+      notes: tidy(body.notes, 600),
+      updatedAt: Date.now(),
+      updatedBy: actor,
+    };
+    if (settings.statusUrl) settings.probe = await probeUrl(settings.statusUrl);
+    await writeJson(env, SETTINGS_KEY, settings);
+    const skip = ["updatedAt", "updatedBy", "probe"];
+    const changed = Object.keys(settings).filter(function (k) {
+      return skip.indexOf(k) === -1 && String(settings[k]) !== String(previous[k] || "");
+    });
+    await appendLog(env, { kind: "server_settings", by: actor, detail: changed.length ? "changed " + changed.join(", ") : "saved with no changes", probe: settings.probe || null });
+    return json({ ok: true, settings: settings }, 200);
+  }
+
+  if (route === "probe" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const target = tidy(body.url, 300);
+    const result = await probeUrl(target);
+    await appendLog(env, { kind: "probe", by: actor, detail: target + " -> " + (result.ok ? "reachable (" + result.status + ")" : "not reachable") });
+    return json({ ok: true, result: result }, 200);
+  }
+
+  /* ---------------------------------------------------------------- roles --- */
+  if (route === "roles" && method === "GET") {
+    const saved = (await readJson(env, ROLES_KEY)) || {};
+    return json({
+      slots: ROLE_SLOTS.map(function (slot) {
+        return { key: slot[0], label: slot[1], required: slot[2], roleId: saved[slot[0]] || "", savedAt: saved.updatedAt || null };
+      }),
+      canEdit: guard.level === "owner",
+      note: "Saved here immediately. The bot applies them once it can read these settings - it asks the website for them when BOT_SETTINGS_TOKEN is set on both sides.",
+    }, 200);
+  }
+
+  if (route === "roles" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const next = { updatedAt: Date.now(), updatedBy: actor };
+    const cleared = [];
+    ROLE_SLOTS.forEach(function (slot) {
+      const value = tidy(body[slot[0]], 25);
+      if (value && !isSnowflake(value)) cleared.push(slot[1] + " was not a Discord id, so it was left out");
+      else next[slot[0]] = isSnowflake(value) ? value : "";
+    });
+    const missing = ROLE_SLOTS.filter(function (slot) { return slot[2] && !next[slot[0]]; }).map(function (slot) { return slot[1]; });
+    await writeJson(env, ROLES_KEY, next);
+    await appendLog(env, { kind: "staff_roles", by: actor, detail: "saved " + ROLE_SLOTS.filter(function (s) { return next[s[0]]; }).length + " of " + ROLE_SLOTS.length + " role slots" + (missing.length ? " (still empty: " + missing.join(", ") + ")" : "") });
+    return json({ ok: true, saved: next, missing: missing, rejected: cleared }, 200);
+  }
+
+  /* --------------------------------------------------------- log channels --- */
+  if (route === "logchannels" && method === "GET") {
+    const saved = (await readJson(env, LOGCHANNELS_KEY)) || {};
+    const set = LOG_SLOTS.filter(function (slot) { return isSnowflake(saved[slot[0]]); }).length;
+    return json({
+      slots: LOG_SLOTS.map(function (slot) {
+        return { key: slot[0], label: slot[1], channelId: saved[slot[0]] || "" };
+      }),
+      set: set,
+      total: LOG_SLOTS.length,
+      canEdit: guard.level === "owner",
+      note: "Leave a box empty to switch that log off. A log with no channel is simply not sent.",
+    }, 200);
+  }
+
+  if (route === "logchannels" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const next = { updatedAt: Date.now(), updatedBy: actor };
+    const rejected = [];
+    LOG_SLOTS.forEach(function (slot) {
+      const value = tidy(body[slot[0]], 25);
+      if (value && !isSnowflake(value)) rejected.push(slot[1]);
+      else next[slot[0]] = isSnowflake(value) ? value : "";
+    });
+    await writeJson(env, LOGCHANNELS_KEY, next);
+    await appendLog(env, { kind: "log_channels", by: actor, detail: "saved " + LOG_SLOTS.filter(function (s) { return next[s[0]]; }).length + " of " + LOG_SLOTS.length + " log channels" });
+    return json({ ok: true, saved: next, rejected: rejected }, 200);
+  }
+
+  /* ------------------------------------------------------ rust connections --- */
+  if (route === "servers" && method === "GET") {
+    const held = await storedServers(env);
+    return json({
+      servers: held.servers.map(publicServer),
+      max: MAX_SERVERS,
+      canEdit: guard.level === "owner",
+      note: "RCON is the console Rust servers speak when rcon.web is 0. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check says so instead of guessing.",
+    }, 200);
+  }
+
+  if (route === "servers" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const held = await storedServers(env);
+    const name = tidy(body.name, 60);
+    const host = tidy(body.host, 120).toLowerCase();
+    const port = Number(body.port);
+    const password = tidy(body.password, 200);
+    if (!name) return json({ error: "name_required", message: "Give the connection a name you will recognise." }, 400);
+    if (!/^[a-z0-9][a-z0-9.-]*$/.test(host)) return json({ error: "host_invalid", message: "That host does not look like an address the bot could reach." }, 400);
+    if (!(port >= 1 && port <= 65535)) return json({ error: "port_invalid", message: "The RCON port has to be between 1 and 65535." }, 400);
+    if (!password) return json({ error: "password_required", message: "RCON needs the password your server was started with." }, 400);
+    if (held.servers.length >= MAX_SERVERS) return json({ error: "limit", message: "Three connections is the limit. Remove one first." }, 409);
+    const row = { id: "srv_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), name: name, host: host, port: port, password: password, addedAt: Date.now(), addedBy: actor, lastTest: null };
+    const next = held.servers.concat([row]);
+    await writeJson(env, SERVERS_KEY, { servers: next, updatedAt: Date.now() });
+    await appendLog(env, { kind: "rcon_server", by: actor, detail: "added " + name + " (" + host + ":" + port + ")" });
+    return json({ ok: true, server: publicServer(row), servers: next.map(publicServer) }, 200);
+  }
+
+  if (route === "servers" && method === "DELETE") {
+    const id = tidy(url.searchParams.get("id"), 40);
+    const held = await storedServers(env);
+    const found = held.servers.filter(function (s) { return s.id === id; })[0];
+    if (!found) return json({ error: "not_found" }, 404);
+    const next = held.servers.filter(function (s) { return s.id !== id; });
+    await writeJson(env, SERVERS_KEY, { servers: next, updatedAt: Date.now() });
+    await appendLog(env, { kind: "rcon_server", by: actor, detail: "removed " + found.name });
+    return json({ ok: true, servers: next.map(publicServer) }, 200);
+  }
+
+  /* Ask the server, over RCON, whether it is there. The password stays on this side of the
+     request: the browser only ever names the connection. */
+  if (route === "rcon-test" && method === "POST") {
+    const body = await request.json().catch(function () { return {}; });
+    const held = await storedServers(env);
+    const row = held.servers.filter(function (s) { return s.id === tidy(body.id, 40); })[0];
+    if (!row) return json({ error: "not_found", message: "That connection is not saved." }, 404);
+    const command = ["serverinfo", "playerlist", "status", "gettime"].indexOf(tidy(body.command, 20)) > -1 ? tidy(body.command, 20) : "serverinfo";
+    let answer = null;
+    try {
+      const response = await fetch(botApiBase(env) + "/api/rcon/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ host: row.host, port: row.port, password: row.password, command: command }),
+      });
+      answer = await response.json();
+    } catch (error) {
+      answer = { ok: false, reason: "bot-unreachable", detail: "The website could not reach the bot to ask it." };
+    }
+    const record = { at: Date.now(), ok: answer && answer.ok === true, reason: (answer && answer.reason) || "unknown", command: command, ms: (answer && answer.ms) || null };
+    row.lastTest = record;
+    await writeJson(env, SERVERS_KEY, { servers: held.servers, updatedAt: Date.now() });
+    await appendLog(env, { kind: "rcon_test", by: actor, detail: row.name + ": " + (record.ok ? "answered " + command + " in " + record.ms + " ms" : "no answer (" + record.reason + ")") });
+    return json({ ok: true, result: answer, record: record }, 200);
+  }
+
+  return json({ error: "not_found", route: route }, 404);
+}
+/* ---------- the owner-only dashboard ---------- */
+
+const CONSOLE_PAGE = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Owner console - Spinback RCE</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Chakra+Petch:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/ui-extras.css">
+<link rel="stylesheet" href="/dashboard/console.css">
+<link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+</head>
+<body class="sbc">
+<div class="sbc-shell">
+
+  <aside class="sbc-rail">
+    <div class="sbc-brand">
+      <img src="/media/spinback-icon.svg" alt="">
+      <span><b>Spinback RCE</b><span>Owner console</span></span>
+    </div>
+    <div class="sbc-who" id="sbc-who">Signing in&hellip;</div>
+    <nav class="sbc-nav" id="sbc-nav">
+      <div class="sbc-group">Server</div>
+      <a href="#overview" data-panel="overview"><i>&#9632;</i> Overview</a>
+      <a href="#server" data-panel="server"><i>&#9723;</i> Rust server</a>
+      <a href="#staff" data-panel="staff"><i>&#9823;</i> Staff roles</a>
+      <a href="#channels" data-panel="channels"><i>&#9993;</i> Log channels</a>
+      <a href="#rcon" data-panel="rcon"><i>&#8644;</i> Rust connections</a>
+      <a href="#roles" data-panel="roles"><i>&#9670;</i> Roles &amp; access</a>
+      <a href="#logs" data-panel="logs"><i>&#9776;</i> Logs</a>
+      <div class="sbc-group">Tools</div>
+      <a href="/dashboard/kitbuilder.html"><i>&#9775;</i> Kit Studio</a>
+      <a href="/status.html"><i>&#9679;</i> Status page</a>
+      <a href="/"><i>&#8962;</i> Public site</a>
+    </nav>
+    <a class="sbc-signout" href="/auth/login?next=/dashboard">Sign in</a>
+      <a class="sbc-signout" href="/auth/logout">Sign out</a>
+  </aside>
+
+  <main class="sbc-main">
+
+    <section id="panel-overview" class="sbc-panel">
+      <div class="sbc-head"><h1 id="ov-title">Overview</h1><span id="ov-pill" class="sbc-pill">loading</span></div>
+      <p class="sbc-sub" id="ov-sub">Live state of the bot, straight from its own status endpoint.</p>
+      <div class="sbc-grid" id="ov-grid"></div>
+      <div class="sbc-scroll" style="margin-top:16px"><table class="sbc-table" id="ov-table"><tbody></tbody></table></div>
+    </section>
+
+    <section id="panel-server" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Rust server</h1></div>
+      <p class="sbc-sub">What you enter here is what the console and the public pages show. It is stored in this app's own storage, never invented.</p>
+      <form id="server-form" class="sbc-form">
+        <div class="sbc-field"><label for="f-name">Server name</label><input id="f-name" maxlength="80" placeholder="e.g. the name players see in the server browser"></div>
+        <div class="sbc-field"><label for="f-platform">Platform</label><input id="f-platform" maxlength="30" placeholder="Console Edition"></div>
+        <div class="sbc-field"><label for="f-region">Region</label><input id="f-region" maxlength="40" placeholder="e.g. EU"></div>
+        <div class="sbc-field"><label for="f-rate">Rate</label><input id="f-rate" maxlength="20" placeholder="e.g. 5x"></div>
+        <div class="sbc-field"><label for="f-wipe">Wipe schedule</label><input id="f-wipe" maxlength="120" placeholder="e.g. first Thursday, monthly"></div>
+        <div class="sbc-field"><label for="f-connect">How to join</label><input id="f-connect" maxlength="120" placeholder="e.g. search the name above in-game"></div>
+        <div class="sbc-field"><label for="f-join">Join / invite link</label><input id="f-join" maxlength="300" placeholder="https://"></div>
+        <div class="sbc-field"><label for="f-status">Host status URL</label><input id="f-status" maxlength="300" placeholder="https:// (optional)"></div>
+        <div class="sbc-field wide"><label for="f-notes">Notes</label><textarea id="f-notes" maxlength="600" placeholder="Anything else players should know."></textarea></div>
+      </form>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="server-save" type="button">Save</button>
+        <button class="sbc-btn" id="server-probe" type="button">Check status URL</button>
+        <span class="sbc-msg" id="server-msg"></span>
+      </div>
+      <div class="sbc-gate" id="server-gate"></div>
+      <p class="sbc-note sbc-sub" style="margin-top:14px">Console Edition servers publish no query endpoint, so there is no live player count unless your host gives you a status URL. The button above only reports what that address really answered.</p>
+      <div class="sbc-scroll"><table class="sbc-table" id="server-meta"><tbody></tbody></table></div>
+    </section>
+
+    <section id="panel-roles" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Roles &amp; access</h1><span id="roles-pill" class="sbc-pill"></span></div>
+      <p class="sbc-sub">Who gets into this dashboard. The owner is the Discord server owner plus anyone listed by user id; staff are the people below, plus anyone with Administrator or Manage Server.</p>
+      <div class="sbc-grid" id="roles-you"></div>
+      <h2 style="margin-top:22px">Staff rules in force</h2>
+      <p class="note" id="roles-source"></p>
+      <div class="sbc-scroll"><table class="sbc-table" id="roles-rules"><tbody></tbody></table></div>
+      <h2 style="margin-top:22px">Add someone</h2>
+      <p class="note" id="roles-addnote">Saved rules take effect on the next sign-in or refresh. Entries that came from the app's settings are shown for reference and cannot be removed here.</p>
+      <div class="sbc-form">
+        <div class="sbc-field"><label for="r-kind">Rule</label>
+        <select id="r-kind"><option value="roleIds">Role id</option><option value="roleNames">Role name</option><option value="userIds">User id</option><option value="users">Username</option></select></div>
+        <div class="sbc-field"><label for="r-value">Value</label><input id="r-value" maxlength="120" placeholder="id or exact name"></div>
+      </div>
+      <div class="sbc-row"><button class="sbc-btn sbc-btn-go" id="roles-add" type="button">Add rule</button><span class="sbc-msg" id="roles-msg"></span></div>
+      <h2 style="margin-top:22px">Roles on the Discord server</h2>
+      <p class="note" id="roles-guildnote"></p>
+      <div class="sbc-scroll"><table class="sbc-table" id="roles-guild"><tbody></tbody></table></div>
+    </section>
+
+    <section id="panel-staff" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Staff roles</h1><span id="staff-pill" class="sbc-pill"></span></div>
+      <p class="sbc-sub">Which Discord role counts as each staff rank. Paste a role id - with Developer Mode on, right-click a role in Discord and choose Copy Role ID. Required slots are the two the bot leans on hardest: the owner rank and the rank given to linked players.</p>
+      <div class="sbc-grid" id="staff-slots"></div>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="staff-save" type="button">Save roles</button>
+        <span class="sbc-msg" id="staff-msg"></span>
+      </div>
+      <p class="sbc-note" id="staff-note"></p>
+      <h2 style="margin-top:22px">Where does the bot get these?</h2>
+      <p class="note">The dashboard saves them straight away. The bot reads them from the website once <span class="mono">BOT_SETTINGS_TOKEN</span> is set to the same value on the website and on the bot - until then they are stored, not applied, and this page will not pretend otherwise.</p>
+    </section>
+
+    <section id="panel-channels" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Log channels</h1><span id="channels-pill" class="sbc-pill"></span></div>
+      <p class="sbc-sub">One Discord text channel per kind of log. Leave a box empty and that log is simply never sent - nothing is posted to a channel you did not name.</p>
+      <div class="sbc-grid" id="channels-slots"></div>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="channels-save" type="button">Save channels</button>
+        <span class="sbc-msg" id="channels-msg"></span>
+      </div>
+      <p class="sbc-note" id="channels-note"></p>
+    </section>
+
+    <section id="panel-rcon" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Rust server connections</h1><span class="sbc-pill" id="rcon-count">0/3 connected</span></div>
+      <p class="sbc-sub">Connect a Rust server over RCON and the bot can ask it things. RCON is what a Rust server speaks when it is started with <span class="mono">rcon.web 0</span>. Rust Console Edition servers publish no RCON at all, so a Console server cannot be linked this way - the check tells you exactly what happened rather than pretending.</p>
+      <div id="rcon-list" class="sbc-conns"></div>
+      <h2 style="margin-top:22px">Add a connection</h2>
+      <form class="sbc-grid" id="rcon-form" autocomplete="off">
+        <div class="sbc-field"><label for="rcon-name">Server name</label><input id="rcon-name" maxlength="60" placeholder="e.g. Main server"></div>
+        <div class="sbc-field"><label for="rcon-host">Server IP or host</label><input id="rcon-host" maxlength="120" placeholder="e.g. 203.0.113.10"></div>
+        <div class="sbc-field"><label for="rcon-port">RCON port</label><input id="rcon-port" maxlength="5" placeholder="28016"></div>
+        <div class="sbc-field"><label for="rcon-password">RCON password</label><input id="rcon-password" type="password" maxlength="200" placeholder="from server.cfg"></div>
+      </form>
+      <div class="sbc-row">
+        <button class="sbc-btn sbc-btn-go" id="rcon-add" type="button">Add server</button>
+        <span class="sbc-msg" id="rcon-msg"></span>
+      </div>
+      <p class="sbc-note" id="rcon-note"></p>
+      <p class="sbc-note sbc-sub">Checks send one harmless command - <span class="mono">serverinfo</span> - and nothing else. Passwords stay on the server side: the browser never receives one back.</p>
+    </section>
+
+    <section id="panel-logs" class="sbc-panel sbc-hidden">
+      <div class="sbc-head"><h1>Logs</h1><span class="sbc-pill" id="logs-count">0 events</span></div>
+      <p class="sbc-sub">One line per event that really happened, with who did it. Nothing here is generated on a schedule.</p>
+      <div class="sbc-row"><button class="sbc-btn" id="logs-refresh" type="button">Refresh</button><span class="sbc-msg" id="logs-msg"></span></div>
+      <div class="sbc-scroll"><table class="sbc-table" id="logs-table"><thead><tr><th>When</th><th>Event</th><th>Who</th><th>Detail</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+  </main>
+</div>
+<script src="/dashboard/console.js" defer></script>
+</body>
+</html>
+`;
+
+
+function avatarUrlSize(session, size) {
+  if (!session.avatar) return null;
+  const kind = session.avatar.startsWith("a_") ? "gif" : "png";
+  return "https://cdn.discordapp.com/avatars/" + session.userId + "/" + session.avatar + "." + kind + "?size=" + (size || 128);
+}
+
+function avatarUrl(session) {
+  if (!session.avatar) return null;
+  const kind = session.avatar.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/avatars/${session.userId}/${session.avatar}.${kind}?size=128`;
+}
+
+async function dashboard(request, env) {
+  if (!(await authReady(env))) return needsSetup(env, request);
+
+  const session = await readSession(request, env);
+  /* The shell is served without a session on purpose: the session cannot always live in a
+     cookie on this host. It carries no data of its own - every panel fetches, and every
+     fetch is checked. */
+  /* Staff and the owner only. A signed-in non-staff account is told why. */
+  if (session.level !== "owner" && session.level !== "staff") return await notStaff(session, env);
+  /* The console is served from here rather than as a static file: Cloudflare hands an
+     existing asset straight to the visitor without waking the Worker, so a file on disk
+     would be readable by anybody even though every endpoint behind it is gated. */
+    return html('<p>This dashboard has been removed. Kit Studio is at /dashboard/kitbuilder.html</p>');
+
+  /* Live numbers straight from the bot API (server-side, so no CORS involved). */
+  let stats = null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const response = await fetch(API_BASE + "/api/status", { headers: { accept: "application/json" }, signal: controller.signal });
+    clearTimeout(timer);
+    if (response.ok) stats = (await response.json()).stats || null;
+  } catch (error) {
+    stats = null;
+  }
+
+  const avatar = avatarUrl(session);
+  const statCard = (value, label) =>
+    `<div class="status-card"><div class="big">${escapeHtml(value)}</div><div class="lbl">${escapeHtml(label)}</div></div>`;
+
+  return html(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Dashboard — Spinback RCE</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <nav>
+        <a href="/" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback">Spinback<span class="accent">RCE</span></a>
+        <div class="nav-links">
+          <a href="/">Website</a>
+          <a href="/auth/logout" class="btn ghost sm">Sign out</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <section class="status-hero">
+    <div class="wrap">
+      <div class="status-dot">
+        <span class="dot ${stats && stats.servers > 0 ? "on" : "unknown"}"></span>
+        <span>${stats && stats.servers > 0 ? "Bot online" : "Bot status unknown"}</span>
+      </div>
+      <h1 style="margin-top:18px">${escapeHtml(session.guildName)}</h1>
+      <p>Owner dashboard — this page is only ever served to the owner of that server.</p>
+    </div>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="wrap">
+      <div class="panel-box">
+        <div class="me-bar">
+          ${avatar ? `<img src="${avatar}" alt="">` : ""}
+          <div>
+            <div class="uname">${escapeHtml(session.globalName || session.username)}</div>
+            <div class="role">Server owner · ${escapeHtml(session.username)}</div>
+          </div>
+        </div>
+        <div class="status-cards">
+          ${statCard(stats ? stats.users : "—", "Linked players")}
+          ${statCard(stats ? stats.servers : "—", "Servers")}
+          ${statCard(stats ? stats.guilds : "—", "Guilds")}
+          ${statCard(stats && stats.uptime30d ? stats.uptime30d + "%" : "—", "30-day uptime")}
+        </div>
+        <p style="margin-top:12px">Signed in as a Discord account; the session cookie is signed by this site and expires after ${SESSION_DAYS} days.</p>
+      </div>
+
+      <div class="panel-box">
+        <h2 style="margin-bottom:10px">Coming from the bot</h2>
+        <p>`/dashboard` in Discord replies privately with a link straight to this page. The command is hidden from
+        everyone else in the server, and only the server owner can open what it links to.</p>
+      </div>
+    </div>
+  </section>
+</body>
+</html>`);
+}
+
+/* ---------- entry point ---------- */
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    /* Answers "did my settings land?" with booleans only - never a secret value. Handy
+       right after setting values on the Worker, and the dashboard page can point at it. */
+    /* Everything under /media/ that the studio or the theme pulls from the operators site goes
+       through kitAsset, which validates the exact path shape before fetching anything. */
+    /* Studio data lives in our own project; if a copy is missing it is proxied from the
+       upstream site so the studio never breaks on a half-finished data move. */
+    if (url.pathname === "/data/entities.json" || url.pathname.startsWith("/data/presets/")) {
+      const local = await env.ASSETS.fetch(request);
+      /* A miss in the asset store comes back as the homepage, so a 200 only counts when the
+         body really is data. Otherwise a page of HTML would be handed back as JSON. */
+      const local_is_data = local.status === 200 && !/text\/html/i.test(local.headers.get("content-type") || "");
+      if (local_is_data) return withAssetHeaders(local, url.pathname);
+      const upstreamPath = url.pathname === "/data/entities.json"
+        ? "/media/entitys/entities.json"
+        : url.pathname.replace("/data/presets/", "/media/kitbuilder/presets/");
+      return kitAsset(new URL(KIT_ORIGIN + upstreamPath), ctx, env);
+    }
+
+    if (url.pathname === "/media/entitys/entities.json"
+      || url.pathname.startsWith("/media/kitbuilder/")
+      || url.pathname.startsWith("/media/spinback-")) {
+      return kitAsset(url, ctx, env);
+    }
+    if (url.pathname === "/api/config-check") {
+      /* The bot's /ping measures this endpoint, and until now it was the slowest thing on
+         the site: building it reads the sign-in log out of R2 (a list plus a dozen gets).
+         That half is the same for every caller, so it is built once and reused for 30
+         seconds. Only the cookie flags are added fresh, because those describe the request
+         that arrived. Served cacheable as well, so repeat probes are answered at the edge. */
+      const nowCheck = Date.now();
+      if (!configCheckCache.body || nowCheck - configCheckCache.at > 30000) {
+        const sec = await resolveSecrets(env);
+        configCheckCache = {
+          at: nowCheck,
+          body: {
+            app: "spinback-rce",
+            dashboardOpen: await authReady(env),
+            staffRoleIdsSet: Boolean(env.STAFF_ROLE_IDS),
+            staffRoleNamesSet: Boolean(env.STAFF_ROLE_NAMES),
+            staffUsersSet: Boolean(env.STAFF_USERS || env.STAFF_USER_IDS),
+            clientId: clientId(env),
+            guildIdSet: Boolean(env.DISCORD_GUILD_ID),
+            clientSecretSet: Boolean(sec.clientSecret),
+            sessionSecretSet: Boolean(sec.sessionSecret),
+            secretsSource: sec.source,
+            botExchangeAvailable: sec.botExchange,
+            signInLog: (await recentLogs(env, 12)).map(function (e) { return { t: e.t, kind: e.kind, detail: e.detail }; })
+              .filter(function (e) { return String(e.kind || "").indexOf("sign_in") === 0; }).slice(0, 6),
+            statusLogBound: Boolean(env.STATUS_LOG),
+            /* Names only - never values. This is the definitive answer to which variables the
+               running worker actually receives. */
+            envKeys: Object.keys(env).sort(),
+            builtAt: new Date(nowCheck).toISOString(),
+          },
+        };
+      }
+      const answer = Object.assign({}, configCheckCache.body, {
+        /* Whether this very request arrived carrying our cookies. Names and yes/no only. */
+        sawStateCookie: Boolean(cookies(request).spinback_oauth_state),
+        sawSessionCookie: Boolean(cookies(request)[SESSION_COOKIE]),
+        cookieHeaderCount: (request.headers.get("cookie") || "").split(";").filter(Boolean).length,
+      });
+      return new Response(JSON.stringify(answer), {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "public, max-age=30, s-maxage=120",
+          "access-control-allow-origin": "*",
+        },
+      });
+    }
+    if (url.pathname === "/api/history") return statusHistory(request, env);
+    if (url.pathname === "/api/setup") return authSetup(request, env);    if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
+    /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
+    if (url.pathname === "/api/setup-status") return setupStatus(request, env);
+    if (url.pathname === "/api/bot/settings") return botSettings(request, env);
+    if (url.pathname === "/api/roles") {
+      const roleSession = await readSession(request, env);
+      if (!roleSession) return json({ authenticated: false }, 200);
+      return json(await sessionRoles(request, env, roleSession), 200);
+    }
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
+
+    /* The dashboard is gone: /dashboard now sends you to the Kit Studio. */
+    if (url.pathname === "/dashboard") {
+      return Response.redirect(new URL("/dashboard/kitbuilder.html", url).toString(), 302);
+    }
+
+    const assetResponse = await env.ASSETS.fetch(request);
+
+    const method = request.method.toUpperCase();
+    const isPageRequest = (method === "GET" || method === "HEAD") &&
+      (request.headers.get("accept") || "").includes("text/html");
+
+    /* The asset store answers a missing file with the homepage instead of a 404. Only the two
+       addresses that really are the homepage may be answered with it: a stylesheet, script,
+       image or data file that is not there has to say so, or the browser quietly throws the
+       HTML away and the page is left with no styling or no data. */
+    const isHomepageFallback = (response, pathname) => response.status === 200 &&
+      (response.headers.get("content-type") || "").includes("text/html") &&
+      pathname !== "/" && pathname !== "/index.html";
+
+    /* The site's own 404 page, still answering 404. */
+    const notFound = async () => {
+      const fallback = await env.ASSETS.fetch(new URL("/404.html", request.url));
+      if (fallback.status === 404) {
+        return new Response("not found", {
+          status: 404,
+          headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
+        });
+      }
+      return new Response(method === "HEAD" ? null : await fallback.arrayBuffer(), {
+        status: 404,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "x-robots-tag": "noindex",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    };
+
+    if (!isHomepageFallback(assetResponse, url.pathname) && assetResponse.status !== 404) {
+      return withAssetHeaders(assetResponse, url.pathname);
+    }
+
+    if (isPageRequest) {
+      /* A page asked for without its extension - /status for /status.html - so links people
+         copy out of the address bar stay short. */
+      if (!HAS_EXTENSION.test(url.pathname)) {
+        const target = url.pathname === "/" ? "/index.html" : url.pathname.replace(/\/+$/, "") + ".html";
+        const pretty = await env.ASSETS.fetch(new URL(target, request.url));
+        if (pretty.status !== 404 && !isHomepageFallback(pretty, target)) return withAssetHeaders(pretty, target);
+      }
+      return await notFound();
+    }
+
+    /* Not a page request, so there is nothing to show a person: answer honestly. */
+    return await notFound();
+  },
+};
