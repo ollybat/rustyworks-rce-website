@@ -21,7 +21,7 @@ import handler from './interactions-worker.js';
 import net from 'node:net';
 import { createHash } from 'node:crypto';
 import {
-  COMMANDS, LOG_TYPES, ROLE_SLOTS, dispatchCommand, optionMap, customId, modalFields,
+  COMMANDS, LOG_TYPES, ROLE_SLOTS, STAFF_ROLE_RECIPES, dispatchCommand, optionMap, customId, modalFields,
   setupPanel, rolesModal, linkedRoleModal, logTypeMenu, channelMenu, serverModal, serverPicker,
   testAndSaveServer, kitsPanel, bindModal, bindList, bindRoleMenu, emoteGuide,
   helpHome, helpDetail, setupStatus, cooldownsPanel, serverSnapshot,
@@ -34,6 +34,7 @@ import {
   testPicker, setupRefresh, whoisPanel, whoisModal,
   setupRolePanel, setupRoleSlot, roleSlotResult, channelSetupPanel, logChannelBuilder,
   logChannelPlan, logChannelBuilt, serverStepPanel, setupSuggest, suggestApplied, setupDoctor,
+  runSetupPanel, roleBuildPanel, roleBuildResult,
   setupImportPanel, setupImportModal, parseServerText, setupImportResult, setupExport,
   setupResetPanel, setupResetModal, setupResetDone,
   kitCommandsPanel, kitCommandsModal, kitCommandsResult, kitsDoctor,
@@ -350,9 +351,13 @@ function hasAdminBypass(interaction) {
   } catch (error) { /* a string permission we cannot read falls through to the role check */ }
   return false;
 }
+/* Every slot except Linked: that one marks members who linked their game account, so it must
+   never hand out staff commands. */
+const STAFF_SLOT_KEYS = ROLE_SLOTS.filter(function (s) { return s[0] !== 'linked'; }).map(function (s) { return s[0]; });
+
 function isStaff(interaction) {
   if (hasAdminBypass(interaction)) return true;
-  const ids = ROLE_SLOTS.map(function (s) { return (settings.staffRoles || {})[s[0]]; }).filter(Boolean);
+  const ids = STAFF_SLOT_KEYS.map(function (slot) { return (settings.staffRoles || {})[slot]; }).filter(Boolean);
   if (!ids.length) return false;
   const held = memberRoleIds(interaction.member);
   return ids.some(function (id) { return held.indexOf(String(id)) > -1; });
@@ -445,13 +450,75 @@ function applyProposal(proposal) {
   return { roleLines: roleLines, channelLines: channelLines, roleMisses: roleMisses };
 }
 
-/* The only thing on this service that creates anything in the guild, and it only runs after a
-   person ticks the types and presses Create. Every channel is reported back one by one. */
+/* Everything the bot creates in the guild lives here. Nothing runs until an administrator
+   presses the button that says so, and every role and channel is reported back one by one. */
+
+/* The roles /setup run can make. Colours are cosmetic; the ids saved afterwards are what the
+   bot checks when it decides who may run staff commands. Nothing is granted here: a role that
+   only marks rank is exactly what these are, and Discord permissions stay as they are. */
+async function createStaffRoles() {
+  const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
+  if (!guild) return { created: [], reused: [], failed: ['the bot is not connected to this server right now'], wrote: { ok: false, detail: 'the guild is not available' } };
+  const created = [];
+  const reused = [];
+  const failed = [];
+  let me = null;
+  try { me = guild.members.me || await guild.members.fetchMe(); } catch (error) { me = null; }
+  const canManageRoles = !!(me && me.permissions && me.permissions.has(PermissionFlagsBits.ManageRoles));
+  for (const recipe of STAFF_ROLE_RECIPES) {
+    const slot = recipe[0], name = recipe[1], colour = recipe[2];
+    const already = guild.roles.cache.find(function (r) { return String(r.name).toLowerCase() === name.toLowerCase(); });
+    if (already) {
+      if (String(settings.staffRoles[slot] || '') !== String(already.id)) {
+        settings.staffRoles[slot] = String(already.id);
+        reused.push(name + ' -> <@&' + already.id + '> (a role with that name was already here, so this one was used)');
+      } else {
+        reused.push(name + ' -> <@&' + already.id + '> (already saved)');
+      }
+      continue;
+    }
+    if (!canManageRoles) { failed.push('**' + name + '**: the bot needs **Manage Roles** to make this one. Give it that permission, or pick a role that exists already.'); continue; }
+    try {
+      const role = await guild.roles.create({
+        name: name,
+        color: colour,
+        hoist: false,
+        mentionable: false,
+        permissions: [],
+        reason: 'Spinback RCE staff role, created by /setup run',
+      });
+      if (String(settings.staffRoles[slot] || '') !== String(role.id)) settings.staffRoles[slot] = String(role.id);
+      created.push(name + ' -> <@&' + role.id + '>');
+    } catch (error) {
+      failed.push('**' + name + '**: ' + String((error && error.message) || error).slice(0, 140));
+    }
+  }
+  const wrote = await persistSettings();
+  return { created: created, reused: reused, failed: failed, wrote: wrote };
+}
+
 async function createLogChannels(keys) {
   const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
-  if (!guild) return { created: [], failed: ['the bot is not connected to this server right now'], wrote: { ok: false, detail: 'the guild is not available' } };
+  if (!guild) return { created: [], reused: [], failed: ['the bot is not connected to this server right now'], wrote: { ok: false, detail: 'the guild is not available' } };
   const created = [];
+  const reused = [];
   const failed = [];
+  const staffIds = STAFF_SLOT_KEYS.map(function (slot) { return settings.staffRoles[slot]; }).filter(Boolean).map(String);
+  let me = null;
+  try { me = guild.members.me || await guild.members.fetchMe(); } catch (error) { me = null; }
+  const botId = (me && me.id) || (client.user && client.user.id);
+  const canManageChannels = !!(me && me.permissions && me.permissions.has(PermissionFlagsBits.ManageChannels));
+  /* @everyone loses View Channel, each saved staff role keeps it, and the bot keeps what it
+     needs to post an embed. A channel is only ever private in this way when the staff roles
+     exist, so a half-finished setup does not hide logs from the people who need them. */
+  function overwritesFor() {
+    const list = [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }];
+    staffIds.forEach(function (id) {
+      list.push({ id: id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+    });
+    if (botId) list.push({ id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] });
+    return list;
+  }
   let parentId = null;
   try {
     let category = guild.channels.cache.find(function (c) { return c.type === ChannelType.GuildCategory && String(c.name).toLowerCase() === 'spinback'; });
@@ -466,18 +533,31 @@ async function createLogChannels(keys) {
   for (const key of wanted) {
     const type = LOG_TYPES.filter(function (t) { return t[0] === key; })[0];
     const name = 'spinback-' + String(key).toLowerCase();
+    const label = type ? type[1] : key;
+    const already = guild.channels.cache.find(function (c) { return c.type === ChannelType.GuildText && String(c.name).toLowerCase() === name; });
+    if (already) {
+      try {
+        await already.permissionOverwrites.set(overwritesFor());
+        settings.logChannels[key] = already.id;
+        reused.push('#' + already.name + ' for ' + label + ' - already there, so its permissions were set rather than making a second one');
+      } catch (error) {
+        failed.push(name + ': it is already there but its permissions could not be set (' + String((error && error.message) || error).slice(0, 100) + ')');
+      }
+      continue;
+    }
+    if (!canManageChannels) { failed.push('**' + name + '**: the bot needs **Manage Channels** to make this one.'); continue; }
     try {
-      const options = { name: name, type: ChannelType.GuildText, topic: 'Spinback RCE ' + (type ? type[1] : key), reason: 'Spinback RCE log channel, requested by a server administrator' };
+      const options = { name: name, type: ChannelType.GuildText, topic: 'Spinback RCE ' + label, reason: 'Spinback RCE log channel, requested by a server administrator', permissionOverwrites: overwritesFor() };
       if (parentId) options.parent = parentId;
       const channel = await guild.channels.create(options);
       settings.logChannels[key] = channel.id;
-      created.push('#' + channel.name + ' for ' + (type ? type[1] : key));
+      created.push('#' + channel.name + ' for ' + label);
     } catch (error) {
       failed.push(name + ': ' + String((error && error.message) || error).slice(0, 140));
     }
   }
   const wrote = await persistSettings();
-  return { created: created, failed: failed, wrote: wrote };
+  return { created: created, reused: reused, failed: failed, staffIds: staffIds, wrote: wrote };
 }
 
 
@@ -507,6 +587,7 @@ function botCtx() {
     clearCooldowns: clearCooldowns,
     cooldownCount: cooldownCount,
     cooldownList: cooldownList,
+    target: function (host, port) { return parseRconTarget(host, port); },
     rconTest: function (o) { return rconRun(Object.assign({}, o, { allowAny: false })); },
     rconRun: function (o) { return rconRun(Object.assign({}, o, { allowAny: true })); },
   };
@@ -671,6 +752,14 @@ async function runButton(interaction) {
     return await interaction.showModal(kitSpawnModal(group, (settings.kits.authSpawn || {})[group] || ''));
   }
   /* ------------------------------------------------------------ setup -------- */
+  if (id === 'setup:run') return await answerPanel(interaction, runSetupPanel(ctx));
+  if (id === 'setup:run:roles') return await answerPanel(interaction, roleBuildPanel(ctx));
+  if (id === 'setup:run:roles:go') {
+    const made = await createStaffRoles();
+    log('setup: ' + made.created.length + ' staff role(s) created, ' + made.reused.length + ' reused, ' + made.failed.length + ' failed');
+    return await answerPanel(interaction, roleBuildResult(ctx, made));
+  }
+  if (id === 'setup:run:channels') return await answerPanel(interaction, logChannelBuilder());
   if (id === 'setup:roles') return await answerPanel(interaction, setupRolePanel(ctx));
   if (id === 'setup:roles:ids') return await interaction.showModal(rolesModal());
   if (id.indexOf('setup:slot:') === 0) return await answerPanel(interaction, setupRoleSlot(ctx, id.slice('setup:slot:'.length)));
@@ -683,7 +772,8 @@ async function runButton(interaction) {
     if (!keys.length) return await answerPanel(interaction, { embeds: [panelEmbed(0xfaa81a, 'Nothing was selected', 'Open Create channels for me again, tick the log types, then press Create.')], components: [panelRow([panelButton('setup:channels', 'Back to log channels', 2)])] });
     const result = await createLogChannels(keys);
     pendingBuild.delete(interaction.user.id);
-    return await answerPanel(interaction, logChannelBuilt(result.created, result.failed, result.wrote));
+    log('setup: ' + result.created.length + ' log channel(s) created, ' + result.reused.length + ' reused, ' + result.failed.length + ' failed');
+    return await answerPanel(interaction, logChannelBuilt(result.created, result.failed, result.wrote, result.reused, result.staffIds));
   }
   if (id === 'setup:server') return await interaction.showModal(serverModal(null));
   /* One saved server is tested straight away; several get a list; none gets the guidance. */
@@ -797,7 +887,7 @@ async function runSelect(interaction) {
   if (id === 'setup:channels:build:pick') {
     const keys = (interaction.values || []).slice(0, 10);
     pendingBuild.set(interaction.user.id, keys);
-    return await answerPanel(interaction, logChannelPlan(keys));
+    return await answerPanel(interaction, logChannelPlan(keys, ctx));
   }
   if (id.indexOf('setup:channel:') === 0) {
     const typeKey = id.slice('setup:channel:'.length);
@@ -1206,21 +1296,78 @@ function rconParse(buffer) {
 }
 
 /* Nothing on the private internet: that keeps this from being pointed at a local service. */
-function rconHostAllowed(host) {
-  const h = String(host || '').trim().toLowerCase();
-  if (!h || h.length > 200) return false;
-  if (h === 'localhost' || /\.local$/.test(h) || /\.internal$/.test(h)) return false;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-    const parts = h.split('.').map(Number);
-    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return false;
-    const a = parts[0], b = parts[1];
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    return true;
+/* What counts as a usable RCON address.
+
+   People paste this in every shape there is: 1.2.3.4:28015, [2606:4700::1]:28015, a
+   hostname, the same address the game client shows, or the port left in the box beside it.
+   All of those are read here, so the bot does not refuse an address that is perfectly fine
+   with a message about the public internet that has nothing to do with what was typed.
+   What is still refused is what this service genuinely cannot reach from a cloud host -
+   loopback, a private network, carrier-grade NAT, link-local and multicast - and each case
+   gets its own reason, so the panel can name the real problem instead of guessing. */
+function parseRconTarget(hostInput, portInput) {
+  let host = String(hostInput == null ? '' : hostInput).trim();
+  let portText = String(portInput == null ? '' : portInput).trim();
+  host = host.replace(/^[<"']+/, '').replace(/[>"']+$/, '').trim();
+  host = host.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').trim();
+  host = host.split('/')[0].split('?')[0].trim();
+  if (!host) return { ok: false, reason: 'no-host', detail: 'No server address was given.' };
+  if (host.length > 200) return { ok: false, reason: 'bad-host', detail: 'That address is far too long to be a server address.' };
+
+  let v6 = null;
+  const bracketed = host.match(/^\[([^\]]+)\](?::(\d{1,5}))?$/);
+  if (bracketed) {
+    v6 = bracketed[1];
+    if (bracketed[2] && !portText) portText = bracketed[2];
+  } else if ((host.match(/:/g) || []).length > 1) {
+    v6 = host;
+  } else if (host.indexOf(':') > -1) {
+    const cut = host.lastIndexOf(':');
+    const tail = host.slice(cut + 1);
+    if (/^\d{1,5}$/.test(tail)) { if (!portText) portText = tail; host = host.slice(0, cut).trim(); }
+    else return { ok: false, reason: 'bad-host', detail: 'There is a colon in that address but the part after it is not a port number.' };
   }
-  return /^[a-z0-9][a-z0-9.-]*$/.test(h);
+  if (!host && !v6) return { ok: false, reason: 'no-host', detail: 'No server address was given.' };
+
+  if (!portText) return { ok: false, reason: 'no-port', detail: 'No RCON port was given. It is rcon.port in server.cfg, not the game or query port.' };
+  if (!/^\d{1,5}$/.test(portText)) return { ok: false, reason: 'refused-port', detail: 'A port is a number, and ' + portText.slice(0, 20) + ' is not one.' };
+  const port = Number(portText);
+  if (!(port >= 1 && port <= 65535)) return { ok: false, reason: 'refused-port', detail: 'Port ' + port + ' cannot exist: a port is between 1 and 65535.' };
+
+  if (v6) {
+    const v = v6.toLowerCase().replace(/^\[|\]$/g, '');
+    if (v === '::1' || v === '::') return { ok: false, reason: 'refused-local', detail: 'That is this machine own address, not your server.' };
+    if (v.indexOf('fe80') === 0) return { ok: false, reason: 'refused-private', detail: 'That is a link-local address, which only exists inside one network.' };
+    if (v.indexOf('ff') === 0) return { ok: false, reason: 'refused-private', detail: 'That is a multicast address, which is not a server.' };
+    if (v.charAt(0) === 'f' && (v.charAt(1) === 'c' || v.charAt(1) === 'd')) return { ok: false, reason: 'refused-private', detail: 'That is a private IPv6 address, which the bot cannot reach from a cloud host. Use the public address or the hostname from server.cfg.' };
+    return { ok: true, host: v, port: port, display: '[' + v + ']:' + port, family: 6 };
+  }
+
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const parts = host.split('.').map(Number);
+    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return { ok: false, reason: 'bad-host', detail: 'That is not a valid IPv4 address.' };
+    const a = parts[0], b = parts[1];
+    if (a === 127) return { ok: false, reason: 'refused-local', detail: '127.0.0.1 is this machine own address, not your server.' };
+    if (a === 0) return { ok: false, reason: 'bad-host', detail: '0.x.x.x is not a real address.' };
+    if (a >= 224) return { ok: false, reason: 'refused-private', detail: 'That is a multicast or reserved address, which is not a server.' };
+    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+      return { ok: false, reason: 'refused-private', detail: 'That is a local network address (' + host + '), which only exists inside your own network. Use the public IP or the hostname from server.cfg: the bot runs on a cloud host and has to reach the server over the internet.' };
+    }
+    if (a === 169 && b === 254) return { ok: false, reason: 'refused-private', detail: 'That is a link-local address, which only exists inside one network.' };
+    if (a === 100 && b >= 64 && b <= 127) {
+      return { ok: false, reason: 'refused-private', detail: 'That is inside your provider carrier-grade NAT range, which the internet cannot route to. Use the public address or a hostname.' };
+    }
+    return { ok: true, host: host, port: port, display: host + ':' + port, family: 4 };
+  }
+
+  const name = host.toLowerCase();
+  if (name === 'localhost' || /\.localhost$/.test(name) || /\.local$/.test(name) || /\.internal$/.test(name) || /\.lan$/.test(name) || /\.home\.arpa$/.test(name)) {
+    return { ok: false, reason: 'refused-local', detail: 'That name only resolves inside one network, so the bot cannot reach it.' };
+  }
+  if (!/^[a-z0-9_]([a-z0-9._-]*[a-z0-9_])?$/.test(name)) {
+    return { ok: false, reason: 'bad-host', detail: 'That does not look like a hostname or an IP address. Use the address exactly as server.cfg has it, for example 51.38.1.2 or eu01.example.net.' };
+  }
+  return { ok: true, host: host, port: port, display: host + ':' + port, family: 0 };
 }
 
 /* Discord has moved channel types from numbers to strings over the years and this bot
@@ -1239,8 +1386,8 @@ function channelKind(channel) {
 function rconRun(options) {
   return new Promise(function (resolve) {
     const started = Date.now();
-    const host = String(options.host || '').trim();
-    const port = Number(options.port);
+    let host = String(options.host || '').trim();
+    let port = Number(options.port);
     const password = String(options.password || '');
     const asked = String(options.command || 'serverinfo').toLowerCase();
     /* The fixed list is what the automatic health check may ask for. When an administrator
@@ -1249,10 +1396,10 @@ function rconRun(options) {
     const requested = String(options.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300).toLowerCase();
     const command = options.allowAny && requested ? requested : (RCON_ALLOWED.indexOf(asked) > -1 ? asked : 'serverinfo');
 
-    if (!rconHostAllowed(host)) {
-      return resolve({ ok: false, reason: 'refused-host', detail: 'That address is not on the public internet, so the bot will not connect to it.' });
-    }
-    if (!(port >= 1 && port <= 65535)) return resolve({ ok: false, reason: 'refused-port', detail: 'That port number cannot exist.' });
+    const target = parseRconTarget(options.host, options.port);
+    if (!target.ok) return resolve({ ok: false, reason: target.reason, detail: target.detail, address: String(options.host || '') + ':' + String(options.port == null ? '' : options.port) });
+    host = target.host;
+    port = target.port;
     if (!password) return resolve({ ok: false, reason: 'no-password', detail: 'No RCON password was given for that server.' });
 
     let socket = null;
