@@ -1,0 +1,76 @@
+/* Get-started guide. Loaded after site-pro.css and before botcard.css, so nothing earlier changes. */
+.st-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.st-section { padding: 34px 0; }
+.st-section--last { padding-bottom: 10px; }
+.st-section h2 { font-size: 1.35rem; margin: 0 0 8px; }
+.st-lede { color: var(--text-dim); margin: 0 0 18px; max-width: 70ch; }
+.st-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.st-card {
+  display: block;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 16px);
+  background: var(--panel);
+  color: inherit;
+  text-decoration: none;
+}
+.st-card h3 { font-size: 1rem; margin: 0 0 8px; }
+.st-card p { margin: 0; color: var(--text-dim); line-height: 1.5; }
+.st-card--link { transition: transform 0.12s ease, border-color 0.12s ease; }
+.st-card--link:hover, .st-card--link:focus-visible { transform: translateY(-1px); border-color: var(--ember); outline: none; }
+.st-list { margin: 0; padding-left: 18px; color: var(--text-dim); line-height: 1.5; }
+.st-list li { margin: 0 0 6px; }
+.st-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: none; }
+.st-step {
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 16px);
+  background: var(--panel-2);
+}
+.st-step__num {
+  flex: 0 0 auto;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--ember);
+  color: var(--ember);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.st-step__body { min-width: 0; }
+.st-step__body h3 { margin: 0 0 6px; font-size: 1.02rem; }
+.st-step__body p { margin: 0 0 8px; color: var(--text-dim); line-height: 1.5; }
+.st-step__body p:last-child { margin-bottom: 0; }
+.st-copyline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.st-copyline code {
+  background: var(--panel, rgba(255,255,255,0.04));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 0.9rem;
+}
+.st-copy {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.st-copy:hover, .st-copy:focus-visible { border-color: var(--ember); color: var(--ember); outline: none; }
+.st-note {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ember);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px 18px;
+}
+.st-note p { margin: 0; color: var(--text-dim); line-height: 1.55; }
+@media (max-width: 560px) {
+  .st-cards { grid-template-columns: 1fr; }
+  .st-step { flex-direction: column; gap: 10px; }
+}

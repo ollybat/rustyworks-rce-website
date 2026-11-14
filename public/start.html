@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <script>
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("spinback-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Get started - Spinback RCE</title>
+    <meta name="application-name" content="Spinback RCE">
+    <meta name="description" content="Set up Spinback RCE in about ten minutes: invite the bot, run /setup run, make the staff roles and log channels, connect your Rust server over RCON and give your first kit. Every step is a button you press.">
+    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/start.html">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Spinback RCE">
+    <meta property="og:title" content="Get started - Spinback RCE">
+    <meta property="og:description" content="The whole setup in about ten minutes, all of it in Discord. Nothing is created until you press Create.">
+    <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/start.html">
+    <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
+    <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="/theme.js"></script>
+    <script src="/config.js" defer></script>
+    <script src="/page.js" defer></script>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+    <link rel="stylesheet" href="/site-pro.css">
+    <link rel="stylesheet" href="/start.css">
+    <link rel="stylesheet" href="/botcard.css">
+    <script src="/botcard.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="sp-header">
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async">Spinback<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="start.html" aria-current="page">Get started</a>
+            <a href="status.html">Status</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+            <a
+              href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
+              target="_blank"
+              rel="noopener"
+              class="btn">
+              Add to Discord
+            </a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="sp-hero">
+        <div class="wrap">
+          <span class="sp-kicker">Set-up guide</span>
+          <h1 class="sp-title">Get started</h1>
+          <p class="sp-lede">
+            The whole of Spinback RCE, wired up in about ten minutes, and all of it inside Discord.
+            Every step is a button you press: <strong>nothing is created until you press Create</strong>, no step
+            depends on an earlier one finishing, and you can stop at any point without leaving anything half-done.
+          </p>
+          <div class="st-cta">
+            <a class="btn" href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands" target="_blank" rel="noopener">Add to Discord</a>
+            <a class="btn is-quiet" href="commands.html">See every command</a>
+            <a class="btn is-quiet" href="status.html">Live status</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="st-section">
+        <div class="wrap">
+          <h2>Before you start</h2>
+          <p class="st-lede">Three things, and only the first one takes any finding.</p>
+          <div class="st-cards">
+            <article class="st-card">
+              <h3>Permission to manage the server</h3>
+              <p>Staff commands answer to Administrator, Manage Server, the server owner, and the roles you save as staff roles. If you can create roles and channels, you can finish this in one sitting.</p>
+            </article>
+            <article class="st-card">
+              <h3>Your RCON details</h3>
+              <p>Host, RCON port and password, the three lines at the top of your <code>server.cfg</code>. The bot tests them before it saves anything, so a wrong port or password never lands in your settings.</p>
+            </article>
+            <article class="st-card">
+              <h3>The bot, invited</h3>
+              <p>One press on Add to Discord, then pick your server and approve. There is no account on this website and nothing to sign up for.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="st-section">
+        <div class="wrap">
+          <h2>The steps</h2>
+          <p class="st-lede">Run them in this order the first time. Each one is a single Discord command that opens a panel.</p>
+          <ol class="st-steps">
+            <li class="st-step">
+              <span class="st-step__num" aria-hidden="true">1</span>
+              <div class="st-step__body">
+                <h3>Invite the bot</h3>
+                <p>Press Add to Discord and approve it for your server. The bot registers its commands when it starts; if the list looks empty, give it a moment and reopen Discord.</p>
+              </div>
+            </li>
+            <li class="st-step">
+              <span class="st-step__num" aria-hidden="true">2</span>
+              <div class="st-step__body">
+                <h3>Run <code>/setup run</code></h3>
+                <p class="st-copyline"><code>/setup run</code><button type="button" class="st-copy" data-copy="/setup run">Copy</button></p>
+                <p>The guided panel: staff roles, then log channels, then your Rust server last. Each step is optional and independent, and every item reports back with a reason if it fails.</p>
+              </div>
+            </li>
+            <li class="st-step">
+              <span class="st-step__num" aria-hidden="true">3</span>
+              <div class="st-step__body">
+                <h3>Create the staff roles</h3>
+                <p class="st-copyline"><code>/setup roles</code><button type="button" class="st-copy" data-copy="/setup roles">Copy</button></p>
+                <p>The roles it creates are saved as your staff roles. From then on, only those roles, Administrator and the server owner can run staff commands: nobody else, including the bot's own linked role.</p>
+              </div>
+            </li>
+            <li class="st-step">
+              <span class="st-step__num" aria-hidden="true">4</span>
+              <div class="st-step__body">
+                <h3>Make the log channels</h3>
+                <p class="st-copyline"><code>/setup channels</code><button type="button" class="st-copy" data-copy="/setup channels">Copy</button></p>
+                <p>The channels it makes are private to the saved staff roles by default, so members cannot read them. Pick the log types you want and the channel for each; clearing a channel switches that type off.</p>
+              </div>
+            </li>
+            <li class="st-step">
+              <span class="st-step__num" aria-hidden="true">5</span>
+              <div class="st-step__body">
+                <h3>Connect the Rust server</h3>
+                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
+                <p>Host, RCON port and password. The connection is tested live before anything is saved, and the panel names the reason when it fails rather than guessing. The RCON port is the one from <code>server.cfg</code>, not the port players join on.</p>
+              </div>
+            </li>
+            <li class="st-step">
+              <span class="st-step__num" aria-hidden="true">6</span>
+              <div class="st-step__body">
+                <h3>Your first kit</h3>
+                <p class="st-copyline"><code>/kits commands</code><button type="button" class="st-copy" data-copy="/kits commands">Copy</button></p>
+                <p>Save the list command your kit plugin uses and the give command you already type, then <code>/kits grab</code> reads the real kit names straight from your server and <code>/kits give</code> sends your own give command with the player and kit filled in. The bot never invents a kit name.</p>
+              </div>
+            </li>
+            <li class="st-step">
+              <span class="st-step__num" aria-hidden="true">7</span>
+              <div class="st-step__body">
+                <h3>Check it</h3>
+                <p class="st-copyline"><code>/setup doctor</code><button type="button" class="st-copy" data-copy="/setup doctor">Copy</button><code>/ping</code><button type="button" class="st-copy" data-copy="/ping">Copy</button></p>
+                <p><code>/setup doctor</code> names anything that is still missing and what to press next. <code>/ping</code> measures the bot, the gateway and this website at the moment you run it.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="st-section">
+        <div class="wrap">
+          <h2>What the bot will not do</h2>
+          <div class="st-cards">
+            <article class="st-card">
+              <h3>It will not invent anything</h3>
+              <ul class="st-list">
+                <li>No guessed kit names, prices or player data: where the bot cannot know something, the answer says so.</li>
+                <li>No saving an RCON address it could not reach during the test.</li>
+                <li>No staff command answering to anyone outside the roles you saved, Administrator and the owner.</li>
+              </ul>
+            </article>
+            <article class="st-card">
+              <h3>This site will not change your server</h3>
+              <ul class="st-list">
+                <li>No login, no account, no server settings here: server setup lives in Discord, where the permissions already are.</li>
+                <li>The site reads the bot's own status and remembers your display choices in this browser only.</li>
+                <li>Nothing on these pages is typed by hand: the command list is drawn from what the bot actually registers.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="st-section">
+        <div class="wrap">
+          <h2>Not connected yet</h2>
+          <div class="st-note">
+            <p>Emote binds, respawn kits and the log types that come from in-game events are saved and shown, but they only run in game once a Rust plugin sends those events to the bot. That feed is not connected yet, and the bot says so in the panel rather than pretending otherwise.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="st-section st-section--last">
+        <div class="wrap">
+          <h2>Next</h2>
+          <div class="st-cards">
+            <a class="st-card st-card--link" href="commands.html#cmdGoals">
+              <h3>Which command does what</h3>
+              <p>The whole command list with a start-here block: pick what you want to do and it jumps to the exact subcommand.</p>
+            </a>
+            <a class="st-card st-card--link" href="status.html">
+              <h3>Is the bot up?</h3>
+              <p>Live bot, website and RCON state, with the honest answer when the server is not connected.</p>
+            </a>
+            <a class="st-card st-card--link" href="settings.html">
+              <h3>Make it yours</h3>
+              <p>Display preferences for this site, stored in your browser, plus your Discord invite and support links.</p>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async" loading="lazy">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="start.html">Get started</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">Support - Spinback 5X EU &middot; 2026<br><span class="foot-fine">&copy; <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</span></div>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        "use strict";
+        document.addEventListener("click", function (event) {
+          var target = event.target;
+          var btn = target && target.closest ? target.closest("[data-copy]") : null;
+          if (!btn) return;
+          var value = btn.getAttribute("data-copy") || "";
+          var old = btn.textContent;
+          var say = function (label) {
+            btn.textContent = label;
+            window.setTimeout(function () { btn.textContent = old; }, 1400);
+          };
+          var selectIt = function () {
+            try {
+              var range = document.createRange();
+              range.selectNodeContents(btn.previousElementSibling || btn);
+              var selection = window.getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+            } catch (error) {}
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(value).then(function () { say("Copied"); }, function () { selectIt(); say("Press Ctrl+C"); });
+          } else {
+            selectIt();
+            say("Press Ctrl+C");
+          }
+        });
+      })();
+    
+      </script>
+  </body>
+</html>
