@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var INVITE = 'https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands';
+  var SERVERS = '/servers.html';
   var HIDDEN_KEY = 'rw-botcard-hidden';
   var FALLBACK = '/media/spinback-icon.svg';
 
@@ -32,7 +32,7 @@
 
   var avatar = document.createElement('a');
   avatar.className = 'rw-botcard__avatar';
-  avatar.href = INVITE;
+  avatar.href = SERVERS;
   avatar.target = '_blank';
   avatar.rel = 'noopener';
   var img = document.createElement('img');
@@ -58,10 +58,8 @@
   state.appendChild(stateText);
   var cta = document.createElement('a');
   cta.className = 'rw-botcard__cta';
-  cta.href = INVITE;
-  cta.target = '_blank';
-  cta.rel = 'noopener';
-  cta.textContent = 'Add to Discord';
+  cta.href = SERVERS;
+  cta.textContent = 'See the servers';
 
   body.appendChild(name);
   body.appendChild(state);
