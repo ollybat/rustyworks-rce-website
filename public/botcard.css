@@ -110,3 +110,42 @@
 /* The site footer carries the same support line the bot puts on every panel, with the
    legal line kept underneath it and quiet. */
 .foot-fine { display: inline-block; margin-top: 4px; font-size: .78rem; opacity: .72; }
+
+/* The full notice a page can show when a feature needs the game and the connection is
+   not there. Same words the bot uses, so the two never tell a different story. */
+.rw-rcon {
+  margin: 8px 0 0;
+  padding: 20px 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(224, 82, 82, .42);
+  background: linear-gradient(150deg, rgba(28, 10, 10, .72), rgba(12, 8, 5, .6));
+}
+.rw-rcon h2 {
+  margin: 0 0 8px;
+  font-family: 'Oswald', system-ui, sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: #ffd9b0;
+}
+.rw-rcon p { margin: 0; color: #e2d3c6; }
+.rw-rcon__facts {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 6px 18px;
+  margin: 14px 0 0;
+}
+.rw-rcon__facts dt {
+  font-size: .78rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #b8a494;
+}
+.rw-rcon__facts dd { margin: 0; color: #f0e6dc; font-size: .92rem; }
+.rw-rcon__how { margin-top: 14px; font-size: .88rem; color: #cbb8a6; }
+.rw-rcon__how a { color: #ffd9b0; }
+@media (max-width: 620px) {
+  .rw-rcon { padding: 16px; }
+  .rw-rcon__facts { grid-template-columns: 1fr; gap: 2px; }
+  .rw-rcon__facts dd { margin-bottom: 8px; }
+}
