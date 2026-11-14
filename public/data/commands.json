@@ -1,6 +1,6 @@
 {
  "site": "https://spinback-j7ao5f.camelai.app",
- "updated": "Commands as registered by the bot",
+ "updated": "Commands as registered by the bot, with what each one needs first",
  "groups": [
   {
    "key": "all",
@@ -305,6 +305,80 @@
      ]
     }
    ]
+  }
+ ],
+ "goals": [
+  {
+   "want": "Set the bot up for this server",
+   "label": "/setup run",
+   "href": "#sub-setup-run",
+   "note": "Roles, log channels and the Rust connection, one press each. Nothing is created until you press Create."
+  },
+  {
+   "want": "Create the staff roles",
+   "label": "/setup roles",
+   "href": "#sub-setup-roles",
+   "note": "The roles it makes become the staff roles: those, plus Administrator and the owner, can run staff commands."
+  },
+  {
+   "want": "Make private log channels",
+   "label": "/setup channels",
+   "href": "#sub-setup-channels",
+   "note": "Private to the saved staff roles by default, so members cannot read the logs."
+  },
+  {
+   "want": "Connect the Rust server (RCON)",
+   "label": "/setup server",
+   "href": "#sub-setup-server",
+   "note": "Tested before it is saved, so a wrong port or password never lands in your settings."
+  },
+  {
+   "want": "Read my real kit names",
+   "label": "/kits grab",
+   "href": "#sub-kits-grab",
+   "note": "Reads them from your server with the list command you saved. It will not invent one."
+  },
+  {
+   "want": "Give a kit in game",
+   "label": "/kits give",
+   "href": "#sub-kits-give",
+   "note": "Opens a box for the kit and the player, sends your own give template and shows the command it sent."
+  },
+  {
+   "want": "Link a Discord account to a gamertag",
+   "label": "/user linkpanel",
+   "href": "#sub-user-linkpanel",
+   "note": "Posts the member-facing panel; players ask, staff confirm."
+  },
+  {
+   "want": "Find who a gamertag belongs to",
+   "label": "/user whois",
+   "href": "#sub-user-whois",
+   "note": "Answers from the links that have been confirmed."
+  },
+  {
+   "want": "See who is online right now",
+   "label": "/server players",
+   "href": "#sub-server-players",
+   "note": "Read-only, put to the server over RCON."
+  },
+  {
+   "want": "See the in-game time",
+   "label": "/server time",
+   "href": "#sub-server-time",
+   "note": "Whatever the server answers is shown as it arrived."
+  },
+  {
+   "want": "Check what is still missing",
+   "label": "/setup doctor",
+   "href": "#sub-setup-doctor",
+   "note": "Names each thing that is not set up yet and what to press next."
+  },
+  {
+   "want": "Something looks broken",
+   "label": "/ping",
+   "href": "#cmd-ping",
+   "note": "Live bot and website health, measured at the moment you run it."
   }
  ]
 }

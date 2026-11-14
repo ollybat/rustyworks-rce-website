@@ -1,0 +1,59 @@
+/* Start-here goals: what do you want to do, and which subcommand does it.
+   Loaded after commands.css so nothing earlier changes. */
+.cmd-goals {
+  margin: 20px 0 10px;
+  padding: 16px 18px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 16px);
+  background: var(--panel);
+}
+.cmd-goals h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+.cmd-goals__lead {
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+.cmd-goals__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cmd-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.cmd-goal:hover,
+.cmd-goal:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--ember);
+  outline: none;
+}
+.cmd-goal__want {
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+.cmd-goal__cmd {
+  font-size: 0.85rem;
+  color: var(--ember);
+}
+.cmd-goal__note {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+@media (max-width: 520px) {
+  .cmd-goals__grid { grid-template-columns: 1fr; }
+}
