@@ -106,3 +106,7 @@
 @media (prefers-reduced-motion: reduce) {
   .rw-botcard { transition: none; transform: none; }
 }
+
+/* The site footer carries the same support line the bot puts on every panel, with the
+   legal line kept underneath it and quiet. */
+.foot-fine { display: inline-block; margin-top: 4px; font-size: .78rem; opacity: .72; }
