@@ -12,7 +12,7 @@
   "use strict";
 
   var REFRESH_MS = 45000;
-  var state = { filter: "all", term: "", servers: [], source: null, at: 0, error: null };
+  var state = { filter: "all", term: "", servers: [], source: null, at: 0, error: null, sort: "state" };
 
   function $(id) { return document.getElementById(id); }
   function mk(tag, cls, text) {
@@ -184,6 +184,25 @@
     if (!list) return;
     clear(list);
     var shown = state.servers.filter(matches);
+
+    /* The reader picks the order. "Answering first" is the default because the useful
+       question is usually "which ones are up", not "which one is first alphabetically".
+       Servers the bot has never contacted sort last: unknown is not good news, but it is
+       also not the same as down, and reporting it as either would be a guess. */
+    var rank = { online: 0, offline: 1, unknown: 2 };
+    shown.sort(function (a, b) {
+      if (state.sort === "name") return String(a.name).localeCompare(String(b.name));
+      if (state.sort === "checked") {
+        var at = a.checkedAt ? Date.parse(a.checkedAt) || 0 : 0;
+        var bt = b.checkedAt ? Date.parse(b.checkedAt) || 0 : 0;
+        if (at !== bt) return bt - at;
+        return String(a.name).localeCompare(String(b.name));
+      }
+      var ar = rank[a.state] === undefined ? 3 : rank[a.state];
+      var br = rank[b.state] === undefined ? 3 : rank[b.state];
+      if (ar !== br) return ar - br;
+      return String(a.name).localeCompare(String(b.name));
+    });
     var online = state.servers.filter(function (s) { return s.state === "online"; }).length;
     var offline = state.servers.filter(function (s) { return s.state === "offline"; }).length;
     var unknown = state.servers.filter(function (s) { return s.state === "unknown"; }).length;
@@ -258,6 +277,21 @@
           + " storage): with no BOT_SETTINGS_TOKEN and no disk, every saved server, role and kit is forgotten on a redeploy."
           + " That is set on the bot's own host, and nothing on this page can change it.";
       }
+      /* The bot can believe it is saving here while this site refuses every save, because the
+         two token values are only compared at this end. Ask this site's own endpoint and say
+         it plainly when that is the case: it is the difference between "saving" and "safe". */
+      if (store === "website") {
+        fetch("/api/bot/settings", { headers: { accept: "application/json" } })
+          .then(function (res) { return res.json().catch(function () { return {}; }).then(function (b) { return { s: res.status, b: b }; }); })
+          .then(function (out) {
+            if (out.s === 503 && out.b && out.b.reason === "no-token") {
+              warn.hidden = false;
+              warn.textContent = "The bot says it is saving its settings on this website, but this site has no BOT_SETTINGS_TOKEN yet,"
+                + " so it refuses every save (503 no-token) and the bot falls back to memory. The same value has to be set on the site as on the bot.";
+            }
+          })
+          .catch(function () { /* the page still works without this check */ });
+      }
     }
   }
 
@@ -314,6 +348,22 @@
         render();
       });
     }
+    var sortBox = $("svSort");
+    if (sortBox) {
+      sortBox.addEventListener("click", function (event) {
+        var button = event.target && event.target.closest ? event.target.closest("[data-sort]") : null;
+        if (!button || !sortBox.contains(button)) return;
+        state.sort = button.getAttribute("data-sort") || "state";
+        var siblings = sortBox.querySelectorAll("[data-sort]");
+        for (var i = 0; i < siblings.length; i++) {
+          var on = siblings[i] === button;
+          siblings[i].className = on ? "sv-chip is-on" : "sv-chip";
+          siblings[i].setAttribute("aria-pressed", on ? "true" : "false");
+        }
+        render();
+      });
+    }
+
     var refresh = $("svRefresh");
     if (refresh) {
       refresh.addEventListener("click", function () {
