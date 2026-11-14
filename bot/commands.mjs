@@ -211,7 +211,7 @@ export function roleBuildPanel(ctx) {
   var built = embed(0xfaa81a, "Create the staff roles?",
     "This is the list, exactly as the bot would make it:\n\n" + lines.join("\n"));
   built.fields = [
-    field("What they are for", "The ids are saved as your staff roles, so these are the roles allowed to run staff commands. The bot grants them no Discord permissions, and it does not give them to anybody - assign them to your staff yourself, or let the role picker in the panel do it when someone is promoted.", false),
+    field("What they are for", "The ids are saved as your staff roles, so these are the roles allowed to run staff commands. The bot grants them no Discord permissions and it never assigns them to anybody: hand them out to your staff in Discord yourself, whenever you want.", false),
     field("Reused, not duplicated", "A role with one of these names that already exists is used instead of making a second one, and its id is saved. Nothing is renamed, re-coloured or deleted.", false),
     field("One permission needed", "Creating a role needs **Manage Roles**. If the bot does not have it, each one it cannot make is reported with that reason and the rest still go ahead.", false),
   ];
