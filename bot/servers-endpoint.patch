@@ -1,62 +1,70 @@
 WHAT THIS ADDS
-  A public, read-only GET /api/servers on the bot, so the website's new Servers page
+  A public, read-only GET /api/servers on the bot, so the website's Servers page
   (https://spinback-j7ao5f.camelai.app/servers.html) can list every Rust server the bot
-  looks after: whatever the bot has measured, with the population, map and last check
-  whenever the bot knows them.
+  looks after: whatever the bot has measured, and "not reported" for anything it has not.
 
   The page reads /api/servers first and falls back to the public /api/status, so nothing
-  breaks while this is unapplied - it just reports the one server the public status
-  carries, and says so on the page.
+  breaks while this is unapplied - it just reports what the public status carries and says
+  so on the page.
+
+REVISED (this version)
+  Step 1 previously read a "serverChecks" map and "state.guildInfo". Neither exists in
+  bot/server.mjs any more, so that version would throw on the first request. This version
+  reads the two things that do exist: settings.servers, and rconState - the last server
+  that answered or refused an RCON command, which is the same record /api/status reports.
+  rconState covers one server at a time, so a saved server that has not been contacted
+  since the bot started is reported as unknown, never as offline.
 
 WHERE
   bot/server.mjs, in the HTTP request handler, directly AFTER the existing
-  'GET /api/guilds' block. The route stays public and above the settings-auth gate: it
-  is read-only and publishes nothing private (no password, no address, no tokens).
+  'GET /api/guilds' block, above the settings-auth gate. Public and read-only: it
+  publishes no address, no password and no token.
+
+  serversCache must sit at MODULE scope, not inside the handler, or it resets every
+  request and the cache does nothing:
+
+    let serversCache = { at: 0, body: null };
 
 CONTRACT THE PAGE EXPECTS
-  Missing fields are printed as "not reported", never guessed, so you may leave any of
-  players / maxPlayers / map / ms out until the bot knows them.
+  Missing fields are printed as "not reported", never guessed.
 
   { "ok": true, "count": 1, "servers": [ {
-      "id": "srv_1",
-      "name": "Spinback 5X EU",
-      "guild": "Spinback",
-      "online": true,
-      "players": 42,
-      "maxPlayers": 100,
-      "map": "Procedural Map",
-      "ms": 38,
-      "checkedAt": "2026-01-01T00:00:00.000Z",
-      "reason": null,
-      "detail": "already address-stripped, or null"
+      "id": "srv_1", "name": "Spinback 5X EU", "guild": "Spinback",
+      "online": true, "state": "online", "ms": 38,
+      "checkedAt": "2026-01-01T00:00:00.000Z", "reason": null,
+      "players": null, "maxPlayers": null, "map": null
   } ] }
 
-  host and port are deliberately not sent: the bot's own status strips addresses, so the
-  page prints "Address not reported". To publish them, add host/port to the object below
-  and nothing else on the site has to change.
+  host and port are deliberately not sent. To publish them, add them to the object below
+  and nothing on the site has to change.
 
 STEP 1 - the minimal version: something the bot has already measured, no new connections
 ------------------------------------------------------------------------------- cut here
   /* Every Rust server the bot looks after, for the website's Servers page. Public and
      read-only on purpose: nothing here is not already reported to a browser by
      /api/status, and the address and password stay in the bot. */
-  let serversCache = { at: 0, body: null };
   if (req.method === 'GET' && url === '/api/servers') {
     const cors = { 'content-type': 'application/json', 'cache-control': 'public, max-age=30',
       'access-control-allow-origin': '*' };
     if (!serversCache.body || Date.now() - serversCache.at > 30000) {
+      const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
       const list = (settings.servers || []).map(function (server) {
-        const check = serverChecks[server.id] || null;
+        const same = rconState && rconState.server
+          && String(rconState.host || '') === String(server.host || '')
+          && Number(rconState.port || 0) === Number(server.port || 0);
         return {
-          id: server.id,
-          name: server.name || 'Rust server',
-          guild: (state.guildInfo && state.guildInfo.name) || null,
-          online: !!(check && check.ok),
-          state: check ? (check.ok ? 'online' : 'offline') : 'unknown',
-          ms: check && typeof check.ms === 'number' ? check.ms : null,
-          checkedAt: check ? check.at : null,
-          reason: check && !check.ok ? (check.reason || 'unknown') : null,
-          detail: null,
+          id: String(server.id || ''),
+          name: String(server.name || 'Rust server'),
+          guild: guild ? guild.name : null,
+          online: same ? rconState.ok === true : null,
+          state: same ? (rconState.ok === true ? 'online' : 'offline') : 'unknown',
+          ms: same && typeof rconState.ms === 'number' ? rconState.ms : null,
+          checkedAt: same ? rconState.checkedAt : null,
+          reason: same ? (rconState.ok ? null : (rconState.reason || 'unknown')) : 'not-checked-yet',
+          detail: same ? null : 'This server has not been contacted since the bot started.',
+          players: null,
+          maxPlayers: null,
+          map: null,
         };
       });
       serversCache = { at: Date.now(), body: JSON.stringify({ ok: true, count: list.length, servers: list }) };
@@ -67,7 +75,7 @@ STEP 1 - the minimal version: something the bot has already measured, no new con
   }
 ------------------------------------------------------------------------------- cut here
 
-STEP 2 - optional, but it is what puts population and the map on the page
+STEP 2 - optional, and it is what puts population and the map on the page
   serverSnapshot(ctx, which) is already imported into server.mjs, so one call per server
   asks the server itself. Build the ctx exactly the way the /server commands do (the same
   guild settings and the same rconRun), then, inside a try/catch so a dead server never
@@ -78,8 +86,8 @@ STEP 2 - optional, but it is what puts population and the map on the page
     entry.maxPlayers = typeof snap.max === 'number' ? snap.max : null;
 
   and for the map name, the same with serverSnapshot(ctx, 'info'). Keep the 30 second
-  cache above: the site's own proxy already caches for 60 seconds, so the bot is asked at
-  most about once a minute no matter how many people open the page.
+  cache: the site's own proxy already caches for 60 seconds, so the bot is asked at most
+  about once a minute no matter how many people open the page.
 
 STEP 3 - one line that makes the status page's history start recording servers
   The site's proxy already looks for a 'servers' count in the bot's status stats
@@ -92,11 +100,10 @@ STEP 3 - one line that makes the status page's history start recording servers
 
       stats: { guilds: state.guilds, gateway: state.gateway, servers: (settings.servers || []).length },
 
-  From then on /api/history carries the server count next to uptime and guilds, and the
-  status page can chart it without another change on the site.
+  From then on /api/history carries the server count next to uptime and guilds.
 
 AFTER APPLYING
-  Push, and let Railway rebuild (it redeploys on push). Then open
+  Push and let Railway rebuild. Then open
   https://spinback-j7ao5f.camelai.app/servers.html - the meta line under the filter row
   says which source it read: "the bot's server list" once this route exists, or "the bot's
-  public status" while it does not.
+  public status" while it does not. That sentence is the check.
