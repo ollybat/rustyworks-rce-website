@@ -298,17 +298,27 @@ async function readHistory(env, hours) {
   const from = Math.floor(now / 3600000) * 3600000 - (hours - 1) * 3600000;
   const samples = [];
   const buckets = [];
-  for (let at = from; at <= now; at += 3600000) {
-    let list = [];
+  /* One object per hour. Read them in parallel batches rather than one after another: a
+     week is 168 objects, which used to mean 168 round trips in a row. */
+  const readHour = async (at) => {
     try {
       const object = await bucket.get(MONITOR_PREFIX + hourStamp(at) + ".json");
-      if (object) {
-        const parsed = await object.json();
-        if (Array.isArray(parsed)) list = parsed.filter((entry) => entry && typeof entry.t === "number");
-      }
+      if (!object) return [];
+      const parsed = await object.json();
+      return Array.isArray(parsed) ? parsed.filter((entry) => entry && typeof entry.t === "number") : [];
     } catch (error) {
-      list = [];
+      return [];
     }
+  };
+  const hourStarts = [];
+  for (let at = from; at <= now; at += 3600000) hourStarts.push(at);
+  const hourLists = [];
+  for (let i = 0; i < hourStarts.length; i += 24) {
+    hourLists.push(...(await Promise.all(hourStarts.slice(i, i + 24).map(readHour))));
+  }
+  for (let h = 0; h < hourStarts.length; h++) {
+    const at = hourStarts[h];
+    const list = hourLists[h];
     const ok = list.filter((entry) => entry.ok);
     const latencies = ok.map((entry) => entry.ms).filter((ms) => typeof ms === "number");
     const latest = list[list.length - 1] || null;
@@ -364,6 +374,13 @@ async function readHistory(env, hours) {
   };
 }
 
+/* The status page asks for the same history from three scripts and again every minute, and
+   each answer reads up to a week of hourly objects. A computed answer is reused for a few
+   seconds. Only finished plain data is kept: on Workers a pending promise must not be shared
+   between requests. */
+const HISTORY_CACHE_MS = 15000;
+const historyCache = new Map();
+
 async function statusHistory(request, env) {
   const url = new URL(request.url);
   const hours = Math.min(168, Math.max(1, Number(url.searchParams.get("hours")) || 24));
@@ -371,7 +388,14 @@ async function statusHistory(request, env) {
     return json({ available: false, reason: "no_storage" }, 200);
   }
   try {
-    const data = await readHistory(env, hours);
+    const held = historyCache.get(hours);
+    let data;
+    if (held && Date.now() - held.at < HISTORY_CACHE_MS) {
+      data = held.data;
+    } else {
+      data = await readHistory(env, hours);
+      historyCache.set(hours, { at: Date.now(), data: data });
+    }
     return new Response(JSON.stringify(data), {
       headers: {
         "content-type": "application/json; charset=utf-8",
@@ -387,6 +411,9 @@ async function statusHistory(request, env) {
 /* ---------- the bot API proxy ---------- */
 
 async function proxyApi(request, env, ctx) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return json({ error: 'method_not_allowed' }, 405);
+  }
   const requestUrl = new URL(request.url);
   const watching = requestUrl.pathname === "/api/status";
   const started = Date.now();
@@ -431,11 +458,14 @@ async function proxyApi(request, env, ctx) {
       }
       ctx.waitUntil(trimSamples(env));
     }
+    /* Only a successful read may be kept by the browser. A cached 502 or 503 kept a recovered
+       bot looking down for up to a minute. */
+    const cacheable = upstream.ok && (request.method === "GET" || request.method === "HEAD");
     return new Response(body, {
       status: upstream.status,
       headers: {
         "content-type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
-        "cache-control": "public, max-age=60",
+        "cache-control": cacheable ? "public, max-age=60" : "no-store",
         "access-control-allow-origin": "*",
       },
     });
@@ -473,6 +503,16 @@ const KIT_PATHS = [
 const KIT_ALIASES = [
   [/^\/media\/spinback-icon-(halloween|thanksgiving)\.svg$/i, "/media/rustyworks-icon-$1.svg"],
   [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/rustyworks-app-$1.png"]
+];
+
+/* Spinback names the pages ask for that are already in public/media under another name.
+   Tried before the operator's site, so these never leave the Worker. */
+const LOCAL_ALIASES = [
+  [/^\/media\/spinback-icon\.svg$/i, "/media/rustyworks-icon.svg"],
+  [/^\/media\/spinback-icon-christmas\.svg$/i, "/media/rustyworks-icon-christmas.svg"],
+  [/^\/media\/spinback-app-(192|512)\.png$/i, "/media/icon-$1.png"],
+  [/^\/media\/spinback-bg\.webp$/i, "/media/spinback-banner.webp"],
+  [/^\/media\/spinback-bg-poster\.jpg$/i, "/media/spinback-banner-poster.jpg"]
 ];
 
 async function kitAsset(url, ctx, env) {
@@ -728,7 +768,10 @@ async function guildRoleNames(env) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
-    const response = await fetch(base + "/api/guild", { headers: { accept: "application/json" }, signal: controller.signal });
+    const headers = { accept: "application/json" };
+    const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+    if (settingsToken) headers["x-settings-token"] = settingsToken;
+    const response = await fetch(base + "/api/guild", { headers: headers, signal: controller.signal });
     clearTimeout(timer);
     if (!response.ok) return {};
     const data = await response.json();
@@ -778,7 +821,6 @@ async function authLogin(request, env) {
   authorize.searchParams.set("scope", "identify guilds guilds.members.read");
   authorize.searchParams.set("state", state);
   const headers = new Headers();
-  headers.append("set-cookie", cookieHeader("spinback_oauth_state", state, 600));
   headers.append("set-cookie", cookieHeader(NEXT_COOKIE, next, 600));
   return redirect(authorize.toString(), headers);
 }
@@ -788,24 +830,18 @@ async function authCallback(request, env) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const expectedState = cookies(request).spinback_oauth_state;
 
   if (url.searchParams.get("error")) return html("<p>Discord refused the sign-in. <a href=\"/dashboard\">Try again</a>.</p>", 400);
-  /* The nonce guards against login CSRF, and the usual way of checking it - a cookie that
-     has to survive a trip to discord.com and back - breaks for real people: a phone that
-     signs in through Discord's QR code, a second tab, or any browser that blocks cross-site
-     cookies. When that happened the site refused its own sign-in and sent the person back
-     to Discord, which looked like an endless loop. So a miss is recorded and the sign-in
-     carries on: a forged nonce could at worst sign somebody in as whoever sent them the
-     link, which gains nothing on a page that only reports your own access. */
+  /* The nonce is signed and returned in Discord's redirect URL, so it remains
+     verifiable even when browsers block cross-site cookies. Refuse unverified callbacks. */
   const signedState = await verifySigned(env, state);
-  const cookieMatches = Boolean(expectedState) && sameString(String(state), String(expectedState));
   if (!code) {
     await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "no code came back from Discord" });
     return html("<p>Discord did not send a sign-in code back. <a href=\"/dashboard\">Start again</a>.</p>", 400);
   }
-  if (!signedState && !cookieMatches) {
-    await appendLog(env, { kind: "sign_in_state_miss", by: { id: "callback", name: "oauth callback" }, detail: "nonce not proven (state cookie " + (expectedState ? "present" : "absent") + "); carried on" });
+  if (!signedState) {
+    await appendLog(env, { kind: "sign_in_failed", by: { id: "callback", name: "oauth callback" }, detail: "state verification failed; sign-in stopped" });
+    return html("<p>That sign-in could not be verified. Please <a href=\"/auth/login\">start again</a>.</p>", 400);
   }
 
   const redirectUri = url.origin + "/auth/callback";
@@ -1129,6 +1165,10 @@ let secretsCache = { at: 0, value: null };
 const EXCHANGE_CACHE = { at: 0, value: null };
 
 async function botExchangeReady(env) {
+  /* The bot's OAuth exchange endpoint is an internal service route. A configured
+     client secret alone is not enough: the Worker must also have the shared token. */
+  const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+  if (!settingsToken) return false;
   const now = Date.now();
   if (EXCHANGE_CACHE.value !== null && now - EXCHANGE_CACHE.at < 60000) return EXCHANGE_CACHE.value;
   const base = botApiBase(env);
@@ -1152,13 +1192,14 @@ async function botExchangeReady(env) {
 
 async function botExchange(env, code, redirectUri) {
   const base = botApiBase(env);
-  if (!base) return { error: "bot_not_configured" };
+  const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+  if (!base || !settingsToken) return { error: "bot_not_configured" };
   try {
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
     const response = await fetch(base + "/api/oauth/exchange", {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json", "x-settings-token": settingsToken },
       body: JSON.stringify({ code: code, redirectUri: redirectUri }),
       signal: controller.signal,
     });
@@ -1301,7 +1342,12 @@ async function botJson(env, path) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
-    const response = await fetch(base + path, { headers: { accept: "application/json" }, signal: controller.signal });
+    const headers = { accept: "application/json" };
+    /* Internal bot metadata is protected by the same server-side token as RCON tests.
+       This header is only sent from the Worker, never exposed to a visitor. */
+    const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+    if (settingsToken) headers["x-settings-token"] = settingsToken;
+    const response = await fetch(base + path, { headers: headers, signal: controller.signal });
     clearTimeout(timer);
     if (!response.ok) return null;
     return await response.json();
@@ -1319,7 +1365,8 @@ async function botSettings(request, env) {
     return json({ ok: false, reason: "no-token", detail: "Set BOT_SETTINGS_TOKEN on the website and the same value on the bot." }, 503);
   }
   const given = String(request.headers.get("x-settings-token") || "");
-  if (given !== expected) return json({ ok: false, reason: "bad-token" }, 403);
+  /* Constant-time: this token guards RCON passwords and every settings write. */
+  if (!sameString(given, expected)) return json({ ok: false, reason: "bad-token" }, 403);
   /* The bot's panels write the same sections the site's own assignment tools read. */
   if (request.method === "POST") return botSettingsWrite(request, env);
   /* RCON passwords are write-only for anything running in a browser. The bot asks for the
@@ -1333,6 +1380,7 @@ async function botSettings(request, env) {
     staffRoles: (await readJson(env, ROLES_KEY)) || null,
     logChannels: (await readJson(env, LOGCHANNELS_KEY)) || null,
     kits: (await readJson(env, KITS_KEY)) || null,
+    installs: (await readJson(env, INSTALLS_KEY)) || {},
     /* Flat lists, because this is the shape the bot loads and writes back. */
     links: Array.isArray(storedLinks.links) ? storedLinks.links : [],
     pending: Array.isArray(storedLinks.pending) ? storedLinks.pending : [],
@@ -1384,6 +1432,7 @@ const ROLES_KEY = "spinback-rce/settings/roles.json";
 const LOGCHANNELS_KEY = "spinback-rce/settings/logchannels.json";
 const SERVERS_KEY = "spinback-rce/settings/servers.json";
 const KITS_KEY = "spinback-rce/settings/kits.json";
+const INSTALLS_KEY = "spinback-rce/settings/installs.json";
 const LINKS_KEY = "spinback-rce/settings/links.json";
 
 /* What the bot's own panels collect. Sections it does not send are left alone, and servers
@@ -1444,6 +1493,11 @@ async function botSettingsWrite(request, env) {
   if (body.kits && typeof body.kits === "object") {
     const current = (await readJson(env, KITS_KEY)) || {};
     if (await writeJson(env, KITS_KEY, Object.assign({}, current, body.kits, { updatedAt: Date.now() }))) wrote.push("kits");
+  }
+  if (body.installs && typeof body.installs === "object" && !Array.isArray(body.installs)) {
+    /* Unlike the section patches above, installs is sent as the complete bounded preview map.
+       Replace it so an empty object really clears old preview records during Reset. */
+    if (await writeJson(env, INSTALLS_KEY, body.installs)) wrote.push("installs");
   }
   /* The saved servers are handed back (without passwords) so a form can pick up the ids
      the site just issued instead of guessing them. */
@@ -1739,9 +1793,11 @@ async function ownerApi(request, env) {
     const command = ["serverinfo", "playerlist", "status", "gettime"].indexOf(tidy(body.command, 20)) > -1 ? tidy(body.command, 20) : "serverinfo";
     let answer = null;
     try {
+      const settingsToken = String(env.BOT_SETTINGS_TOKEN || "").trim();
+      if (!settingsToken) return json({ error: "bot_not_configured", message: "Set BOT_SETTINGS_TOKEN on the website and Railway bot service." }, 503);
       const response = await fetch(botApiBase(env) + "/api/rcon/test", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-settings-token": settingsToken },
         body: JSON.stringify({ host: row.host, port: row.port, password: row.password, command: command }),
       });
       answer = await response.json();
@@ -2033,17 +2089,33 @@ export default {
       const local = await env.ASSETS.fetch(request);
       /* A miss in the asset store comes back as the homepage, so a 200 only counts when the
          body really is data. Otherwise a page of HTML would be handed back as JSON. */
-      const local_is_data = local.status === 200 && !/text\/html/i.test(local.headers.get("content-type") || "");
-      if (local_is_data) return withAssetHeaders(local, url.pathname);
+      const localIsData = local.status === 200 && !/text\/html/i.test(local.headers.get("content-type") || "");
+      if (localIsData) return withAssetHeaders(local, url.pathname);
       const upstreamPath = url.pathname === "/data/entities.json"
         ? "/media/entitys/entities.json"
         : url.pathname.replace("/data/presets/", "/media/kitbuilder/presets/");
       return kitAsset(new URL(KIT_ORIGIN + upstreamPath), ctx, env);
     }
 
-    if (url.pathname === "/media/entitys/entities.json"
-      || url.pathname.startsWith("/media/kitbuilder/")
-      || url.pathname.startsWith("/media/spinback-")) {
+    /* Spinback artwork: our own file first (the banner, its poster and the mark live in
+       public/media), then a local file under its older name, and only then the operator's
+       site. Sending every /media/spinback-* path upstream used to 404 the local banner and
+       the header logo. */
+    if (url.pathname.startsWith("/media/spinback-")) {
+      if (request.method === "GET" || request.method === "HEAD") {
+        const own = await env.ASSETS.fetch(request);
+        const isHtml = (r) => /text\/html/i.test(r.headers.get("content-type") || "");
+        if (own.status === 200 && !isHtml(own)) return withAssetHeaders(own, url.pathname);
+        const local = LOCAL_ALIASES.find((a) => a[0].test(url.pathname));
+        if (local) {
+          const target = url.pathname.replace(local[0], local[1]);
+          const aliased = await env.ASSETS.fetch(new Request(new URL(target, url), request));
+          if (aliased.status === 200 && !isHtml(aliased)) return withAssetHeaders(aliased, target);
+        }
+      }
+      return kitAsset(url, ctx, env);
+    }
+    if (url.pathname === "/media/entitys/entities.json" || url.pathname.startsWith("/media/kitbuilder/")) {
       return kitAsset(url, ctx, env);
     }
     if (url.pathname === "/api/config-check") {
@@ -2073,8 +2145,15 @@ export default {
         envKeys: Object.keys(env).sort()
       });
     }
+    /* Sign-in was retired. Pages that still ask (the status page, theme sync) get a clear,
+       machine-readable answer instead of a bare 404 or the not-found page. */
+    if (url.pathname === "/auth" || url.pathname.startsWith("/auth/")) {
+      return json({ authenticated: false, configured: false, retired: true }, url.pathname === "/auth/me" ? 200 : 410);
+    }
     if (url.pathname === "/api/history") return statusHistory(request, env);
-    if (url.pathname === "/api/setup") return authSetup(request, env);
+    /* Sign-in setup went with the dashboard. It was the one route that still wrote to storage
+       for anybody who asked, so it is shut rather than left reachable. */
+    if (url.pathname === "/api/setup") return json({ error: "retired", note: "Sign-in setup was removed with the dashboard." }, 410);
     if (url.pathname.indexOf("/api/owner/") === 0) return ownerApi(request, env);
     /* Answered here, not proxied to the bot: what this site thinks of the signed-in person. */
     if (url.pathname === "/api/setup-status") return setupStatus(request, env);
@@ -2087,8 +2166,11 @@ export default {
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return proxyApi(request, env, ctx);
 
     /* The dashboard is gone: /dashboard now sends you to the Kit Studio. */
-    if (url.pathname === "/dashboard") {
-      return Response.redirect(new URL("/dashboard/kitbuilder.html", url).toString(), 302);
+    /* Only /dashboard itself (with or without a trailing slash) is redirected - a second,
+       unconditional redirect used to sit on this line and sent every page, the Kit Studio
+       included, round in a loop. */
+    if (url.pathname === "/dashboard" || url.pathname === "/dashboard/") {
+      return Response.redirect(new URL("/dashboard/kitbuilder.html" + url.search, url).toString(), 302);
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
@@ -2097,13 +2179,28 @@ export default {
     const isPageRequest = (method === "GET" || method === "HEAD") &&
       (request.headers.get("accept") || "").includes("text/html");
 
-    /* The asset store answers a missing file with the homepage instead of a 404. Only the two
-       addresses that really are the homepage may be answered with it: a stylesheet, script,
-       image or data file that is not there has to say so, or the browser quietly throws the
-       HTML away and the page is left with no styling or no data. */
-    const isHomepageFallback = (response, pathname) => response.status === 200 &&
-      (response.headers.get("content-type") || "").includes("text/html") &&
-      pathname !== "/" && pathname !== "/index.html";
+    /* Some hosts answer a missing file with the homepage instead of a 404. That substitute
+       must not be passed off as the file: a stylesheet, script, image or data file that is
+       not there has to say so, or the browser quietly throws the HTML away and the page is
+       left with no styling or no data. Real pages are HTML too, so for an HTML address the
+       answer only counts as the substitute when it is the homepage itself. */
+    let homepageText = null;
+    const homepage = async () => {
+      if (homepageText === null) {
+        const home = await env.ASSETS.fetch(new URL("/index.html", request.url));
+        homepageText = home.status === 200 ? await home.text() : "";
+      }
+      return homepageText;
+    };
+    const isHomepageFallback = async (response, pathname) => {
+      if (response.status !== 200) return false;
+      if (!/text\/html/i.test(response.headers.get("content-type") || "")) return false;
+      if (pathname === "/" || pathname === "/index.html") return false;
+      const extension = (pathname.match(/\.([a-z0-9]+)$/i) || [])[1];
+      if (extension && extension.toLowerCase() !== "html" && extension.toLowerCase() !== "htm") return true;
+      const home = await homepage();
+      return !!home && (await response.clone().text()) === home;
+    };
 
     /* The site's own 404 page, still answering 404. */
     const notFound = async () => {
@@ -2125,7 +2222,7 @@ export default {
       });
     };
 
-    if (!isHomepageFallback(assetResponse, url.pathname) && assetResponse.status !== 404) {
+    if (assetResponse.status !== 404 && !(await isHomepageFallback(assetResponse, url.pathname))) {
       return withAssetHeaders(assetResponse, url.pathname);
     }
 
@@ -2135,7 +2232,7 @@ export default {
       if (!HAS_EXTENSION.test(url.pathname)) {
         const target = url.pathname === "/" ? "/index.html" : url.pathname.replace(/\/+$/, "") + ".html";
         const pretty = await env.ASSETS.fetch(new URL(target, request.url));
-        if (pretty.status !== 404 && !isHomepageFallback(pretty, target)) return withAssetHeaders(pretty, target);
+        if (pretty.status !== 404 && !(await isHomepageFallback(pretty, target))) return withAssetHeaders(pretty, target);
       }
       return await notFound();
     }

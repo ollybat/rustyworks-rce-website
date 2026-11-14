@@ -123,3 +123,29 @@ Halloween, Thanksgiving or Christmas without a second build.
 
 British spelling in the copy and the comments, plain language, and no invented
 numbers: anything the site cannot ask the bot for says so instead of guessing.
+
+## The Discord bot (`bot/`)
+
+`bot/server.mjs` runs on Railway with `bot/commands.mjs` holding every command, panel and
+reply. Six commands, none with typed options: `/ping`, `/help` (open to everyone), `/setup`,
+`/kits`, `/user` and `/server`. Every reply passes through `dress()` for one consistent look.
+
+- **Railway build**: Railway no longer reads `railway.json`, so the service itself is set to
+  build `bot/Dockerfile` and start `node server.mjs`, with the health check on `/healthz`.
+- **Settings** are kept by the website when `BOT_SETTINGS_TOKEN` is set on both sides, and
+  also in a file: with a Railway volume attached (`RAILWAY_VOLUME_MOUNT_PATH`) or
+  `SETTINGS_FILE` set, it survives redeploys, so a volume alone is enough. The file holds RCON
+  passwords and is written owner-only.
+- **Guided setup** (`/setup run`) can create the staff roles (no Discord permissions granted,
+  never assigned to anyone) and one log channel per log type, private to those roles.
+- **RCON** addresses are read in any shape (`1.2.3.4:28015`, `[v6]:port`, a hostname, a
+  scheme in front); private, loopback and special ranges are refused with their own reason,
+  and `bot/network-guard.mjs` checks every address a hostname resolves to.
+- **Internal HTTP routes** (`/api/guild(s)`, `/api/rcon/test`, `/api/reconnect`,
+  `/api/oauth/exchange`) need `BOT_SETTINGS_TOKEN`; `/healthz` reports liveness only.
+
+Checks (all run in CI): `scripts/check-commands.mjs` (every reply within Discord's limits,
+plain and dressed, plus missing imports and the commands reference),
+`scripts/simulate-bot.mjs` (the real bot against a pretend Discord, website and silent Rust
+server, then a restart with only the settings file), `scripts/check-network-guard.mjs`,
+`scripts/smoke-test.mjs`, `scripts/check-brand.mjs` and `scripts/rcon-selftest.py`.

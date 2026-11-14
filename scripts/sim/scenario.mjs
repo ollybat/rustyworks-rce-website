@@ -21,7 +21,7 @@ function last(it) {
   const answers = it.calls.filter((c) => c.body !== undefined && ["reply", "editReply", "update", "showModal", "respond"].includes(c.method));
   return answers.length ? answers[answers.length - 1].body : null;
 }
-function text(value) { return JSON.stringify(value || null); }
+function text(value) { return JSON.stringify(value || null, (k, v) => (typeof v === "bigint" ? String(v) : v)); }
 async function writes() { return (await fetch(SITE + "/__sim/writes")).json(); }
 const latest = (w) => (w && w.length ? w[w.length - 1] : {}) || {};
 
@@ -51,7 +51,9 @@ export async function run({ world, make, interact }) {
 
   /* 4. roles from Discord's own role menu, saved through the website */
   it = await go(make.command(ADMIN, "setup", "run"), "/setup run");
-  expect("/setup run shows the panel", text(last(it)).includes("Spinback RCE setup"), text(last(it)));
+  expect("/setup run shows guided setup", text(last(it)).includes("Guided setup"), text(last(it)));
+  it = await go(make.button(ADMIN, "setup:home"), "the step-by-step setup panel");
+  expect("the step-by-step panel is one press away", text(last(it)).includes("Spinback RCE setup"), text(last(it)).slice(0, 300));
   it = await go(make.button(ADMIN, "setup:roles"), "setup: roles page 1");
   const roleMenus = ((last(it) || {}).components || []).filter((r) => r.components && r.components[0] && r.components[0].type === 6).length;
   expect("roles are picked from role menus (4 on page 1)", roleMenus === 4, text(last(it)));
@@ -95,11 +97,11 @@ export async function run({ world, make, interact }) {
   it = await go(make.select(ADMIN, "string", "setup:pick", ["srv1"]), "pick a server to edit");
   expect("the edit form says a blank password keeps the saved one", text(last(it)).includes("blank keeps"), text(last(it)));
   const slow = [];
-  slow.push(go(make.modal(ADMIN, "modal:server:srv1", { srv_name: "Main", srv_host: "203.0.113.10", srv_port: "28016", srv_pass: "" }), "edit the server, password blank"));
+  slow.push(go(make.modal(ADMIN, "modal:server:srv1", { srv_name: "Main", srv_host: "rcon.sim.test", srv_port: "28016", srv_pass: "" }), "edit the server, password blank"));
   /* 9. /kits give to a linked Discord user: their gamertag is used, the kit keeps its case */
   slow.push(go(make.command(ADMIN, "kits", "give", { kit: "STARTER", user: { type: 6, value: "100000000000000210" }, server: "srv1" }), "/kits give to a linked user"));
   const [edited, given] = await Promise.all(slow);
-  expect("a blank password is not sent as blank", !text(last(edited)).includes("no-password") && text(last(edited)).includes("203.0.113.10:28016"), text(last(edited)));
+  expect("the RCON test reaches the pinned DNS address and keeps the saved password", !text(last(edited)).includes("no-password") && text(last(edited)).includes("rcon.sim.test:28016") && text(last(edited)).includes("timeout") && text(last(edited)).includes("Nothing answered within"), text(last(edited)));
   expect("slow RCON answers are acknowledged in time", edited.firstAckAt !== null && edited.firstAckAt < 3000 && given.firstAckAt < 3000, edited.firstAckAt + " / " + given.firstAckAt);
   expect("a Discord user gets their linked gamertag, not their id", text(last(given)).includes('kit givetoplayer STARTER \\"PlayerOne\\"'), text(last(given)));
   expect("the RCON command is logged", world.sent.some((m) => m.channelId === "100000000000000404" && text(m.payload).includes("kit givetoplayer STARTER")), text(world.sent.filter((m) => m.channelId === "100000000000000404").slice(-1)));
@@ -120,8 +122,13 @@ export async function run({ world, make, interact }) {
   it = await go(make.modal(ADMIN, "modal:bind", { bind_emote: "wave", bind_kit1: "PVP", bind_kit2: "", bind_kit3: "", bind_cooldown: "100000000000000300" }), "save a bind");
   expect("the bind form asks for a role next", text(last(it)).includes("Who may use it?"), text(last(it)));
   it = await go(make.select(ADMIN, "role", "kits:role:wave", ["100000000000000303"]), "pick the bind role");
-  w = await writes();
-  const wave = ((latest(w).kits || {}).binds || []).find((b) => b.emote === "wave");
+  /* saves go out one at a time, in order, so this one may still be behind the bind itself */
+  let wave = null;
+  for (let i = 0; i < 100 && !(wave && wave.roleId); i++) {
+    w = await writes();
+    wave = ((latest(w).kits || {}).binds || []).find((b) => b.emote === "wave");
+    if (!(wave && wave.roleId)) await new Promise((r) => setTimeout(r, 150));
+  }
   expect("the bind's role is saved", wave && wave.roleId === "100000000000000303", text(wave));
 
   /* 12. a player asks to link; staff approve it in one click; the linked role follows */
@@ -186,9 +193,25 @@ export async function run({ world, make, interact }) {
   expect("Read kit names answers from the panel", it.firstAckAt !== null && text(last(it)).length > 10, text(last(it)).slice(0, 300));
 
   /* 20. an install code teaches the bot its kit names */
+  const beforeBadCode = await writes();
+  const installWriteCount = beforeBadCode.filter((write) => write.installs).length;
+  const invalidCode = await go(make.modal(ADMIN, "modal:kitcode", { install_code: "%%%not-base64%%%" }), "submit malformed kit code");
+  w = await writes();
+  expect("malformed Base64 is rejected without writing a preview", text(last(invalidCode)).includes("not valid")
+    && w.filter((write) => write.installs).length === installWriteCount, text(last(invalidCode)));
   const code64 = Buffer.from('kit remove "RAIDER"\nkit add "RAIDER"\nkit add "RAIDER" rifle.ak 1 1 main').toString("base64");
-  it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "install a kit code");
-  expect("the kit names in an install code are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  it = await go(make.modal(ADMIN, "modal:kitcode", { install_code: code64 }), "preview a kit code");
+  expect("the kit names in a code preview are listed", text(last(it)).includes("Kit names found") && text(last(it)).includes("RAIDER"), text(last(it)).slice(0, 400));
+  expect("the result says the original code is not retained", text(last(it)).includes("original Base64 code is not retained") && text(last(it)).includes("not installed"), text(last(it)));
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  w = await writes();
+  expect("preview metadata is written to the website installs section", w.some((write) => write.installs && Object.keys(write.installs).length === 1), text(w.slice(-3)));
+  const previewWrites = w.filter((write) => write.installs && Object.keys(write.installs).length);
+  const previewSnapshot = previewWrites[previewWrites.length - 1] || {};
+  const previewRecord = Object.values(previewSnapshot.installs || {})[0];
+  expect("only a short excerpt is persisted, never the full Base64 code", !!previewRecord && previewRecord.head.length <= 400
+    && previewRecord.chars === Buffer.from(code64, "base64").toString("utf8").length
+    && !JSON.stringify(previewRecord).includes(code64), text(previewRecord));
   it = await go(make.command(ADMIN, "kits", "give", { kit: "rai" }, "kit"), "autocomplete an installed kit");
   expect("an installed kit is suggested straight away", [].concat(last(it) || []).some((c) => c.value === "RAIDER"), text(last(it)));
 
@@ -246,6 +269,141 @@ export async function run({ world, make, interact }) {
   expect("log posts say which log they are", logged && text(logged.payload).includes("Command log"), text(logged && logged.payload).slice(0, 300));
   expect("the DM to a player is a proper embed", world.dms.some((d) => (d.payload.embeds || []).length && text(d.payload).includes("You are linked")), text(world.dms.slice(-1)));
   expect("the bot's status line says what it looks after", world.presence && /server.*linked/.test(text(world.presence)), text(world.presence));
+
+  /* 27. /server asks read-only questions of a chosen server; its buttons keep that server */
+  it = await go(make.command(ADMIN, "server", "players", { server: "srv1" }), "/server players");
+  expect("/server answers in time even when RCON is slow", it.firstAckAt !== null && it.firstAckAt < 3000, it.firstAckAt);
+  expect("/server names the server and the command it asked", text(last(it)).includes("Main") && text(last(it)).includes("playerlist"), text(last(it)).slice(0, 400));
+  expect("/server's Ask again keeps the server", text(last(it)).includes("server:players:srv1"), text((last(it) || {}).components));
+  it = await go(make.button(ADMIN, "server:time:srv1"), "/server game time button");
+  expect("a /server button asks the right question", text(last(it)).includes("gettime"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "server", "info", { server: "nope" }), "/server with an unknown server");
+  expect("an unknown server is named, not silently swapped", text(last(it)).includes("No saved server called nope"), text(last(it)).slice(0, 300));
+  it = await go(make.command(PLAYER, "server", "info"), "/server by a non-staff member");
+  expect("/server is staff only", text(last(it)).includes("Not allowed"), text(last(it)).slice(0, 200));
+
+  /* 28. /user whois finds the account behind a gamertag */
+  it = await go(make.command(ADMIN, "user", "whois", { gamertag: "playerone" }), "/user whois");
+  expect("whois finds the linked account", text(last(it)).includes("PlayerOne") && text(last(it)).includes("100000000000000210"), text(last(it)).slice(0, 400));
+  expect("whois offers to remove that link", text(last(it)).includes("user:unlink:ask:PlayerOne"), text((last(it) || {}).components));
+  it = await go(make.button(ADMIN, "user:unlink:ask:PlayerOne"), "whois: remove this link");
+  expect("the remove button asks for confirmation first", text(last(it)).includes("Remove this link?"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "user", "whois", { gamertag: "nobodyatall" }), "/user whois with no match");
+  expect("whois says plainly when nobody matches", text(last(it)).includes("No link for nobodyatall"), text(last(it)).slice(0, 300));
+
+  /* 29. kit giving is safe to hammer: one at a time per player + kit, pause works, names are clean */
+  const [, giveB] = await Promise.all([
+    go(make.command(ADMIN, "kits", "give", { kit: "RAIDER", gamertag: "PlayerOne", server: "srv1" }), "/kits give (first of two at once)"),
+    go(make.command(OWNER_ROLE, "kits", "give", { kit: "raider", gamertag: "playerone", server: "srv1" }), "/kits give (second, same player + kit)"),
+  ]);
+  expect("the same kit to the same player is never sent twice at once", text(last(giveB)).includes("Already being sent"), text(last(giveB)).slice(0, 300));
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "RAIDER;kick PlayerOne", gamertag: "PlayerOne", server: "srv1" }), "/kits give with a separator in the kit");
+  expect("a ; cannot smuggle a second command into the give", text(last(it)).includes("Command:") && !/Command: `[^`]*;/.test(text(last(it))), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "kits:lock"), "pause kit delivery");
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "RAIDER", gamertag: "Player2", server: "srv1" }), "/kits give while paused");
+  expect("a paused delivery refuses to give", text(last(it)).includes("Kit delivery is paused"), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "kits:lock"), "resume kit delivery");
+  expect("the panel says delivery is on again", text(last(it)).includes("Pause kit delivery"), text(last(it)).slice(0, 300));
+  it = await go(make.modal(ADMIN, "modal:kitdelivery", { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"', kit_give_cooldown: "soon" }), "delivery with a bad cooldown");
+  expect("a cooldown that is not a whole number is refused", text(last(it)).includes("whole number"), text(last(it)).slice(0, 300));
+
+  /* 30. one gamertag waits for one account */
+  await go(make.modal({ id: "100000000000000221" }, "modal:link:self", { link_gamertag: "Rival1" }), "first claim on a gamertag");
+  it = await go(make.modal({ id: "100000000000000222" }, "modal:link:self", { link_gamertag: "rival1" }), "second account claims the same gamertag");
+  expect("a rival claim on a waiting gamertag is refused", text(last(it)).includes("already waiting"), text(last(it)).slice(0, 300));
+
+  /* 31. help is for everyone */
+  it = await go(make.command(PLAYER, "help"), "/help by a member");
+  expect("members can open /help", text(last(it)).includes("/server") && !text(last(it)).includes("Not allowed"), text(last(it)).slice(0, 200));
+  it = await go(make.button(PLAYER, "help:cmd:server"), "help page for /server, by a member");
+  expect("members can open a help page", text(last(it)).includes("Help: /server"), text(last(it)).slice(0, 200));
+
+  /* 32. the click-through setup tools from main */
+  it = await go(make.command(ADMIN, "setup", "suggest"), "/setup suggest");
+  expect("suggest proposes roles from the names it can see", text(last(it)).includes("What the names suggest") && text(last(it)).includes("Owner"), text(last(it)).slice(0, 400));
+  expect("the proposal itself is never sent to Discord", !text(last(it)).includes("proposalData"), "");
+  it = await go(make.button(ADMIN, "setup:suggest:apply"), "apply the suggestion");
+  expect("Apply writes the proposal and says what it saved", text(last(it)).includes("Proposal applied"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "setup", "channels"), "/setup channels");
+  it = await go(make.button(ADMIN, "setup:channels:build"), "create channels: pick types");
+  it = await go(make.select(ADMIN, "string", "setup:channels:build:pick", ["killfeed", "nonsense"]), "create channels: tick kill feed");
+  expect("the plan lists exactly the channel it will make", text(last(it)).includes("spinback-killfeed") && !text(last(it)).includes("nonsense"), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "setup:channels:build:go"), "create channels: go");
+  expect("the bot creates the channel and saves it", world.created.some((c) => c.name === "spinback-killfeed") && world.created.some((c) => c.name === "Spinback"), text(world.created.map((c) => c.name)));
+  it = await go(make.button(ADMIN, "setup:import:paste"), "open the server.cfg paste form");
+  expect("the paste form opens", (it.calls[0] || {}).method === "showModal", text(it.calls));
+  it = await go(make.modal(ADMIN, "modal:import", { import_text: "rcon.ip 203.0.113.10\nrcon.port 28016\nrcon.password \"hunter2\"\nrcon.web 0" }), "paste server.cfg lines");
+  expect("server.cfg lines are read, password hidden", text(last(it)).includes("ready to test") && !text(last(it)).includes("hunter2"), text(last(it)).slice(0, 400));
+  it = await go(make.command(ADMIN, "setup", "export"), "/setup export");
+  expect("the export never contains a password", text(last(it)).includes("password not shown") && !text(last(it)).includes("secret"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "setup", "doctor"), "/setup doctor");
+  expect("the doctor answers in time with a report", it.firstAckAt !== null && it.firstAckAt < 3000 && text(last(it)).length > 100, it.firstAckAt);
+  it = await go(make.command(ADMIN, "kits", "commands"), "/kits commands");
+  expect("/kits commands opens the validated delivery form", text(last(it)).includes("kits:delivery"), text((last(it) || {}).components));
+  it = await go(make.command(ADMIN, "kits", "doctor"), "/kits doctor");
+  expect("/kits doctor is honest about binds needing the game hook", text(last(it)).includes("Kit setup check"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "user", "pending"), "/user pending");
+  expect("/user pending opens the waiting list", text(last(it)).includes("user:pending:approve") || text(last(it)).includes("Nobody is waiting") || text(last(it)).includes("aiting"), text(last(it)).slice(0, 300));
+  /* 33. nothing needs typing: bare commands open forms and pickers */
+  it = await go(make.command(ADMIN, "user", "whois"), "/user whois (bare)");
+  expect("bare /user whois offers the look-up form", text(last(it)).includes("user:whois:go"), text((last(it) || {}).components));
+  it = await go(make.button(ADMIN, "user:whois:go"), "open the whois form");
+  expect("the whois form opens", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes("whois_tag"), text(it.calls));
+  it = await go(make.modal(ADMIN, "modal:whois", { whois_tag: "player3" }), "submit the whois form");
+  expect("the whois form finds the link", text(last(it)).includes("Player3") || text(last(it)).includes("Player30"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "user", "roster"), "/user roster (bare)");
+  expect("the roster has a Search button", text(last(it)).includes("user:roster:search"), text((last(it) || {}).components));
+  it = await go(make.modal(ADMIN, "modal:rostersearch", { roster_search: "player4" }), "search the roster");
+  expect("roster search from the form filters the list", text(last(it)).includes("matching") && text(last(it)).includes("Player4"), text(last(it)).slice(0, 300));
+  it = await go(make.command(ADMIN, "server", "info"), "/server info (bare, one server)");
+  expect("with one server saved, /server asks it straight away", text(last(it)).includes("serverinfo") && text(last(it)).includes("Main"), text(last(it)).slice(0, 300));
+  it = await go(make.select(ADMIN, "string", "kits:give:pick", ["PlayerOne"]), "pick a player to give a kit");
+  expect("picking a player fills the give form with their gamertag", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes('"value":"PlayerOne"'), text(last(it)).slice(0, 400));
+  expect("every registered command takes no typed option", world.registered.every((c) => (c.options || []).every((o) => o.type === 1 && !(o.options || []).length)), text(world.registered.map((c) => c.name)));
+
+  /* 34. guided setup: the bot makes the staff roles, then log channels private to them */
+  it = await go(make.command(ADMIN, "setup", "run"), "/setup run (guided)");
+  expect("/setup run opens guided setup", text(last(it)).includes("Guided setup") && text(last(it)).includes("setup:run:roles"), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "setup:run:roles"), "guided: show the role plan");
+  expect("the role plan lists every role before anything is made", text(last(it)).includes("Create the staff roles?") && text(last(it)).includes("Head Admin") && world.createdRoles.length === 0, text(last(it)).slice(0, 400));
+  it = await go(make.button(ADMIN, "setup:run:roles:go"), "guided: create the roles");
+  expect("missing staff roles are created with no permissions", world.createdRoles.length === 4 && world.createdRoles.every((r) => Array.isArray(r.permissions) && !r.permissions.length), text(world.createdRoles.map((r) => r.name)));
+  expect("an existing role with the same name is reused, not duplicated", !world.createdRoles.some((r) => r.name === "Owner") && text(last(it)).includes("Already here"), text(last(it)).slice(0, 500));
+  it = await go(make.button(ADMIN, "setup:run:roles:go"), "guided: create the roles again");
+  expect("pressing it twice makes nothing new", world.createdRoles.length === 4, text(world.createdRoles.map((r) => r.name)));
+  const createdBefore = world.created.length;
+  it = await go(make.select(ADMIN, "string", "setup:channels:build:pick", ["teleport"]), "guided: tick a log type");
+  expect("the channel plan says who will be able to read it", text(last(it)).includes("Who will be able to read them") && text(last(it)).includes("Head Admin"), text(last(it)).slice(0, 500));
+  it = await go(make.button(ADMIN, "setup:channels:build:go"), "guided: create the channel");
+  const made = world.created.slice(createdBefore).find((c) => c.name === "spinback-teleport");
+  const locks = made ? world.overwrites[made.id] || [] : [];
+  expect("the new log channel hides from @everyone", locks.some((o) => o.id === "100" && (o.deny || []).length), text(locks));
+  expect("every staff role keeps View Channel on it", locks.filter((o) => (o.allow || []).length && o.id !== "100000000000000500").length >= 5, text(locks));
+  expect("the bot keeps what it needs to post there", locks.some((o) => o.id === "100000000000000500" && (o.allow || []).length >= 3), text(locks));
+  it = await go(make.select(ADMIN, "string", "setup:channels:build:pick", ["teleport"]), "guided: tick the same type again");
+  it = await go(make.button(ADMIN, "setup:channels:build:go"), "guided: create the same channel again");
+  expect("an existing log channel is relocked, not duplicated", world.created.filter((c) => c.name === "spinback-teleport").length === 1 && text(last(it)).includes("relocked"), text(last(it)).slice(0, 400));
+
+  /* 35. the server address is read in whatever shape it is typed */
+  it = await go(make.modal(ADMIN, "modal:server:new", { srv_name: "Home", srv_host: "192.168.1.20", srv_port: "28016", srv_pass: "x" }), "a private server address");
+  expect("a private address is refused with the real reason", text(last(it)).includes("address needs fixing") && text(last(it)).includes("local network"), text(last(it)).slice(0, 400));
+  it = await go(make.modal(ADMIN, "modal:server:new", { srv_name: "Shape", srv_host: "rcon://203.0.113.10:28016/", srv_port: "", srv_pass: "x" }), "an address with a scheme and the port on the end");
+  expect("an address with the port on the end is read, then tested", text(last(it)).includes("203.0.113.10:28016") && !text(last(it)).includes("address needs fixing"), text(last(it)).slice(0, 400));
+  it = await go(make.modal(ADMIN, "modal:server:new", { srv_name: "Typo", srv_host: "203.0.113.10:abc", srv_port: "", srv_pass: "x" }), "an address with a broken port");
+  expect("a broken port is named, not guessed", text(last(it)).includes("not a port number"), text(last(it)).slice(0, 400));
+
+  /* 36. one footer and the bot's picture everywhere; RCON Connection Required when the game is not reachable */
+  it = await go(make.command(ADMIN, "help"), "/help (the look)");
+  const helpEmbed = ((last(it) || {}).embeds || [])[0] || {};
+  expect("every embed carries the one footer", helpEmbed.footer && helpEmbed.footer.text === "Support - Spinback 5X EU \u2022 2026", text(helpEmbed.footer));
+  expect("every embed carries the bot's own picture", helpEmbed.thumbnail && /^https:/.test(helpEmbed.thumbnail.url), text(helpEmbed.thumbnail));
+  it = await go(make.command(ADMIN, "server", "info"), "/server info with the server not answering");
+  expect("a game feature with no connection shows RCON Connection Required", text(last(it)).includes("RCON Connection Required") && text(last(it)).includes("/server info"), text(last(it)).slice(0, 300));
+  expect("it still says what it asked, and offers to ask again", text(last(it)).includes("serverinfo") && text(last(it)).includes("server:info:srv1"), text(last(it)).slice(0, 600));
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "STARTER", gamertag: "Player9", server: "srv1" }), "/kits give with the server not answering");
+  expect("a give with no connection says nothing was sent", text(last(it)).includes("RCON Connection Required") && text(last(it)).includes("Nothing was sent"), text(last(it)).slice(0, 400));
+  const logPost = world.sent.filter((m) => m.channelId === "100000000000000401").slice(-1)[0];
+  expect("log posts carry the same footer, and say which log they are on top", logPost && text(logPost.payload).includes("Support - Spinback 5X EU") && text(logPost.payload).includes("Command log"), text(logPost && logPost.payload).slice(0, 300));
 
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {

@@ -14,8 +14,11 @@
    Exits non-zero if anything fails. RCON goes to 203.0.113.10, a documentation address that
    never answers, so those checks fail on purpose and exercise the slow path. */
 import { createServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, existsSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,6 +36,7 @@ const initial = {
   servers: [{ id: "srv1", name: "Main", host: "203.0.113.10", port: 28016, hasPassword: true, password: "secret" }],
   kits: { binds: [{ emote: "salute", kits: ["STARTER"], cooldown: 60, roleId: null }], locked: false, authSpawn: {},
     giveCommand: 'kit givetoplayer {kit} "{player}"', listCommand: "kit list", known: [] },
+  installs: {},
   links,
   pending: [],
   linkPanel: null,
@@ -44,6 +48,7 @@ const store = JSON.parse(JSON.stringify(initial));
 function merge(into, body) {
   for (const key of ["staffRoles", "logChannels", "kits"]) if (body[key] && typeof body[key] === "object") into[key] = Object.assign({}, into[key], body[key]);
   for (const key of ["servers", "links", "pending"]) if (Array.isArray(body[key])) into[key] = body[key];
+  if (body.installs && typeof body.installs === "object") into.installs = Object.assign({}, body.installs);
   if ("linkPanel" in body) into.linkPanel = body.linkPanel;
 }
 const writes = [];
@@ -77,41 +82,181 @@ const site = createServer(async (req, res) => {
 await new Promise((r) => site.listen(0, "127.0.0.1", r));
 const siteUrl = "http://127.0.0.1:" + site.address().port;
 
-const child = spawn(process.execPath, ["--import", join(repo, "scripts", "sim", "register.mjs"), join(repo, "bot", "server.mjs")], {
-  cwd: repo,
-  env: Object.assign({}, process.env, {
-    PORT: "0",
-    HOST: "127.0.0.1",
-    DISCORD_BOT_TOKEN: "simsimsimsimsimsimsimsim.simsim.simsimsimsimsimsimsimsimsim",
-    DISCORD_GUILD_ID: "1",
-    BOT_SETTINGS_TOKEN: TOKEN,
-    SITE_URL: siteUrl,
-    SITE_ORIGIN: siteUrl,
-    SETTINGS_RELOAD_MS: "2500",
-    SIM_OWNER_ID: "100000000000000999",
-    SIM_SCENARIO: join(repo, "scripts", "sim", "scenario.mjs"),
-  }),
-  stdio: ["ignore", "pipe", "pipe"],
-});
+/* The pretend Rust server: accepts RCON connections and never answers (see sim/net-sim.mjs). */
+const silentSockets = new Set();
+const silentRcon = createNetServer((socket) => { silentSockets.add(socket); socket.on("error", () => {}); socket.on("close", () => silentSockets.delete(socket)); });
+await new Promise((r) => silentRcon.listen(0, "127.0.0.1", r));
+const SIM_SILENT_RCON = "127.0.0.1:" + silentRcon.address().port;
 
-let result = null;
-let output = "";
-child.stdout.on("data", (chunk) => {
-  output += chunk;
-  for (const line of String(chunk).split("\n")) if (line.startsWith("SIM_RESULT ")) result = JSON.parse(line.slice(11));
-});
-child.stderr.on("data", (chunk) => { output += chunk; });
-const killer = setTimeout(() => { child.kill("SIGKILL"); }, 120000);
-const code = await new Promise((r) => child.on("exit", r));
-clearTimeout(killer);
-site.close();
+/* The bot keeps a copy of its settings in a file; the simulation gives it a fresh one. */
+const settingsDir = mkdtempSync(join(tmpdir(), "spinback-sim-"));
+const SETTINGS_FILE = join(settingsDir, "settings.json");
 
-if (!result) {
-  console.log(output.split("\n").slice(-40).join("\n"));
-  console.log("The bot did not finish the simulation (exit code " + code + ").");
-  process.exit(1);
+function runBot(extraEnv, scenario, { stopWith } = {}) {
+  const child = spawn(process.execPath, ["--import", join(repo, "scripts", "sim", "register.mjs"), join(repo, "bot", "server.mjs")], {
+    cwd: repo,
+    env: Object.assign({}, process.env, {
+      PORT: "0",
+      HOST: "127.0.0.1",
+      DISCORD_BOT_TOKEN: "simsimsimsimsimsimsimsim.simsim.simsimsimsimsimsimsimsimsim",
+      DISCORD_GUILD_ID: "1",
+      BOT_SETTINGS_TOKEN: TOKEN,
+      SITE_URL: siteUrl,
+      SITE_ORIGIN: siteUrl,
+      SETTINGS_RELOAD_MS: "2500",
+      /* 203.0.113.10 never answers on CI (locally it may refuse at once): keep each silent
+         RCON wait well above Discord's deferral point but short enough for the whole tour */
+      RCON_TIMEOUT_MS: "2500",
+      /* the background connection check runs every few seconds here instead of every two minutes */
+      RCON_WATCH_MS: "4000",
+      SETTINGS_FILE,
+      SIM_SILENT_RCON,
+      SIM_OWNER_ID: "100000000000000999",
+      SIM_SCENARIO: join(repo, "scripts", "sim", scenario),
+    }, extraEnv),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return new Promise((resolve) => {
+    let result = null;
+    let output = "";
+    let stopSentAt = null;
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      for (const line of String(chunk).split("\n")) {
+        if (!line.startsWith("SIM_RESULT ")) continue;
+        result = JSON.parse(line.slice(11));
+        if (stopWith) { stopSentAt = Date.now(); child.kill(stopWith); }
+      }
+    });
+    child.stderr.on("data", (chunk) => { output += chunk; });
+    const killer = setTimeout(() => { child.kill("SIGKILL"); }, 300000);
+    child.on("exit", (code, signal) => {
+      clearTimeout(killer);
+      resolve({ result, output, code, signal, stopMs: stopSentAt ? Date.now() - stopSentAt : null });
+    });
+  });
 }
-console.log("Bot registered: /" + result.commands.join(", /"));
-console.log(result.interactions + " interactions, " + result.total + " checks, " + result.failed + " failed.");
-for (const f of result.failures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
-process.exit(result.failed ? 1 : 0);
+
+function report(name, run) {
+  if (!run.result) {
+    console.log(run.output.split("\n").slice(-40).join("\n"));
+    console.log(name + ": the bot did not finish the simulation (exit code " + run.code + ").");
+    return { total: 0, failed: 1, interactions: 0 };
+  }
+  console.log(name + ": " + run.result.interactions + " interactions, " + run.result.total + " checks, " + run.result.failed + " failed.");
+  for (const f of run.result.failures) console.log("  FAIL " + f.name + (f.detail ? "\n       " + f.detail : ""));
+  return run.result;
+}
+
+/* The bot's own HTTP API, checked while run 1 is up: Railway's health check says only "alive",
+   public status leaks nothing internal, and the routes meant for the website's server side
+   refuse anyone without BOT_SETTINGS_TOKEN. */
+const portProbe = createServer();
+await new Promise((r) => portProbe.listen(0, "127.0.0.1", r));
+const botPort = portProbe.address().port;
+await new Promise((r) => portProbe.close(r));
+async function apiChecks() {
+  const base = "http://127.0.0.1:" + botPort;
+  const out = [];
+  const request = (path, options) => fetch(base + path, Object.assign({ signal: AbortSignal.timeout(4000) }, options || {}));
+  let health = null;
+  for (let i = 0; i < 100 && !health; i++) {
+    try { const r = await request("/healthz"); if (r.ok) health = await r.json(); } catch (e) { /* not up yet */ }
+    if (!health) await new Promise((r) => setTimeout(r, 100));
+  }
+  out.push(["/healthz answers with liveness only", !!health && Object.keys(health).sort().join(",") === "ok,service"]);
+  const pub = await (await request("/api/status")).json().catch(() => ({}));
+  const secret = ["host", "port", "tokenPresent", "tokenSource", "tokenShape", "tokenLength", "lookedFor", "loginAttempts", "siteUrl", "ownerSource", "error", "guildInfo"];
+  out.push(["public /api/status shows no internals", pub.online !== undefined && secret.every((k) => !(k in pub))]);
+  out.push(["public /api/status carries the bot's picture for the website card", /^https:\/\//.test(pub.avatar || "")]);
+  /* wait for the background connection check to have looked at the saved server */
+  let watched = pub;
+  for (let i = 0; i < 40 && !(watched.rcon && watched.rcon.checkedAt); i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    watched = await (await request("/api/status")).json().catch(() => ({}));
+  }
+  out.push(["the background check reports the Rust connection publicly", !!(watched.rcon && watched.rcon.checkedAt && watched.rcon.connected === false && watched.rcon.serverName)]);
+  out.push(["the Rust server's address is not public", !!watched.rcon && !("host" in watched.rcon) && !("port" in watched.rcon) && !JSON.stringify(watched).includes("203.0.113.10")]);
+  out.push(["the public check says why, in words", typeof watched.rcon.detail === "string" && watched.rcon.detail.length > 0]);
+  const full = await (await request("/api/status", { headers: { "x-settings-token": TOKEN } })).json().catch(() => ({}));
+  out.push(["the website (with the token) still gets full diagnostics", "tokenShape" in full && "guildInfo" in full]);
+  for (const [path, method] of [["/api/guilds", "GET"], ["/api/guild", "GET"], ["/api/rcon/test", "POST"], ["/api/reconnect", "POST"], ["/api/oauth/exchange", "POST"]]) {
+    const r = await request(path, Object.assign({ method }, method === "POST" ? { body: "{}", headers: { "content-type": "application/json" } } : {}));
+    out.push([path + " refuses a request without the token", r.status === 403]);
+  }
+  const wrongToken = await request("/api/guilds", { headers: { "x-settings-token": TOKEN + "x" } });
+  out.push(["a wrong token is refused too", wrongToken.status === 403]);
+  const wrongOAuthToken = await request("/api/oauth/exchange", {
+    method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN + "x" }, body: "{}",
+  });
+  out.push(["OAuth code exchange refuses a wrong shared token", wrongOAuthToken.status === 403]);
+  const rightOAuthToken = await request("/api/oauth/exchange", {
+    method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN }, body: "{}",
+  });
+  out.push(["OAuth code exchange accepts only the authenticated internal caller", rightOAuthToken.status !== 403]);
+  const guilds = await request("/api/guilds", { headers: { "x-settings-token": TOKEN } });
+  out.push(["the right token reads guild metadata", guilds.status === 200]);
+  const getReconnect = await request("/api/reconnect", { headers: { "x-settings-token": TOKEN } });
+  out.push(["reconnect needs POST", getReconnect.status === 405]);
+  const privateRcon = await (await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify({ host: "192.168.1.10", port: 28016, password: "x" }) })).json().catch(() => ({}));
+  out.push(["RCON to a private address is refused, saying why", privateRcon.reason === "refused-private" && /local network/.test(privateRcon.detail || "")]);
+  const docRcon = await (await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify({ host: "192.0.2.10", port: 28016, password: "x" }) })).json().catch(() => ({}));
+  out.push(["RCON to a documentation range is refused", docRcon.reason === "refused-host"]);
+  const oversizedRcon = await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: JSON.stringify({ command: "x".repeat(5000) }) });
+  out.push(["oversized RCON requests receive HTTP 413", oversizedRcon.status === 413]);
+  const oversizedOAuth = await request("/api/oauth/exchange", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+    body: "x".repeat(17000) });
+  out.push(["oversized OAuth requests receive HTTP 413", oversizedOAuth.status === 413]);
+  return out;
+}
+
+/* Run 1: the full tour, with the website keeping settings. */
+const apiPromise = apiChecks();
+const first = await runBot({ PORT: String(botPort) }, "scenario.mjs");
+const api = await apiPromise;
+if (first.result) console.log("Bot registered: /" + first.result.commands.join(", /"));
+const one = report("Run 1 (website storage)", first);
+
+/* Between runs: the settings file was written, whole, and owner-only (it holds passwords). */
+const between = [];
+let saved = null;
+try { saved = JSON.parse(readFileSync(SETTINGS_FILE, "utf8")); } catch (e) { saved = null; }
+between.push(["the settings file is written", !!saved]);
+between.push(["it holds the saved roles and servers", !!(saved && saved.staffRoles && saved.staffRoles.owner && Array.isArray(saved.servers) && saved.servers.length)]);
+between.push(["kit-code previews survive in the settings file", !!(saved && saved.installs && Object.keys(saved.installs).length)]);
+between.push(["it is readable by the bot's own user only (0600)", process.platform === "win32" || (existsSync(SETTINGS_FILE) && (statSync(SETTINGS_FILE).mode & 0o077) === 0)]);
+between.push(["no half-written temp file is left", !existsSync(SETTINGS_FILE + ".tmp")]);
+
+/* Run 2: a restart with no BOT_SETTINGS_TOKEN and a volume: settings come back from the file,
+   the traffic guards work, and SIGTERM lets the bot finish and leave cleanly. */
+const second = await runBot({ BOT_SETTINGS_TOKEN: "", SETTINGS_RELOAD_MS: "600000" }, "scenario-restart.mjs", { stopWith: "SIGTERM" });
+const two = report("Run 2 (volume storage, restart)", second);
+between.push(["SIGTERM ends the bot cleanly (exit 0)", second.code === 0]);
+between.push(["the shutdown is quick (under 10 s)", second.stopMs !== null && second.stopMs < 10000]);
+between.push(["the shutdown is logged", /shutting down \(SIGTERM\)/.test(second.output)]);
+between.push(["the shutdown waits for the press still running", /1 interaction\(s\) still running/.test(second.output) && second.stopMs > 500]);
+
+/* The second bot run used file storage and reset its local preview map. Check that an empty
+   complete snapshot also clears the pretend website store, matching the Worker R2 behavior. */
+const clearInstallResponse = await fetch(siteUrl + "/api/bot/settings", {
+  method: "POST",
+  headers: { "content-type": "application/json", "x-settings-token": TOKEN },
+  body: JSON.stringify({ installs: {} }),
+});
+between.push(["an empty preview snapshot clears website-side metadata", clearInstallResponse.ok && !Object.keys(store.installs || {}).length]);
+
+site.close();
+for (const socket of silentSockets) socket.destroy();
+silentRcon.close();
+rmSync(settingsDir, { recursive: true, force: true });
+
+for (const a of api) between.push(["HTTP API: " + a[0], a[1]]);
+const betweenFailed = between.filter((b) => !b[1]);
+console.log("HTTP API, storage and shutdown: " + between.length + " checks, " + betweenFailed.length + " failed.");
+for (const b of betweenFailed) console.log("  FAIL " + b[0]);
+const failed = one.failed + two.failed + betweenFailed.length;
+console.log((one.interactions + two.interactions) + " interactions, " + (one.total + two.total + between.length) + " checks, " + failed + " failed.");
+process.exit(failed ? 1 : 0);

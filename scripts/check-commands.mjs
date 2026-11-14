@@ -11,6 +11,7 @@
       failed". Nothing is sent anywhere; RCON and the website are answered by stand-ins.
 
    Exits non-zero if anything would be refused. */
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createChecker } from "./lib/discord-limits.mjs";
@@ -178,6 +179,11 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
     ["logTypeMenu", () => mod.logTypeMenu(ctx)],
     ["kitGivePanel", () => mod.kitGivePanel(ctx)],
     ["deliveryModal", () => mod.deliveryModal(ctx.kits())],
+    ["kitGiveModal(several servers)", () => mod.kitGiveModal(Object.assign({}, ctx, { servers: () => [{ id: "a", name: "Main", host: "1.2.3.4", port: 1 }, { id: "b", name: "Second", host: "1.2.3.5", port: 2 }] }), "PlayerOne")],
+    ["serverChoice", () => mod.serverChoice(ctx, "server:pick:info", "Which server?", "Pick one.")],
+    ["serverSnapshot(several servers, none picked)", () => mod.serverSnapshot(Object.assign({}, ctx, { servers: () => [{ id: "a", name: "Main", host: "1.2.3.4", port: 1 }, { id: "b", name: "Second", host: "1.2.3.5", port: 2 }] }), "players", "")],
+    ["whoisModal", () => mod.whoisModal()],
+    ["rosterSearchModal", () => mod.rosterSearchModal()],
     ["saveDelivery(ok)", () => mod.saveDelivery(Object.assign({}, ctx, { setDelivery: () => ({ ok: true }) }), { kit_list: "kit list", kit_give: 'kit givetoplayer {kit} "{player}"' })],
     ["saveDelivery(no placeholders)", () => mod.saveDelivery(Object.assign({}, ctx, { setDelivery: () => ({ ok: true }) }), { kit_give: "kit give" })],
     ["setupPanel(not saving)", () => mod.setupPanel(Object.assign({}, ctx, { storeTokenSet: () => false }))],
@@ -212,6 +218,47 @@ for (const [label, configured, big] of [["after setup", true, false], ["lots of 
 }
 
 problems.push(...limits.problems);
+/* ---- 3b. every panel function the bot process calls is really imported ----
+   A missing import only fails when someone presses that button (the install-code form and
+   the kit-give form both crashed this way), so it is checked here, without running anything. */
+{
+  const server = readFileSync(join(repo, "bot", "server.mjs"), "utf8");
+  const imported = new Set(((/import \{([^}]*)\} from '\.\/commands\.mjs'/.exec(server) || [])[1] || "").split(",").map((x) => x.trim()).filter(Boolean));
+  const local = new Set([...server.matchAll(/^(?:async )?function (\w+)|^(?:const|let|var) (\w+)/gm)].map((m) => m[1] || m[2]));
+  for (const name of Object.keys(mod)) {
+    if (typeof mod[name] !== "function") continue;
+    checked += 1;
+    if (new RegExp("(?<![\\w.])" + name + "\\s*\\(").test(server) && !imported.has(name) && !local.has(name)) {
+      problems.push("bot/server.mjs calls " + name + "() from commands.mjs without importing it");
+    }
+  }
+}
+
+/* ---- 4. the website's commands reference lists exactly what the bot registers ---- */
+{
+  const ref = JSON.parse(readFileSync(join(repo, "public", "data", "commands.json"), "utf8"));
+  const names = (list) => (list || []).map((x) => x.name).sort().join(",");
+  for (const real of COMMANDS) {
+    checked += 1;
+    const page = (ref.commands || []).find((c) => c.name === real.name);
+    if (!page) { problems.push("commands.json: /" + real.name + " is missing from the commands reference"); continue; }
+    const subs = (real.options || []).filter((o) => o.type === 1);
+    if (!subs.length) {
+      /* a command with no subcommands: the page may describe its options in one entry */
+      const shownOptions = [].concat(...(page.subcommands || []).map((x) => x.options || []), page.options || []);
+      const uniq = (list) => [...new Set(list.map((x) => x.name))].sort().join(",");
+      if (uniq(real.options || []) !== uniq(shownOptions)) problems.push("commands.json: /" + real.name + " options differ (bot: " + uniq(real.options || []) + ", page: " + uniq(shownOptions) + ")");
+      continue;
+    }
+    if (names(subs) !== names(page.subcommands)) problems.push("commands.json: /" + real.name + " subcommands differ (bot: " + names(subs) + ", page: " + names(page.subcommands) + ")");
+    for (const sub of subs) {
+      const shown = (page.subcommands || []).find((x) => x.name === sub.name);
+      if (shown && names(sub.options) !== names(shown.options)) problems.push("commands.json: /" + real.name + " " + sub.name + " options differ (bot: " + names(sub.options) + ", page: " + names(shown.options) + ")");
+    }
+  }
+  for (const page of ref.commands || []) if (!COMMANDS.some((c) => c.name === page.name)) problems.push("commands.json: /" + page.name + " is listed but the bot does not register it");
+}
+
 console.log(COMMANDS.length + " commands, " + runs.length + " command runs x 3 setups, " + (checked + limits.checked) + " checks.");
 if (problems.length) {
   const unique = [...new Set(problems)];
