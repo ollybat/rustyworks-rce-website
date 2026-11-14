@@ -56,6 +56,7 @@
     <link rel="stylesheet" href="/site-pro.css">
     <link rel="stylesheet" href="/commands.css">
   <link rel="stylesheet" href="/botcard.css">
+  <link rel="stylesheet" href="/commands-goals.css">
   <script src="/botcard.js" defer></script>
 </head>
   <body>
@@ -102,6 +103,12 @@
             <span class="cmd-stat"><strong id="statSetup">—</strong> need setup first</span>
           </div>
         </div>
+      </section>
+
+      <section class="cmd-goals" aria-labelledby="cmdGoalsTitle">
+        <h2 id="cmdGoalsTitle">Start here: what do you want to do?</h2>
+        <p class="cmd-goals__lead">One press jumps to the exact subcommand, with what it needs first.</p>
+        <div class="cmd-goals__grid" id="cmdGoals"></div>
       </section>
 
       <div class="cmd-bar" id="cmdBar">
