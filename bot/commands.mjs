@@ -13,6 +13,16 @@ export const LOG_TYPES = [
   ["zorp", "Zorp log"], ["teleport", "Teleport log"], ["clan", "Clan log"],
   ["catchARide", "Catch-A-Ride log"], ["joinLeave", "Join and leave log"], ["errors", "Error log"],
 ];
+/* The roles /setup run can create, in the order they rank. The colour is cosmetic; the id
+   saved against each slot afterwards is what the bot checks when it decides who may run
+   staff commands. The bot grants these roles no Discord permissions of their own. */
+export const STAFF_ROLE_RECIPES = [
+  ["owner", "Owner", 0xcf6a2e, "whoever runs the server"],
+  ["coOwner", "Co-Owner", 0xd97732, "second in charge"],
+  ["headAdmin", "Head Admin", 0xe8843f, "runs the admin team"],
+  ["admin", "Admin", 0xfaa81a, "full staff powers"],
+  ["moderator", "Moderator", 0x3ba55d, "day to day moderation"],
+];
 export const ROLE_SLOTS = [
   ["owner", "Owner"], ["coOwner", "Co-Owner"], ["headAdmin", "Head Admin"],
   ["admin", "Admin"], ["moderator", "Moderator"], ["linked", "Linked"],
@@ -26,9 +36,9 @@ export const COMMANDS = [
   { name: "help", description: "Every command, what it needs first, and a button into each one", dm_permission: false },
   { name: "setup", description: "Configure Spinback RCE for this server", dm_permission: false,
     options: [
-      { type: 1, name: "run", description: "Guided setup: roles, logging channels, then your Rust server" },
+      { type: 1, name: "run", description: "Guided setup: the bot can make the roles and log channels, then your Rust server" },
       { type: 1, name: "roles", description: "Pick your staff roles from a list: no ids to copy" },
-      { type: 1, name: "channels", description: "Logging channels: pick them, or let the bot create them" },
+      { type: 1, name: "channels", description: "Logging channels: pick them, or let the bot create them private to your staff roles" },
       { type: 1, name: "server", description: "Add or change the Rust server, tested before it is saved" },
       { type: 1, name: "suggest", description: "Read the role and channel names here and propose a full setup" },
       { type: 1, name: "doctor", description: "Health check: measure every saved setting and list what to fix" },
@@ -162,6 +172,77 @@ export async function pingReply(ctx) {
   return { embeds: [built], components: [row(buttons)], flags: EPH };
 }
 
+/* /setup run ---------------------------------------------------------------- */
+/* One panel that does the whole thing, in any order, with the Rust server last. Each press
+   either creates something or explains exactly why it could not, and nothing in the guild is
+   touched until one of the Create buttons is pressed. */
+export function runSetupPanel(ctx) {
+  var roles = ctx.settings.staffRoles || {};
+  var madeRoles = STAFF_ROLE_RECIPES.filter(function (r) { return roles[r[0]]; });
+  var channels = ctx.settings.logChannels || {};
+  var setChannels = LOG_TYPES.filter(function (t) { return channels[t[0]]; });
+  var servers = ctx.servers() || [];
+  var built = embed(madeRoles.length || setChannels.length || servers.length ? 0x3ba55d : 0xfaa81a, "Guided setup",
+    "Every step is optional and every step is one press, so you can do them in any order and come back later. Nothing in this server is created or changed until you press a button that says so, and the Rust server is the last step because it is the only one that has to answer a real check.");
+  built.fields = [
+    field("1 - Staff roles", madeRoles.length ? madeRoles.length + " of " + STAFF_ROLE_RECIPES.length + " saved: " + madeRoles.map(function (r) { return r[1]; }).join(", ") : "not saved yet - the bot can make them all for you", false),
+    field("2 - Log channels", setChannels.length ? setChannels.length + " of " + LOG_TYPES.length + " log types have a channel" : "not set yet - the bot can make them too", false),
+    field("3 - Rust server", servers.length ? servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port); }).join(", ") : "not linked yet - add it last", false),
+    field("What the bot creates", "**Roles:** " + STAFF_ROLE_RECIPES.map(function (r) { return r[1]; }).join(", ") + ". They are markers of rank: the bot grants them no Discord permissions, and their ids are saved as the staff roles, so they - and only they, plus Administrator and the server owner - can run the staff commands."
+      + "\n**Channels:** one text channel per log type you tick, inside a **Spinback** category, and **@everyone is denied View Channel on every one of them**, so only the staff roles above and the bot can read them. A channel of the same name that already exists is reused and relocked instead of being duplicated.", false),
+    field("If a step will not run", "Making roles needs **Manage Roles**, making channels needs **Manage Channels**. Without them the bot names the missing permission item by item instead of failing quietly, and you can always pick roles and channels you already have with the buttons below.", false),
+  ];
+  built.footer = { text: "Admin or Manage Server. Panels are ephemeral, and no password is ever shown back to you" };
+  return { embeds: [built], components: [
+    row([button("setup:run:roles", "Create the roles for me", 3), button("setup:run:channels", "Create the log channels", 3)]),
+    row([button("setup:roles", "Pick roles I already have", 2), button("setup:server", "3. Add the Rust server", 1)]),
+    row([button("setup:doctor", "Health check", 2), button("setup:status", "Status", 2), button("setup:suggest", "Find them by name", 2)]),
+  ], flags: EPH };
+}
+
+export function roleBuildPanel(ctx) {
+  var roles = ctx.settings.staffRoles || {};
+  var known = (ctx.guildInfo && ctx.guildInfo.roles) || [];
+  var lines = STAFF_ROLE_RECIPES.map(function (r) {
+    var there = known.filter(function (x) { return String(x.name).toLowerCase() === r[1].toLowerCase(); })[0];
+    var saved = roles[r[0]] ? "saved" : "not saved yet";
+    return "- **" + r[1] + "** (" + r[3] + ") - " + (there ? "a role called " + r[1] + " already exists, so it is used as it is" : "will be created here") + ", " + saved;
+  });
+  var built = embed(0xfaa81a, "Create the staff roles?",
+    "This is the list, exactly as the bot would make it:\n\n" + lines.join("\n"));
+  built.fields = [
+    field("What they are for", "The ids are saved as your staff roles, so these are the roles allowed to run staff commands. The bot grants them no Discord permissions, and it does not give them to anybody - assign them to your staff yourself, or let the role picker in the panel do it when someone is promoted.", false),
+    field("Reused, not duplicated", "A role with one of these names that already exists is used instead of making a second one, and its id is saved. Nothing is renamed, re-coloured or deleted.", false),
+    field("One permission needed", "Creating a role needs **Manage Roles**. If the bot does not have it, each one it cannot make is reported with that reason and the rest still go ahead.", false),
+  ];
+  built.footer = { text: "Nothing is created until Create the roles is pressed" };
+  return { embeds: [built], components: [
+    row([button("setup:run:roles:go", "Create the roles", 3), button("setup:roles", "Choose roles instead", 2)]),
+    row([button("setup:run", "Back to guided setup", 2), button("setup:doctor", "Health check", 2)]),
+  ], flags: EPH };
+}
+
+export function roleBuildResult(ctx, made) {
+  var created = (made && made.created) || [];
+  var reused = (made && made.reused) || [];
+  var failed = (made && made.failed) || [];
+  var wrote = (made && made.wrote) || null;
+  var built = embed(failed.length ? 0xfaa81a : 0x3ba55d, failed.length ? "Roles: some could not be made" : "The staff roles are ready",
+    created.length + " role(s) created, " + reused.length + " already here and used" + (failed.length ? ", " + failed.length + " could not be made" : "") + "."
+    + (wrote && wrote.ok ? " Saved to the website as well." : " The website refused the settings save, so this holds until the service restarts: " + String((wrote && wrote.detail) || "").slice(0, 160)));
+  var fields = [];
+  if (created.length) fields.push(field("Created", created.slice(0, 10).join("\n").slice(0, 1000), false));
+  if (reused.length) fields.push(field("Already here, now saved", reused.slice(0, 10).join("\n").slice(0, 1000), false));
+  if (failed.length) fields.push(field("Could not be made", failed.slice(0, 6).join("\n").slice(0, 1000), false));
+  fields.push(field("Who can run staff commands now", "The roles saved above, plus Administrator and the server owner. Nobody else.", false));
+  fields.push(field("Next", "**Create the log channels** locks one channel per log type to these same roles, so only they can read the logs. Then add the Rust server last: it is the only step that has to pass a live check.", false));
+  built.fields = fields;
+  return { embeds: [built], components: [
+    row([button("setup:run:channels", "Create the log channels", 1), button("setup:run:roles", "Create more roles", 2)]),
+    row([button("setup:server", "3. Add the Rust server", 1), button("setup:run", "Back to guided setup", 2)]),
+  ], flags: EPH };
+}
+
 /* /setup ------------------------------------------------------------------- */
 export function setupPanel(ctx) {
   var roles = ctx.settings.staffRoles || {};
@@ -180,6 +261,7 @@ export function setupPanel(ctx) {
     "Press **Find them for me**: the bot reads the role and channel names in this server, proposes a match for each slot and each log type, and shows you the whole list before anything is saved. **Health check** then measures everything it can reach and says what to fix first.", false));
   built.footer = { text: "Admin or Manage Server. Panels are ephemeral, and passwords are never shown back to you." };
   return { embeds: [built], components: [
+    row([button("setup:run", "Guided setup: the bot makes the roles and channels", 3)]),
     row([button("setup:roles", "1. Staff roles", 1), button("setup:channels", "2. Log channels", 1), button("setup:server", "3. Rust server", 1)]),
     row([button("setup:suggest", "Find them for me", 2), button("setup:doctor", "Health check", 2), button("setup:status", "Status", 2)]),
     row([button("setup:import", "Import server.cfg", 2), button("setup:export", "Export settings", 2), button("setup:reset", "Reset", 4)]),
@@ -223,16 +305,44 @@ export function serverPicker(ctx) {
       options: servers.slice(0, 25).map(function (s) { return { label: s.name.slice(0, 90), value: s.id, description: (s.host + ":" + s.port).slice(0, 90) }; }) }])], flags: EPH };
 }
 export async function testAndSaveServer(ctx, data, existingId) {
-  var host = String(data.srv_host || "").trim();
-  var port = Number(String(data.srv_port || "").trim());
-  var password = String(data.srv_pass || "");
-  var name = String(data.srv_name || "").trim() || (existingId ? "server" : host);
+  var typedHost = String((data && data.srv_host) || "").trim();
+  var typedPort = String((data && data.srv_port) || "").trim();
+  var password = String((data && data.srv_pass) || "");
+  /* The address is read the way people actually write it - with the port on the end, in
+     brackets, with a scheme in front - so a good address is never refused for its shape.
+     Anything that genuinely cannot be reached says which part of it is the problem. */
+  var target = ctx.target ? ctx.target(typedHost, typedPort) : null;
+  if (!target || target.ok !== true) {
+    var reason = (target && target.reason) || "bad-host";
+    var advice = {
+      "no-host": "The **Server IP or host** box arrived empty. Type the " + code("rcon.ip") + " value from server.cfg: " + code("51.38.1.2") + ", " + code("eu01.example.net") + " and " + code("51.38.1.2:28015") + " all work.",
+      "no-port": "The **RCON port** box arrived empty. It is " + code("rcon.port") + " in server.cfg, and it is not the game port or the query port.",
+      "refused-port": "That is not a port number. " + code("rcon.port") + " is normally five digits.",
+      "refused-private": "That address exists only inside a private network, so a cloud host cannot reach it. Use the public IP or the hostname from server.cfg.",
+      "refused-local": "That address is the machine the bot runs on, not your server.",
+      "bad-host": "That did not read as an address. Copy the value from server.cfg exactly as it is written there.",
+    }[reason] || "That address could not be used.";
+    return { embeds: [embed(0xdc4c4c, "Nothing was saved - the address needs fixing",
+      "**" + (typedHost || "(empty)") + ":" + (typedPort || "(empty)") + "** was not used, so nothing was written.\n\nReason: "
+      + code(reason) + "\n" + String((target && target.detail) || "").slice(0, 300) + "\n\n" + advice)],
+      components: [row([button("setup:server", "Enter it again", 1), button("setup:import", "Paste server.cfg", 2)])], flags: EPH };
+  }
+  var host = target.host;
+  var port = target.port;
+  var name = String((data && data.srv_name) || "").trim() || (existingId ? "server" : host);
   var answer = await ctx.rconTest({ host: host, port: port, password: password, command: "serverinfo" });
   if (!answer || answer.ok !== true) {
+    var why = {
+      "connect-failed": "Nothing is listening on that port, or the host blocks this cloud address. Check that RCON is on, that the port is open in the host firewall, and that the address is the one players connect to.",
+      "timeout": "The address and port look right but nothing answered in time. RCON is usually switched off, or " + code("rcon.web") + " is set to 1.",
+      "bad-password": "The server answered and refused the password, so the address and port are right. Compare " + code("rcon.password") + " in server.cfg with what you typed, character for character.",
+      "closed-before-auth": "The server closed the connection before it accepted the password. That is normally " + code("rcon.web") + " being set to 1, or an RCON ban on this address.",
+    }[(answer && answer.reason) || ""] || "";
     return { embeds: [embed(0xdc4c4c, "Not saved - the connection failed",
-      "**" + host + ":" + port + "** did not answer the check, so nothing was written.\n\nReason: " +
-      code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 400))],
-      components: [row([button("setup:server", "Try again", 1)])], flags: EPH };
+      "**" + target.display + "** did not answer the check, so nothing was written.\n\nReason: " +
+      code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 400)
+      + (why ? "\n\n" + why : ""))],
+      components: [row([button("setup:server", "Try again", 1), button("setup:import", "Paste server.cfg", 2)])], flags: EPH };
   }
   var saved = await ctx.saveServer({ id: existingId, name: name, host: host, port: port, password: password });
   var lines = String(answer.answer || "").split("\n").slice(0, 6).join("\n");
@@ -434,6 +544,7 @@ export function channelSetupPanel(ctx) {
     "Every log type is optional: a type with no channel is simply switched off, and " + setCount + " of " + LOG_TYPES.length + " have one.");
   built.fields = [
     field("Two ways", "**Pick them one by one** - choose a log type, then the channel for it.\n**Create them for me** - the bot makes a Spinback category and one channel per type you tick, shows you the exact list first, and reports each channel back as it is made.", false),
+    field("What Create them for me does now", "Each channel it makes is locked to your staff roles: `@everyone` loses View Channel, every saved staff role keeps it, and the bot keeps what it needs to post. A channel with that name that is already here is reused and relocked instead of being duplicated. With no staff role saved yet there is nobody to lock it to, so make the roles first - that button is on the guided setup panel.", false),
     field("Why the bot asks", "It only saves a channel it can actually post in, and it says so when it cannot. A log target the bot cannot write to would be worse than none.", false),
   ];
   return { embeds: [built], components: [
@@ -444,38 +555,55 @@ export function channelSetupPanel(ctx) {
 
 export function logChannelBuilder() {
   return { embeds: [embed(0x3ba55d, "Which logs should get a channel?",
-    "Tick the log types you want. The bot creates one text channel per ticked type inside a new **Spinback** category, then saves each channel as that type target. Nothing else in the server is touched, and you see the list before it makes anything.")],
+    "Tick the log types you want. The bot makes one text channel per ticked type inside a **Spinback** category, then saves each channel as that log target."
+    + "\n\nEvery channel it makes is **private to your staff roles**: `@everyone` is denied View Channel and only the saved staff roles (and the bot) keep it. A channel of that name that is already here is reused and relocked rather than duplicated, and nothing else in the server is touched. You see the list before anything is made.")],
     components: [
       row([stringSelect("setup:channels:build:pick", "Log types to create channels for",
         LOG_TYPES.slice(0, 25).map(function (p) { return { label: p[1], value: p[0] }; }), 1, 10)]),
-      row([button("setup:channels", "Back", 2)]),
+      row([button("setup:channels", "Back", 2), button("setup:run", "Guided setup", 2)]),
     ], flags: EPH };
 }
 
-export function logChannelPlan(keys) {
+export function logChannelPlan(keys, ctx) {
   var list = (keys || []).map(function (key) {
     var found = LOG_TYPES.filter(function (t) { return t[0] === key; })[0];
     return "- **#" + (found ? found[0].toLowerCase() : key) + "** for " + (found ? found[1] : key);
   });
+  var roles = (ctx && ctx.settings && ctx.settings.staffRoles) || {};
+  var staff = STAFF_ROLE_RECIPES.filter(function (r) { return roles[r[0]]; });
   var built = embed(0xfaa81a, "Create these channels?",
     "A category named **Spinback**, then " + (keys || []).length + " text channel(s) in this server:\n\n" + (list.join("\n") || "nothing selected"));
-  built.fields = [field("Afterwards", "Each created channel is saved as that log type target, so logs start going there. A channel the bot cannot create is reported with the reason and simply skipped.", false)];
+  built.fields = [
+    field("Who will be able to read them", staff.length
+      ? "`@everyone` is denied View Channel on each one, and these saved staff roles keep it: " + staff.map(function (r) { return r[1]; }).join(", ") + ". The bot keeps what it needs to post, and nothing else in the server changes."
+      : "**No staff role is saved yet**, so there is nobody to lock these to and `@everyone` would keep reading them. Make the roles first (guided setup), then come back here.", false),
+    field("Afterwards", "Each channel is saved as that log type target, so logs start going there. A channel the bot cannot create is reported with the reason and simply skipped.", false),
+  ];
   built.footer = { text: "This is the only step that creates channels, and it does it only when you press Create" };
   return { embeds: [built], components: [
     row([button("setup:channels:build:go", "Create them", 3), button("setup:channels:build:cancel", "Cancel", 2)]),
+    row([button("setup:run:roles", "Make the staff roles first", 2)]),
   ], flags: EPH };
 }
 
-export function logChannelBuilt(created, failed, wrote) {
+export function logChannelBuilt(created, failed, wrote, reused, staffIds) {
   var okList = created || [];
+  var again = reused || [];
   var badList = failed || [];
+  var locked = staffIds || [];
   var built = embed(badList.length ? 0xfaa81a : 0x3ba55d, "Log channels",
-    okList.length + " channel(s) created and saved" + (badList.length ? ", " + badList.length + " skipped" : "") + "."
-    + (wrote && wrote.ok ? "" : " The website refused the settings save, so these ids live in this bot memory only: " + String((wrote && wrote.detail) || "").slice(0, 160)));
-  if (okList.length) built.fields = [field("Created", okList.slice(0, 12).join("\n").slice(0, 1000), false)];
-  if (badList.length) built.fields = (built.fields || []).concat([field("Skipped", badList.slice(0, 8).join("\n").slice(0, 1000), false)]);
+    okList.length + " channel(s) created" + (again.length ? ", " + again.length + " already there and relocked" : "") + (badList.length ? ", " + badList.length + " skipped" : "") + "."
+    + (wrote && wrote.ok ? " Saved to the website." : " The website refused the settings save, so these ids live in this bot memory only: " + String((wrote && wrote.detail) || "").slice(0, 160)));
+  var fields = [];
+  if (okList.length) fields.push(field("Created", okList.slice(0, 12).join("\n").slice(0, 1000), false));
+  if (again.length) fields.push(field("Already there, now relocked", again.slice(0, 12).join("\n").slice(0, 1000), false));
+  if (badList.length) fields.push(field("Skipped", badList.slice(0, 8).join("\n").slice(0, 1000), false));
+  fields.push(field("Who can read them", locked.length
+    ? locked.length + " staff role(s) plus the bot, and `@everyone` is denied View Channel on each channel. If you add or change a staff role later, run this once more: an existing channel is relocked rather than duplicated."
+    : "No staff role is saved, so these channels are visible to everyone. Make the roles, then run this again to lock them.", false));
+  built.fields = fields;
   return { embeds: [built], components: [
-    row([button("setup:channels", "Back to log channels", 2), button("setup:doctor", "Health check", 2), button("setup:server", "Next: the Rust server", 1)]),
+    row([button("setup:channels", "Back to log channels", 2), button("setup:doctor", "Health check", 2), button("setup:server", "3. Add the Rust server", 1)]),
   ], flags: EPH };
 }
 
@@ -486,6 +614,7 @@ export function serverStepPanel(ctx) {
     "The address, the RCON port and the password come from your server.cfg. Nothing is saved until the server answers a real RCON command, so a wrong port or password cannot land in your settings."
     + (servers.length ? "\n\nAlready saved: " + servers.map(function (s) { return code(s.name + " " + s.host + ":" + s.port); }).join(", ") : ""));
   built.fields = [
+    field("What you can type", "The address on its own, or with the port on the end - " + code("51.38.1.2") + ", " + code("51.38.1.2:28015") + ", " + code("[2606:4700::1]:28015") + " and " + code("eu01.example.net") + " are all read correctly. A private address (192.168.x.x, 10.x.x.x, 127.0.0.1) cannot be reached from a cloud host, and the panel says so in those words instead of failing silently.", false),
     field("Where the details are", "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + ", " + code("rcon.password") + ". " + code("rcon.web") + " must be " + code("0") + ", because this bot speaks the classic source RCON protocol."),
     field("If it will not answer", "The port is the thing people get wrong most: it is the RCON port from server.cfg, not the game or query port. Then rcon.web. Then an IP allowlist on the host, because the bot runs from a cloud address that can change."),
     field("Two ways in", "Type the details, or paste the RCON lines from server.cfg and let the bot read them."),
@@ -1146,8 +1275,8 @@ export function setupStatus(ctx) {
   ];
   var next = [];
   if (!servers.length) next.push("Run **/setup run** and add your Rust server, so the RCON connection can be tested.");
-  if (!Object.keys(roles).length) next.push("Step 1: save your staff roles so staff-only features know who is who.");
-  if (!Object.keys(channels).length) next.push("Step 2: choose a channel for the log types you want.");
+  if (!Object.keys(roles).length) next.push("Step 1: **/setup run** can create the staff roles for you, or pick roles you already have.");
+  if (!Object.keys(channels).length) next.push("Step 2: **/setup run** can create one log channel per log type, locked to those staff roles.");
   if (!kits.listCommand) next.push("Set your kit plugin list command, then **/kits grab** reads your real kit names.");
   if (!kits.giveCommand) next.push("Set a give template using {player} and {kit}, then **/kits give** can hand kits out in game.");
   if (!ctx.storeTokenSet()) next.push("Set BOT_SETTINGS_TOKEN to the same value on the website and the bot, otherwise saves stay in this bot memory only.");
@@ -1574,6 +1703,7 @@ export function dispatchCommand(ctx, name, sub, options) {
     if (gate.complete !== true) return gatePayload(ctx, "/" + name + (sub ? " " + sub : ""));
   }
   if (name === "setup") {
+    if (sub === "run") return runSetupPanel(ctx);
     if (sub === "refresh") return setupRefresh(ctx);
     if (sub === "status") return setupStatus(ctx);
     if (sub === "roles") return setupRolePanel(ctx);
