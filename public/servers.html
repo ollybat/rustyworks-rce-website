@@ -84,7 +84,7 @@
             <strong>Anything the bot has not reported is shown as not reported</strong>, because a made-up player
             count would be worse than an honest blank.
           </p>
-          <div class="sv-summary" id="svSummary">
+          <div class="sv-summary" id="svSummary" role="status" aria-live="polite">
             <span class="sv-tile"><strong id="svStatServers">-</strong> servers known</span>
             <span class="sv-tile"><strong id="svStatOnline">-</strong> answering now</span>
             <span class="sv-tile"><strong id="svStatOffline">-</strong> not answering</span>
@@ -113,10 +113,16 @@
               <button type="button" class="sv-chip" data-filter="offline">Not answering</button>
               <button type="button" class="sv-chip" data-filter="unknown">Not checked yet</button>
             </div>
+            <div class="sv-filters" id="svSort" role="group" aria-label="Sort servers">
+              <span class="sv-sort-label">Sort</span>
+              <button type="button" class="sv-chip is-on" data-sort="state" aria-pressed="true">Answering first</button>
+              <button type="button" class="sv-chip" data-sort="name" aria-pressed="false">Name</button>
+              <button type="button" class="sv-chip" data-sort="checked" aria-pressed="false">Last checked</button>
+            </div>
             <button type="button" class="sv-refresh" id="svRefresh">Refresh</button>
           </div>
-          <p class="sv-meta" id="svMeta">Reading the bot...</p>
-          <p class="sv-warn" id="svWarn" hidden></p>
+          <p class="sv-meta" id="svMeta" role="status" aria-live="polite">Reading the bot...</p>
+          <p class="sv-warn" id="svWarn" role="status" hidden></p>
           <div class="sv-list" id="svList"></div>
           <p class="sv-note" id="svNote" hidden></p>
           <p class="sv-meta">Adding one is a Discord step: <a href="commands.html#sub-setup-server">/setup server</a> tests the address before it saves it, and every server saved there appears here.</p>
