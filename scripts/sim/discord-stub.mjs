@@ -96,7 +96,8 @@ function makeGuild() {
 export class Client extends EventEmitter {
   constructor() {
     super();
-    this.user = { tag: "Spinback#0001", setPresence(p) { world.presence = p; } };
+    this.user = { id: "100000000000000500", tag: "Spinback#0001", setPresence(p) { world.presence = p; },
+      displayAvatarURL: () => "https://cdn.discordapp.com/avatars/100000000000000500/sim.png" };
     this.ws = { ping: 42 };
     this.guild = makeGuild();
     this.guilds = { cache: new Collection([[this.guild.id, this.guild]]), fetch: async () => this.guild };

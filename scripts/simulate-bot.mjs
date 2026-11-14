@@ -107,6 +107,8 @@ function runBot(extraEnv, scenario, { stopWith } = {}) {
       /* 203.0.113.10 never answers on CI (locally it may refuse at once): keep each silent
          RCON wait well above Discord's deferral point but short enough for the whole tour */
       RCON_TIMEOUT_MS: "2500",
+      /* the background connection check runs every few seconds here instead of every two minutes */
+      RCON_WATCH_MS: "4000",
       SETTINGS_FILE,
       SIM_SILENT_RCON,
       SIM_OWNER_ID: "100000000000000999",
@@ -166,6 +168,15 @@ async function apiChecks() {
   const pub = await (await request("/api/status")).json().catch(() => ({}));
   const secret = ["host", "port", "tokenPresent", "tokenSource", "tokenShape", "tokenLength", "lookedFor", "loginAttempts", "siteUrl", "ownerSource", "error", "guildInfo"];
   out.push(["public /api/status shows no internals", pub.online !== undefined && secret.every((k) => !(k in pub))]);
+  out.push(["public /api/status carries the bot's picture for the website card", /^https:\/\//.test(pub.avatar || "")]);
+  /* wait for the background connection check to have looked at the saved server */
+  let watched = pub;
+  for (let i = 0; i < 40 && !(watched.rcon && watched.rcon.checkedAt); i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    watched = await (await request("/api/status")).json().catch(() => ({}));
+  }
+  out.push(["the background check reports the Rust connection publicly", !!(watched.rcon && watched.rcon.checkedAt && watched.rcon.connected === false && watched.rcon.serverName)]);
+  out.push(["the Rust server's address is not public", !!watched.rcon && !("host" in watched.rcon) && !("port" in watched.rcon) && !JSON.stringify(watched).includes("203.0.113.10")]);
   const full = await (await request("/api/status", { headers: { "x-settings-token": TOKEN } })).json().catch(() => ({}));
   out.push(["the website (with the token) still gets full diagnostics", "tokenShape" in full && "guildInfo" in full]);
   for (const [path, method] of [["/api/guilds", "GET"], ["/api/guild", "GET"], ["/api/rcon/test", "POST"], ["/api/reconnect", "POST"], ["/api/oauth/exchange", "POST"]]) {

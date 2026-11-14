@@ -5,17 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Colour Studio | Spinback RCE</title>
     <meta name="description" content="Build a colour gradient, watch it live, and copy the exact markup for a Discord ANSI block, a bot embed accent colour or a web page.">
-    <meta name="theme-color" content="#0b0704">
-    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
-    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
-    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/dashboard/colortext.html">
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Spinback RCE">
-    <meta property="og:title" content="Colour Studio — Spinback RCE">
-    <meta property="og:description" content="Gradient text for Discord: watch it live, then copy the ANSI block, an embed accent colour or the CSS.">
-    <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/dashboard/colortext.html">
-    <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
-    <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="../style.css">
     <link rel="stylesheet" href="/ui-extras.css">
@@ -34,8 +23,7 @@
       .ct-preview { display: grid; place-items: center; min-height: 140px; border-radius: 14px; border: 1px dashed #3a2f25; padding: 18px; margin-bottom: 16px; background: #0e0b08; }
       .ct-preview b { font-size: clamp(28px, 7vw, 54px); font-weight: 800; letter-spacing: .5px; -webkit-background-clip: text; background-clip: text; color: transparent; }
       .ct-stops { display: grid; gap: 8px; }
-      .ct-stop { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
-      .ct-stop input[type="text"] { min-width: 0; width: 100%; box-sizing: border-box; }
+      .ct-stop { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; }
       .ct-stop input[type="color"] { width: 46px; height: 34px; border: 1px solid #3a2f25; border-radius: 8px; background: #120e0b; padding: 2px; }
       .ct-stop input[type="text"] { padding: 9px 11px; border-radius: 9px; border: 1px solid #3a2f25; background: #120e0b; color: inherit; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
       .ct-x { padding: 8px 12px; border-radius: 9px; border: 1px solid #3a2f25; background: transparent; color: inherit; cursor: pointer; }
@@ -49,32 +37,13 @@
       .ct-msg { font-size: 13.5px; color: #6cc24a; }
       .ct-saved { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 7px; }
       .ct-saved li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; border: 1px solid #2e251d; border-radius: 10px; padding: 9px 12px; }
-      .ct-discord { margin: 6px 0 10px; padding: 12px 14px; border-radius: 8px; background: #2b2d31; border: 1px solid #1e1f22; color: #dbdee1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
       .ct-swatch { width: 76px; height: 14px; border-radius: 999px; border: 1px solid #3a2f25; }
     </style>
-  </head>
+  <link rel="stylesheet" href="/botcard.css">
+  <script src="/botcard.js" defer></script>
+</head>
   <body>
-    <a class="skip-link" href="#main">Skip to content</a>
-    <header>
-      <div class="wrap">
-        <nav>
-          <a href="/index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34">Spinback<span class="accent">RCE</span></a>
-          <div class="nav-links" id="navLinks">
-            <a href="/dashboard/kitbuilder.html">Kit Studio</a>
-            <a href="/status.html">Status</a>
-            <a
-              href="https://discord.com/oauth2/authorize?client_id=1570023832717361213&permissions=8&integration_type=0&scope=bot+applications.commands"
-              target="_blank"
-              rel="noopener"
-              class="btn">
-              Add to Discord
-            </a>
-          </div>
-          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
-        </nav>
-      </div>
-    </header>
-    <main id="main" class="ct-wrap" tabindex="-1">
+    <main id="main" class="ct-wrap">
       <div class="ct-head">
         <h1>Colour <span class="accent">Studio</span></h1>
         <p>Pick up to eight colours, watch the gradient form, then copy the markup for the place you want it: a Discord ANSI block, a bot embed accent, or a web page.</p>
@@ -101,13 +70,11 @@
 
       <section class="ct-card">
         <h2>Copy it into your place</h2>
-        <p class="ct-note">Discord colours text inside an <code>ansi</code> code block with just eight colours, so each letter gets the one of those eight closest to its place on your gradient. The strip below shows what Discord will draw. Colours show on Discord for desktop and web; the phone apps show the text plain. Embeds take a single accent colour, and a web page takes the gradient itself.</p>
-        <div class="ct-note">How it will look in Discord</div>
-        <pre class="ct-discord" id="ctAnsiPreview" aria-label="Preview of the Discord ANSI block"></pre>
+        <p class="ct-note">Discord renders ANSI colour codes inside an <code>ansi</code> code block, so what you copy is the nearest of the sixteen ANSI colours to each stop. Embeds take an accent colour as a decimal integer, and a web page takes the gradient itself.</p>
         <label class="ct-note" for="ctAnsi">Discord ANSI block</label>
         <textarea class="ct-out" id="ctAnsi" readonly></textarea>
         <div class="ct-row"><button class="ct-btn" id="ctCopyAnsi" type="button">Copy ANSI block</button></div>
-        <label class="ct-note" for="ctEmbed">Embed accent colour</label>
+        <label class="ct-note" for="ctEmbed">Embed accent colour (discord.js)</label>
         <textarea class="ct-out" id="ctEmbed" readonly style="min-height:64px"></textarea>
         <div class="ct-row"><button class="ct-btn" id="ctCopyEmbed" type="button">Copy accent code</button></div>
         <label class="ct-note" for="ctCss">Web gradient</label>
@@ -119,7 +86,7 @@
         <h2>Saved palettes</h2>
         <p class="ct-note">Saved in this browser only, with no account and nothing sent anywhere.</p>
         <div class="ct-row">
-          <input id="ctName" type="text" maxlength="40" aria-label="Palette name" placeholder="Name this palette" style="padding:9px 11px;border-radius:9px;border:1px solid #3a2f25;background:#120e0b;color:inherit;font:inherit">
+          <input id="ctName" type="text" maxlength="40" placeholder="Name this palette" style="padding:9px 11px;border-radius:9px;border:1px solid #3a2f25;background:#120e0b;color:inherit;font:inherit">
           <button class="ct-btn" id="ctSave" type="button">Save palette</button>
           <span class="ct-msg" id="ctSaveMsg"></span>
         </div>

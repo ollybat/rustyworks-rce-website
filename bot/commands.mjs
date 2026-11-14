@@ -128,6 +128,9 @@ function ago(when) {
    sees in their own time, and a small icon on each button so panels scan at a glance.
    It only adds what is missing and never pushes a reply past Discord's limits. */
 export const BRAND = "Spinback RCE";
+/* One footer on every embed, and nothing after it (main's PANEL_FOOTER). Anything a panel
+   used to say in its footer goes into its description or fields instead. */
+export const PANEL_FOOTER = "Support - Spinback 5X EU \u2022 2026";
 var TITLE_MARKS = { 0x3ba55d: "\u2705", 0xdc4c4c: "\u26d4", 0xfaa81a: "\u26a0\ufe0f" };
 var BUTTON_ICONS = [
   [/^(back|all commands|home)|back to|^cancel|keep it|left alone/i, "\u21a9\ufe0f"],
@@ -179,8 +182,15 @@ export function dress(payload, ctx) {
       if (mark && d.title && !startsWithMark(d.title) && d.title.length < 240) { d.title = mark + " " + d.title; total += 3; }
       if (i === 0 && !d.author && total + BRAND.length < 5900) { d.author = icon ? { name: BRAND, icon_url: icon } : { name: BRAND }; total += BRAND.length; }
       if (i === out.embeds.length - 1 && !d.timestamp) d.timestamp = new Date().toISOString();
-      if (i === out.embeds.length - 1 && !d.footer && total + BRAND.length < 5900) { d.footer = icon ? { text: BRAND, icon_url: icon } : { text: BRAND }; total += BRAND.length; }
-      else if (d.footer && icon && !d.footer.icon_url) d.footer = Object.assign({}, d.footer, { icon_url: icon });
+      /* a panel's own footer note moves to the end of its description, so nothing is lost */
+      if (d.footer && d.footer.text && d.footer.text !== PANEL_FOOTER) {
+        var note = "\n\n-# " + String(d.footer.text).slice(0, 200);
+        if (String(d.description || "").length + note.length <= 4096 && total + note.length < 5900) { d.description = String(d.description || "") + note; total += note.length; }
+      }
+      d.footer = icon ? { text: PANEL_FOOTER, icon_url: icon } : { text: PANEL_FOOTER };
+      total += PANEL_FOOTER.length;
+      var avatar = ctx && /^https:\/\//.test(String(ctx.avatar || "")) ? String(ctx.avatar) : null;
+      if (avatar && !d.thumbnail) d.thumbnail = { url: avatar };
       return d;
     });
   }
@@ -317,6 +327,30 @@ export async function pingReply(ctx) {
   ];
   built.footer = { text: "Site: " + ctx.siteUrl + " | checked at " + when() };
   return { embeds: [built], components: [row([button("ping:again", "Check again", 1), link("Status page", ctx.siteUrl + "/status.html")])] };
+}
+
+/* The panel a feature shows when it needs the game and the connection is not there. It
+   answers the three questions a person actually has: what is not connected, which Rust
+   server it tried, and what to do about it. */
+export function rconRequiredPanel(ctx, status, wanted) {
+  var guildName = (ctx && ctx.guildInfo && ctx.guildInfo.name) || "this Discord server";
+  var server = status && status.server;
+  var built = embed(0xdc4c4c, "RCON Connection Required",
+    "**" + guildName + "** is not connected via RCON. " + (wanted ? "**" + wanted + "** requires" : "This feature requires") + " an active RCON connection.");
+  built.fields = [
+    field("Server", guildName, true),
+    field("Rust server", server ? code(server.name + " " + server.host + ":" + server.port) : "none saved yet", true),
+    field("How to connect", "Make sure the RCON details are saved and the server is answering: **Test the connection now** checks it on the spot.", false),
+  ];
+  if (status && status.reason && status.reason !== "no-server") {
+    built.fields.push(field("What the check said", code(status.reason) + (status.detail ? "\n" + String(status.detail).slice(0, 300) : ""), false));
+  }
+  built.fields.push(field("Where the details are",
+    "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + " and " + code("rcon.password") + ", with " + code("rcon.web") + " set to " + code("0") + ". The bot tests the address and the password before it saves anything.", false));
+  return { embeds: [built], components: [
+    row([button(server ? "setup:test" : "setup:server", server ? "Test the connection now" : "Enter the details", 1), button("setup:import", "Paste server.cfg", 2)]),
+    row([button("setup:run", "Guided setup", 2), button("setup:doctor", "Health check", 2)]),
+  ], flags: EPH };
 }
 
 /* /setup run ---------------------------------------------------------------- */
@@ -605,14 +639,7 @@ function serverQuestion(which) {
 export async function serverSnapshot(ctx, which, serverWanted) {
   var question = serverQuestion(which);
   var servers = ctx.servers() || [];
-  if (!servers.length) {
-    return {
-      embeds: [embed(0xdc4c4c, "No Rust server linked yet",
-        "Link one with **/setup run**: the address, the RCON port and the password are tested before anything is saved.")],
-      components: [row([button("setup:server", "Add a server", 1), link("Commands reference", ctx.siteUrl + "/commands.html#server")])],
-      flags: EPH,
-    };
-  }
+  if (!servers.length) return rconRequiredPanel(ctx, { ok: false, reason: "no-server", server: null }, "/server " + question[0]);
   if (!serverWanted && servers.length > 1) {
     return serverChoice(ctx, "server:pick:" + question[0], "/server " + question[0] + " - which server?",
       servers.length + " servers are saved. Pick the one to ask " + code(question[1]) + "; nothing is changed on it.");
@@ -634,17 +661,20 @@ export async function serverSnapshot(ctx, which, serverWanted) {
   } else if (ok) {
     built.fields.push(field("What the server answered", "an empty answer", false));
   }
+  /* the server id rides along in the button, so "Ask again" asks the same server */
+  var sid = String(server.id).slice(0, 40);
   if (!ok) {
-    built.fields.push(field("Reason", code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 400), false));
-    built.fields.push(field("What usually causes this", [
+    var down = rconRequiredPanel(ctx, { ok: false, reason: (answer && answer.reason) || "unknown", detail: (answer && answer.detail) || null, server: server }, "/server " + question[0]);
+    down.embeds[0].fields.push(field("What it asked", code(question[1]) + " - " + question[2].toLowerCase() + ", read-only", false));
+    down.embeds[0].fields.push(field("What usually causes this", [
       "- The RCON port is not the game or query port",
       "- rcon.web is set to 1 on the server (this speaks the other kind)",
       "- The host refuses connections from the wider internet, or an IP allowlist is on",
     ].join("\n"), false));
+    down.components.unshift(row([button("server:" + question[0] + ":" + sid, "Ask again", 1)]));
+    return down;
   }
   built.footer = { text: question[2] + " | read-only" };
-  /* the server id rides along in the button, so "Ask again" asks the same server */
-  var sid = String(server.id).slice(0, 40);
   return {
     embeds: [built],
     components: [row([button("server:" + question[0] + ":" + sid, "Ask again", 1), button("server:players:" + sid, "Who is online", 2), button("server:time:" + sid, "Game time", 2)])],
@@ -1885,6 +1915,12 @@ export async function grabKitsRun(ctx, wanted) {
   var server = findServer(ctx, wanted);
   if (!server) return noServerPayload(ctx, wanted);
   var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: ctx.kits().listCommand });
+  if (!answer || answer.ok !== true) {
+    var down = rconRequiredPanel(ctx, { ok: false, reason: (answer && answer.reason) || "unknown", detail: (answer && answer.detail) || null, server: server }, "/kits grab");
+    down.embeds[0].fields.push(field("What it tried", code(ctx.kits().listCommand), false));
+    down.components.unshift(row([button("kits:grab", "Read again", 1), button("kits:config", "Emote Kits", 2)]));
+    return down;
+  }
   var lines = String((answer && answer.answer) || "").split("\n").filter(Boolean);
   var names = answer && answer.ok ? parseKitNames(answer.answer) : [];
   if (names.length && ctx.setKnownKits) ctx.setKnownKits(names);
@@ -1990,7 +2026,14 @@ export async function giveKit(ctx, opts) {
   } finally {
     if (ctx.finishKitGive) ctx.finishKitGive(reservation, !!(answer && answer.ok));
   }
-  var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c, answer && answer.ok ? "Sent" : "The server refused it",
+  if (!answer || answer.ok !== true) {
+    /* No connection at all: the RCON Connection Required panel, with what it tried. */
+    var down = rconRequiredPanel(ctx, { ok: false, reason: (answer && answer.reason) || "unknown", detail: (answer && answer.detail) || null, server: server }, "/kits give");
+    down.embeds[0].fields.push(field("What it tried", code(kit) + " to " + code(target) + via + "\nCommand: " + code(final.slice(0, 300)) + "\nNothing was sent, and no cooldown started.", false));
+    down.components.unshift(row([button("kits:give", "Give another", 2)]));
+    return down;
+  }
+  var built = embed(0x3ba55d, "Sent",
     code(kit) + " to " + code(target) + via + " on **" + server.name + "**.\nCommand: " + code(final));
   built.fields = [field("Server answer", answer && answer.answer
     ? block(String(answer.answer).slice(0, 900))

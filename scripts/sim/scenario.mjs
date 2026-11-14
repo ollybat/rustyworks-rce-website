@@ -392,6 +392,19 @@ export async function run({ world, make, interact }) {
   it = await go(make.modal(ADMIN, "modal:server:new", { srv_name: "Typo", srv_host: "203.0.113.10:abc", srv_port: "", srv_pass: "x" }), "an address with a broken port");
   expect("a broken port is named, not guessed", text(last(it)).includes("not a port number"), text(last(it)).slice(0, 400));
 
+  /* 36. one footer and the bot's picture everywhere; RCON Connection Required when the game is not reachable */
+  it = await go(make.command(ADMIN, "help"), "/help (the look)");
+  const helpEmbed = ((last(it) || {}).embeds || [])[0] || {};
+  expect("every embed carries the one footer", helpEmbed.footer && helpEmbed.footer.text === "Support - Spinback 5X EU \u2022 2026", text(helpEmbed.footer));
+  expect("every embed carries the bot's own picture", helpEmbed.thumbnail && /^https:/.test(helpEmbed.thumbnail.url), text(helpEmbed.thumbnail));
+  it = await go(make.command(ADMIN, "server", "info"), "/server info with the server not answering");
+  expect("a game feature with no connection shows RCON Connection Required", text(last(it)).includes("RCON Connection Required") && text(last(it)).includes("/server info"), text(last(it)).slice(0, 300));
+  expect("it still says what it asked, and offers to ask again", text(last(it)).includes("serverinfo") && text(last(it)).includes("server:info:srv1"), text(last(it)).slice(0, 600));
+  it = await go(make.command(ADMIN, "kits", "give", { kit: "STARTER", gamertag: "Player9", server: "srv1" }), "/kits give with the server not answering");
+  expect("a give with no connection says nothing was sent", text(last(it)).includes("RCON Connection Required") && text(last(it)).includes("Nothing was sent"), text(last(it)).slice(0, 400));
+  const logPost = world.sent.filter((m) => m.channelId === "100000000000000401").slice(-1)[0];
+  expect("log posts carry the same footer, and say which log they are on top", logPost && text(logPost.payload).includes("Support - Spinback 5X EU") && text(logPost.payload).includes("Command log"), text(logPost && logPost.payload).slice(0, 300));
+
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {
     expect("answered in time: " + label, one.firstAckAt !== null && one.firstAckAt < 3000, "first answer at " + one.firstAckAt + " ms");

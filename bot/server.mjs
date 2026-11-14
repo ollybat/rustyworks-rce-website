@@ -36,7 +36,7 @@ import {
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
   STAFF_SLOTS, STAFF_ROLE_RECIPES, runSetupPanel, roleBuildPanel, roleBuildResult, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
-  deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit, dress, BRAND, serverSnapshot,
+  deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit, dress, BRAND, PANEL_FOOTER, rconRequiredPanel, serverSnapshot,
   channelSetupPanel, logChannelBuilder, logChannelPlan, logChannelBuilt, serverStepPanel,
   setupSuggest, suggestApplied, setupDoctor, setupImportPanel, setupImportModal, parseServerText,
   setupImportResult, setupExport, setupResetPanel, setupResetModal, setupResetDone,
@@ -567,7 +567,7 @@ async function postLinkPanel(channelId) {
   try {
     const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(function () { return null; });
     if (!channel || typeof channel.send !== 'function') return { ok: false, detail: 'The bot cannot post in that channel.' };
-    const message = await channel.send(dress(linkPanelPayload(), { siteUrl: SITE_URL }));
+    const message = await channel.send(dress(linkPanelPayload(), dressCtx()));
     const previous = settings.linkPanel && settings.linkPanel.messageId ? settings.linkPanel : null;
     settings.linkPanel = { channelId: channelId, messageId: (message && message.id) || null, at: new Date().toISOString() };
     if (previous) previousPanels.set(String(settings.linkPanel.messageId), previous);
@@ -839,6 +839,15 @@ function botCtx(interaction) {
 const LOG_COLORS = { command: 0x5865f2, rcon: 0xff7200, linking: 0x3ba55d, emoteKits: 0xff7200, admin: 0xfaa81a, errors: 0xdc4c4c };
 const LOG_NAMES = { command: 'Command log', rcon: 'RCON log', linking: 'Linking log', emoteKits: 'Emote kits log', admin: 'Admin log', errors: 'Error log' };
 function who(actor) { return actor && actor.id ? '<@' + actor.id + '>' : 'the bot'; }
+/* The bot's own picture, for every embed and for the website's bot card. */
+function botAvatarUrl() {
+  try {
+    if (client.user && typeof client.user.displayAvatarURL === 'function') return client.user.displayAvatarURL({ extension: 'png', size: 128 });
+  } catch (error) { /* not logged in yet */ }
+  return null;
+}
+function dressCtx() { return { siteUrl: SITE_URL, avatar: botAvatarUrl() }; }
+
 async function postLog(type, title, description, fields) {
   const channelId = (settings.logChannels || {})[type];
   if (!channelId) return { ok: false, reason: 'off', detail: 'No channel is set for this log type.' };
@@ -850,9 +859,13 @@ async function postLog(type, title, description, fields) {
       title: String(title || 'Log').slice(0, 256),
       description: String(description || '').slice(0, 3900),
       timestamp: new Date().toISOString(),
-      footer: { text: (LOG_NAMES[type] || 'Log') + ' | ' + BRAND },
+      /* which log this is sits on top; the one footer every embed carries sits below */
+      author: { name: (LOG_NAMES[type] || 'Log') + ' | ' + BRAND },
+      footer: { text: PANEL_FOOTER },
     };
     if (/^https:\/\//.test(SITE_URL)) embedOut.footer.icon_url = SITE_URL.replace(/\/+$/, '') + '/media/icon-192.png';
+    const avatar = botAvatarUrl();
+    if (avatar) embedOut.author.icon_url = avatar;
     if (fields && fields.length) {
       embedOut.fields = fields.slice(0, 10).map(function (f) {
         return { name: String(f.name || '-').slice(0, 256), value: String(f.value || '-').slice(0, 1024), inline: !!f.inline };
@@ -868,6 +881,30 @@ async function postLog(type, title, description, fields) {
   }
 }
 function logLater(type, title, description, fields) { postLog(type, title, description, fields).catch(function () {}); }
+
+/* ------------------------------------------------------------ connection watch ---- */
+/* RCON cannot stream a server's own log, so this does the honest, useful thing: every two
+   minutes it asks each saved server (up to five) one read-only question, keeps the answer for
+   /ping, /setup and the website, and posts in the Server log when a connection goes down or
+   comes back. Nothing is posted for the first check after a start, so a redeploy is quiet,
+   and nothing runs at all until a server is saved. */
+const WATCH_MS = Math.max(2000, Number(process.env.RCON_WATCH_MS) || 120000);
+async function watchServers() {
+  const servers = (settings.servers || []).slice(0, 5);
+  for (const server of servers) {
+    const answer = await rconRun({ host: server.host, port: server.port, password: server.password, command: 'serverinfo', allowAny: false });
+    const before = serverChecks[server.id];
+    serverChecks[server.id] = { ok: !!(answer && answer.ok), ms: answer && answer.ms, reason: answer && !answer.ok ? (answer.reason || 'unknown') : null, at: new Date().toISOString(), detail: answer && !answer.ok ? String(answer.detail || '').slice(0, 200) : null };
+    if (before && before.ok !== serverChecks[server.id].ok) {
+      const now = serverChecks[server.id];
+      logLater('server', now.ok ? 'Rust server connected' : 'Rust server connection lost',
+        '**' + server.name + '** ' + (now.ok ? 'answered again, in ' + now.ms + ' ms.' : 'stopped answering: `' + now.reason + '`. ' + (now.detail || '')),
+        now.ok ? [] : [{ name: 'What to check', value: 'The host is up, RCON is on with rcon.web 0, and the RCON port is open to the internet. **/setup doctor** measures it from here.' }]);
+    }
+  }
+  updatePresence();
+}
+setInterval(function () { if ((settings.servers || []).length) watchServers().catch(function () {}); }, WATCH_MS).unref();
 
 async function rconLogged(options, actor) {
   const started = Date.now();
@@ -931,7 +968,7 @@ async function tellPlayer(userId, text, good) {
   try {
     const user = await client.users.fetch(String(userId));
     await user.send(dress({ embeds: [panelEmbed(good ? 0x3ba55d : 0xdc4c4c, good ? 'You are linked' : 'Link request not approved', String(text).slice(0, 1900))],
-      allowedMentions: { parse: [] } }, { siteUrl: SITE_URL }));
+      allowedMentions: { parse: [] } }, dressCtx()));
     return true;
   } catch (error) {
     return false;
@@ -1047,7 +1084,7 @@ async function respond(interaction, work, kind) {
   } finally {
     clearTimeout(timer);
   }
-  const body = dress(Object.assign({}, payload || { content: 'Done.' }), { siteUrl: SITE_URL });
+  const body = dress(Object.assign({}, payload || { content: 'Done.' }), dressCtx());
   try {
     if (deferring) {
       await deferring;
@@ -1100,7 +1137,7 @@ function overRate(userId) {
 }
 async function quickNote(interaction, color, title, text) {
   if (typeof interaction.isRepliable === 'function' && !interaction.isRepliable()) return;
-  await interaction.reply(dress({ embeds: [panelEmbed(color, title, text)], flags: 64 }, { siteUrl: SITE_URL })).catch(function () {});
+  await interaction.reply(dress({ embeds: [panelEmbed(color, title, text)], flags: 64 }, dressCtx())).catch(function () {});
 }
 async function routeInteraction(interaction) {
   const isSuggest = typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete();
@@ -2416,6 +2453,14 @@ createServer(async (req, res) => {
       oauthExchange: !!CLIENT_SECRET,
       storage: storeKind(),
       shuttingDown: shuttingDown || undefined,
+      /* The bot's picture and whether its first Rust server answers, for the website's bot
+         card. The server's address is not public: it is in the full diagnostics below. */
+      avatar: botAvatarUrl(),
+      rcon: (function () {
+        const first = (settings.servers || [])[0];
+        const check = first ? serverChecks[first.id] : null;
+        return first ? { connected: !!(check && check.ok), serverName: first.name, checkedAt: check ? check.at : null, reason: check && !check.ok ? check.reason : (check ? null : 'not-checked-yet') } : null;
+      })(),
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
       stats: { guilds: state.guilds, gateway: state.gateway },
     };
@@ -2432,6 +2477,7 @@ createServer(async (req, res) => {
       lookedFor: TOKEN_NAMES,
       siteUrl: SITE_URL,
       storageFileOk: fileState.ok,
+      rconTargets: (settings.servers || []).map(function (sv) { return { id: sv.id, name: sv.name, host: sv.host, port: sv.port, check: serverChecks[sv.id] || null }; }),
       interactions: !!PUBLIC_KEY,
       guildConfigured: !!GUILD_ID && !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
       ownerKnown: !!(OWNER_ID || (state.guildInfo && state.guildInfo.ownerId)),
