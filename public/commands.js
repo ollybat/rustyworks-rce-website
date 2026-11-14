@@ -361,6 +361,28 @@
     window.addEventListener('hashchange', openHash);
   }
 
+  /* --------------------------------------------------------------- goals */
+  function renderGoals() {
+    var box = $('cmdGoals');
+    if (!box) return;
+    var goals = (DATA && DATA.goals) || [];
+    if (!goals.length) {
+      var section = box.parentNode;
+      if (section && section.parentNode) section.parentNode.removeChild(section);
+      return;
+    }
+    clear(box);
+    goals.forEach(function (goal) {
+      var card = mk('a', 'cmd-goal');
+      card.href = goal.href || '#cmd-' + (goal.command || '');
+      card.appendChild(mk('span', 'cmd-goal__want', goal.want || 'not stated'));
+      card.appendChild(mk('code', 'cmd-goal__cmd', goal.label || ''));
+      card.appendChild(mk('span', 'cmd-goal__note', goal.note || ''));
+      card.addEventListener('click', function () { window.setTimeout(openHash, 0); });
+      box.appendChild(card);
+    });
+  }
+
   function fail(message) {
     var box = $('cmdList');
     if (!box) return;
@@ -384,6 +406,7 @@
       DATA = data;
       renderStats();
       renderChips();
+      renderGoals();
       renderList();
       openHash();
     }).catch(function (error) {
