@@ -246,6 +246,19 @@
     tile("svBotPing", ping === null ? "not reported" : ping + " ms");
     var seen = firstOf(status.lastHeartbeat, status.heartbeat, status.seenAt);
     tile("svBotSeen", seen ? (ago(seen) || "not reported") : "not reported");
+    /* The bot tells us how it is storing settings. When it is not keeping them at all, that
+       is worth saying plainly: it is why a list of servers can look empty after a restart. */
+    var warn = $("svWarn");
+    if (warn) {
+      var store = lower(status.storage);
+      var kept = store === "website" || store === "file";
+      warn.hidden = kept;
+      if (!kept) {
+        warn.textContent = "The bot reports that it is not keeping settings (" + (status.storage || "unknown")
+          + " storage): with no BOT_SETTINGS_TOKEN and no disk, every saved server, role and kit is forgotten on a redeploy."
+          + " That is set on the bot's own host, and nothing on this page can change it.";
+      }
+    }
   }
 
   function finish() { state.at = Date.now(); render(); }
