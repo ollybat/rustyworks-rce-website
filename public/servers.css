@@ -1,0 +1,70 @@
+/* Servers page. Loaded after site-pro.css and before botcard.css. */
+.sv-summary { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.sv-tile {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 8px 14px; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--panel); color: var(--text-dim); font-size: 0.88rem;
+}
+.sv-tile strong { color: var(--text); font-size: 1rem; }
+.sv-summary.is-bot { margin-top: 8px; }
+.sv-section { padding: 26px 0 10px; }
+.sv-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.sv-search { display: flex; flex-direction: column; gap: 4px; flex: 1 1 260px; min-width: 220px; }
+.sv-search__label { font-size: 0.8rem; color: var(--text-dim); }
+.sv-search input {
+  width: 100%; padding: 9px 12px; font: inherit;
+  color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+}
+.sv-search input:focus-visible { outline: none; border-color: var(--ember); }
+.sv-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.sv-chip, .sv-refresh {
+  font: inherit; font-size: 0.85rem; cursor: pointer;
+  padding: 8px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent; color: var(--text-dim);
+}
+.sv-chip:hover, .sv-chip:focus-visible, .sv-refresh:hover, .sv-refresh:focus-visible { border-color: var(--ember); color: var(--ember); outline: none; }
+.sv-chip.is-on { border-color: var(--ember); color: var(--ember); background: var(--panel-2); }
+.sv-refresh[disabled] { opacity: 0.5; cursor: progress; }
+.sv-meta { margin: 12px 0 18px; color: var(--text-dim); font-size: 0.85rem; }
+.sv-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.sv-card {
+  padding: 16px 18px; border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: var(--radius, 16px); background: var(--panel);
+}
+.sv-card.is-online { border-left-color: var(--green, #3ba55d); }
+.sv-card.is-offline { border-left-color: var(--rust, #ff7200); }
+.sv-card.is-unknown { border-left-color: var(--line); }
+.sv-card__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sv-card__name { margin: 0; font-size: 1.02rem; }
+.sv-state {
+  flex: 0 0 auto; font-size: 0.75rem; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--text-dim); white-space: nowrap;
+}
+.sv-state.is-online { color: var(--green, #3ba55d); border-color: var(--green, #3ba55d); }
+.sv-state.is-offline { color: var(--rust); border-color: var(--rust); }
+.sv-card__sub { margin: 6px 0 12px; color: var(--text-dim); font-size: 0.85rem; word-break: break-word; }
+.sv-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin-bottom: 10px; }
+.sv-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sv-fact__name { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+.sv-fact__value { font-size: 0.9rem; }
+.sv-bar-block { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.sv-bar-track { display: block; height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
+.sv-bar-fill { display: block; height: 100%; background: var(--ember); }
+.sv-bar-label { font-size: 0.78rem; color: var(--text-dim); }
+.sv-card__why { margin: 8px 0 0; font-size: 0.85rem; color: var(--text-dim); }
+.sv-empty {
+  grid-column: 1 / -1; margin: 0; padding: 18px; border: 1px dashed var(--line);
+  border-radius: var(--radius, 16px); color: var(--text-dim); background: var(--panel);
+}
+.sv-note {
+  margin: 16px 0 0; padding: 12px 14px; border-left: 3px solid var(--ember);
+  border-radius: 10px; background: var(--panel); color: var(--text-dim); font-size: 0.88rem;
+}
+.sv-legend { margin-top: 28px; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius, 16px); background: var(--panel-2); }
+.sv-legend h2 { margin: 0 0 8px; font-size: 1rem; }
+.sv-legend p { margin: 0; color: var(--text-dim); line-height: 1.55; max-width: 78ch; }
+@media (max-width: 560px) {
+  .sv-list { grid-template-columns: 1fr; }
+  .sv-facts { grid-template-columns: 1fr 1fr; }
+  .sv-refresh { width: 100%; }
+}

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <script>
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("spinback-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Servers - Spinback RCE</title>
+    <meta name="application-name" content="Spinback RCE">
+    <meta name="description" content="Every Rust server Spinback RCE looks after: whether it answers, how many players are on it, the map, and when it was last checked. Read-only, and never guessed.">
+    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/servers.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Spinback RCE">
+    <meta property="og:title" content="Servers - Spinback RCE">
+    <meta property="og:description" content="The Rust servers the bot looks after, with live state and population, read straight from the bot.">
+    <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/servers.html">
+    <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
+    <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="/theme.js"></script>
+    <script src="/config.js" defer></script>
+    <script src="/page.js" defer></script>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+    <script src="/servers.js" defer></script>
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+    <link rel="stylesheet" href="/site-pro.css">
+    <link rel="stylesheet" href="/servers.css">
+    <link rel="stylesheet" href="/botcard.css">
+    <script src="/botcard.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="sp-header">
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async">Spinback<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="start.html">Get started</a>
+            <a href="servers.html" aria-current="page">Servers</a>
+            <a href="status.html">Status</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="sp-hero">
+        <div class="wrap">
+          <span class="sp-kicker">Live, read-only</span>
+          <h1 class="sp-title">Servers</h1>
+          <p class="sp-lede">
+            Every Rust server Spinback RCE looks after, with the state the bot last measured: answering or not,
+            how many players are on it, the map and when it was last checked. The bot reports, this page repeats.
+            <strong>Anything the bot has not reported is shown as not reported</strong>, because a made-up player
+            count would be worse than an honest blank.
+          </p>
+          <div class="sv-summary" id="svSummary">
+            <span class="sv-tile"><strong id="svStatServers">-</strong> servers known</span>
+            <span class="sv-tile"><strong id="svStatOnline">-</strong> answering now</span>
+            <span class="sv-tile"><strong id="svStatOffline">-</strong> not answering</span>
+            <span class="sv-tile"><strong id="svStatPlayers">-</strong> players online</span>
+          </div>
+          <div class="sv-summary is-bot" id="svBot">
+            <span class="sv-tile"><strong id="svBotState">-</strong> the bot</span>
+            <span class="sv-tile"><strong id="svBotServers">-</strong> in Discord</span>
+            <span class="sv-tile"><strong id="svBotUptime">-</strong> uptime</span>
+            <span class="sv-tile"><strong id="svBotPing">-</strong> gateway</span>
+            <span class="sv-tile"><strong id="svBotSeen">-</strong> last heartbeat</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="sv-section">
+        <div class="wrap">
+          <div class="sv-bar">
+            <label class="sv-search">
+              <span class="sv-search__label">Find a server</span>
+              <input type="search" id="svSearch" placeholder="Name, address or map" autocomplete="off">
+            </label>
+            <div class="sv-filters" id="svFilters" role="group" aria-label="Filter by state">
+              <button type="button" class="sv-chip is-on" data-filter="all">All</button>
+              <button type="button" class="sv-chip" data-filter="online">Answering</button>
+              <button type="button" class="sv-chip" data-filter="offline">Not answering</button>
+              <button type="button" class="sv-chip" data-filter="unknown">Not checked yet</button>
+            </div>
+            <button type="button" class="sv-refresh" id="svRefresh">Refresh</button>
+          </div>
+          <p class="sv-meta" id="svMeta">Reading the bot...</p>
+          <div class="sv-list" id="svList"></div>
+          <p class="sv-note" id="svNote" hidden></p>
+          <div class="sv-legend">
+            <h2>What this page can show</h2>
+            <p>
+              It shows what the bot's own read-only status reports: the servers it has been given, whether the last
+              connection test answered, when that test ran, and what the server said when it answered. Player
+              counts, map names and round-trip times appear as soon as the bot reports them for each server.
+              Nothing here can change a server, and no password, token or address the bot keeps privately is ever
+              shown.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async" loading="lazy">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">Support - Spinback 5X EU &middot; 2026<br><span class="foot-fine">&copy; <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</span></div>
+      </div>
+    </footer>
+  </body>
+</html>
