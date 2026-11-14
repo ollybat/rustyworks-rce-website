@@ -172,6 +172,30 @@ export async function pingReply(ctx) {
   return { embeds: [built], components: [row(buttons)], flags: EPH };
 }
 
+/* The panel a feature shows when it needs the game and the connection is not there. It
+   answers the three questions a person actually has: what is not connected, which Rust
+   server it is trying, and what to do about it. */
+export function rconRequiredPanel(ctx, status, wanted) {
+  var guildName = (ctx && ctx.guildInfo && ctx.guildInfo.name) || "this Discord server";
+  var server = status && status.server;
+  var built = embed(0xdc4c4c, "RCON Connection Required",
+    "**" + guildName + "** is not connected via RCON. " + (wanted ? "**" + wanted + "** requires" : "This feature requires") + " an active RCON connection.");
+  built.fields = [
+    field("Server", guildName, true),
+    field("Rust server", server ? code(server.name + " " + server.host + ":" + server.port) : "none saved yet", true),
+    field("How to Connect", "Ensure your server RCON credentials are configured and the connection is active.", false),
+  ];
+  if (status && status.reason && status.reason !== "no-server") {
+    built.fields.push(field("What the check said", code(status.reason) + (status.detail ? "\n" + String(status.detail).slice(0, 300) : ""), false));
+  }
+  built.fields.push(field("Where the details are",
+    "In server.cfg: " + code("rcon.ip") + ", " + code("rcon.port") + " and " + code("rcon.password") + ", with " + code("rcon.web") + " set to " + code("0") + ". The bot tests the address and the password before it saves anything.", false));
+  return { embeds: [built], components: [
+    row([button("setup:test", "Test the connection now", 1), button("setup:server", "Enter the details", 2)]),
+    row([button("setup:import", "Paste server.cfg", 2), button("setup:run", "Guided setup", 2), button("setup:doctor", "Health check", 2)]),
+  ], flags: EPH };
+}
+
 /* /setup run ---------------------------------------------------------------- */
 /* One panel that does the whole thing, in any order, with the Rust server last. Each press
    either creates something or explains exactly why it could not, and nothing in the guild is
@@ -386,14 +410,7 @@ function serverQuestion(which) {
 export async function serverSnapshot(ctx, which) {
   var question = serverQuestion(which);
   var servers = ctx.servers() || [];
-  if (!servers.length) {
-    return {
-      embeds: [embed(0xdc4c4c, "No Rust server linked yet",
-        "Link one with **/setup run**: the address, the RCON port and the password are tested before anything is saved.")],
-      components: [row([link("How setup works", ctx.siteUrl + "/commands.html#setup"), link("Command list", ctx.siteUrl + "/commands.html#server")])],
-      flags: EPH,
-    };
-  }
+  if (!servers.length) return rconRequiredPanel(ctx, { ok: false, reason: "no-server", server: null }, "/server " + question[0]);
   var server = servers[0];
   var answer = await ctx.rconTest({ host: server.host, port: server.port, password: server.password, command: question[1] });
   var ok = answer && answer.ok === true;
@@ -408,12 +425,16 @@ export async function serverSnapshot(ctx, which) {
       block(text.slice(0, 900) + (text.length > 900 ? "\n... and " + (text.length - 900) + " more characters" : "")), false));
   }
   if (!ok) {
-    built.fields.push(field("Reason", code((answer && answer.reason) || "unknown") + "\n" + String((answer && answer.detail) || "").slice(0, 400), false));
-    built.fields.push(field("What usually causes this", [
-      "The RCON port is not the game or query port",
-      "rcon.web is set to 1 on the server (this speaks the other kind)",
-      "The host refuses connections from the wider internet, or an IP allowlist is on",
-    ].join("\n"), false));
+    var panel = rconRequiredPanel(ctx, { ok: false, reason: (answer && answer.reason) || "unknown", detail: (answer && answer.detail) || null, server: server }, "/server " + question[0]);
+    panel.embeds[0].fields = panel.embeds[0].fields.concat([
+      field("What usually causes this", [
+        "The RCON port is not the game or query port",
+        "rcon.web is set to 1 on the server (this speaks the other kind)",
+        "The host refuses connections from the wider internet, or an IP allowlist is on",
+      ].join("\n"), false),
+      field("Checked", question[2] + " | " + when(), false),
+    ]);
+    return panel;
   }
   built.footer = { text: question[2] + " | checked at " + when() };
   return {
@@ -1646,8 +1667,13 @@ export async function giveKit(ctx, opts) {
   if (!server) return { embeds: [embed(0xdc4c4c, "No server linked", "Link one first with /setup run.")], flags: EPH };
   var final = command.split("{player}").join(target).split("{kit}").join(opts.kit);
   var answer = await ctx.rconRun({ host: server.host, port: server.port, password: server.password, command: final });
-  var built = embed(answer && answer.ok ? 0x3ba55d : 0xdc4c4c, answer && answer.ok ? "Sent" : "The server refused it",
-    "Command: " + code(final) + "\n" + (answer && answer.answer ? "It said: " + answer.answer.slice(0, 400) : String((answer && answer.detail) || "no answer")));
+  if (!answer || answer.ok !== true) {
+    var panel = rconRequiredPanel(ctx, { ok: false, reason: (answer && answer.reason) || "unknown", detail: (answer && answer.detail) || null, server: server }, "/kits give");
+    panel.embeds[0].fields.push(field("The command it tried", code(final.slice(0, 300)), false));
+    return panel;
+  }
+  var built = embed(0x3ba55d, "Sent",
+    "Command: " + code(final) + "\n" + (answer.answer ? "It said: " + answer.answer.slice(0, 400) : "The server accepted it and said nothing back."));
   return { embeds: [built], flags: EPH };
 }
 export function permissionNote(ctx) {
