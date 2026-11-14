@@ -1,335 +1,310 @@
 {
-  "site": "https://spinback-j7ao5f.camelai.app",
-  "updated": "Commands as registered by the bot",
-  "groups": [
+ "site": "https://spinback-j7ao5f.camelai.app",
+ "updated": "Commands as registered by the bot",
+ "groups": [
+  {
+   "key": "all",
+   "label": "All commands"
+  },
+  {
+   "key": "health",
+   "label": "Health and help"
+  },
+  {
+   "key": "setup",
+   "label": "Setup"
+  },
+  {
+   "key": "kits",
+   "label": "Emote kits"
+  },
+  {
+   "key": "links",
+   "label": "Player links"
+  },
+  {
+   "key": "server",
+   "label": "Rust server"
+  }
+ ],
+ "commands": [
+  {
+   "name": "ping",
+   "group": "health",
+   "who": "Anyone in the server",
+   "needsSetup": false,
+   "readOnly": true,
+   "panel": "A reply with Check again, Start setup and Health check buttons",
+   "summary": "Live health, measured the moment you run it: gateway heartbeat, uptime, Node version, memory, the server it is in, commands registered, saved servers with their addresses, how many staff role slots are filled (and any that point at a role that no longer exists), how many log types are set (and any channel the bot cannot post in), whether the setup gate is passed, and a real request to this website with the round-trip time.",
+   "why": "Nothing. It works before setup is finished, and it says which step is still missing.",
+   "subcommands": []
+  },
+  {
+   "name": "help",
+   "group": "health",
+   "who": "Anyone in the server",
+   "needsSetup": false,
+   "readOnly": true,
+   "panel": "One button per command, a Start setup button while setup is unfinished, and links to the website",
+   "summary": "Every command, what it does, who may run it and what it needs set up first — as buttons rather than something to type.",
+   "why": "Nothing. It only reports and links.",
+   "subcommands": [
     {
-      "key": "all",
-      "label": "All commands"
-    },
-    {
-      "key": "health",
-      "label": "Health and help"
-    },
-    {
-      "key": "setup",
-      "label": "Setup"
-    },
-    {
-      "key": "kits",
-      "label": "Emote kits"
-    },
-    {
-      "key": "links",
-      "label": "Player links"
-    },
-    {
-      "key": "server",
-      "label": "Rust server"
+     "name": "pages",
+     "summary": "Press any command button to open its own page: subcommands, permissions, what it needs first, and the honest limits.",
+     "notes": [
+      "The setup note on the home panel is read from what is saved, so it cannot be out of date."
+     ]
     }
-  ],
-  "commands": [
+   ]
+  },
+  {
+   "name": "setup",
+   "group": "setup",
+   "who": "Administrator, Manage Server or the server owner",
+   "needsSetup": false,
+   "readOnly": false,
+   "panel": "Click-to-pick panels: one guided panel the bot does the work from, role lists, channel lists, health checks and pasteable server lines",
+   "summary": "Configure Spinback for your server without typing a single value into a command. The bot can create the staff roles and the log channels for you, locked so that only those roles can read the logs, or you can pick ones you already have, and the Rust connection is tested before anything is saved — so a wrong port or password never lands in your settings.",
+   "why": "The RCON port and password from server.cfg, with rcon.web set to 0.",
+   "subcommands": [
     {
-      "name": "ping",
-      "group": "health",
-      "who": "Anyone in the server",
-      "needsSetup": false,
-      "readOnly": true,
-      "panel": "A reply with Check again, Start setup and Health check buttons",
-      "summary": "Live health, measured the moment you run it: gateway heartbeat, uptime, Node version, memory, the server it is in, commands registered, saved servers with their addresses, how many staff role slots are filled (and any that point at a role that no longer exists), how many log types are set (and any channel the bot cannot post in), whether the setup gate is passed, and a real request to this website with the round-trip time.",
-      "why": "Nothing. It works before setup is finished, and it says which step is still missing.",
-      "subcommands": []
+     "name": "run",
+     "summary": "The guided panel. The bot can create the staff roles and the log channels for you, then you add the Rust server last. Every step is optional and one press.",
+     "notes": [
+      "Every step is a button, nothing is created until you press Create, and each item is reported back with the reason when it fails.",
+      "The roles it makes are saved as the staff roles, so they — and only they, plus Administrator and the server owner — can run staff commands.",
+      "The Rust server is the last step because it is the only one that has to answer a live RCON check first."
+     ]
     },
     {
-      "name": "help",
-      "group": "health",
-      "who": "Anyone in the server",
-      "needsSetup": false,
-      "readOnly": true,
-      "panel": "One button per command, a Start setup button while setup is unfinished, and links to the website",
-      "summary": "Every command, what it does, who may run it and what it needs set up first — as buttons rather than something to type.",
-      "why": "Nothing. It only reports and links.",
-      "subcommands": [
-        {
-          "name": "pages",
-          "summary": "Press any command button to open its own page: subcommands, permissions, what it needs first, and the honest limits.",
-          "notes": [
-            "The setup note on the home panel is read from what is saved, so it cannot be out of date."
-          ]
-        }
-      ]
+     "name": "roles",
+     "summary": "Pick each staff role straight from this server's role list, one slot at a time. Choose nothing in the list to clear a slot.",
+     "notes": [
+      "The roles saved here are the staff roles: they, Administrator, Manage Server and the server owner may run every staff command.",
+      "The Linked slot is the one exception: it marks members who linked their game account, so it never grants staff commands."
+     ]
     },
     {
-      "name": "setup",
-      "group": "setup",
-      "who": "Administrator, Manage Server or the server owner",
-      "needsSetup": false,
-      "readOnly": false,
-      "panel": "Click-to-pick panels: role lists, channel lists, health checks and pasteable server lines",
-      "summary": "Configure Spinback for your server without typing a single value into a command. Staff roles come from a list, log channels from a list or made for you, and the Rust connection is tested before anything is saved — so a wrong port or password never lands in your settings.",
-      "why": "The RCON port and password from server.cfg, with rcon.web set to 0.",
-      "subcommands": [
-        {
-          "name": "run",
-          "summary": "The main panel: roles, log channels, the Rust server, plus Find them for me, Health check, Import, Export and Reset.",
-          "notes": [
-            "Every step is a picker or a button. Nothing is inferred from a name unless the panel says it was."
-          ],
-          "options": []
-        },
-        {
-          "name": "roles",
-          "summary": "Pick each staff role, and the Linked role, from Discord's own role menus. Each pick saves straight away.",
-          "notes": [
-            "The roles saved here are the staff roles: they, Administrator, Manage Server and the server owner may run every staff command."
-          ],
-          "options": []
-        },
-        {
-          "name": "channels",
-          "summary": "Logging channels two ways: pick a log type then its channel, or have the bot create a Spinback category and one channel per type you tick.",
-          "notes": [
-            "A type with no channel is simply switched off. Creating channels is the only step that makes anything in your server, and it shows the exact list first."
-          ],
-          "options": []
-        },
-        {
-          "name": "server",
-          "summary": "Add or change the Rust server, by typing the details or by pasting the RCON lines from server.cfg.",
-          "options": []
-        },
-        {
-          "name": "suggest",
-          "summary": "Read the role and channel names in this server and propose a match for each slot and log type, with the matching reason shown for every line, then apply the whole list in one press.",
-          "notes": [
-            "A name match is a suggestion, never a decision: Apply writes exactly the list that was on screen."
-          ],
-          "options": []
-        },
-        {
-          "name": "doctor",
-          "summary": "The health check: saved role ids are checked against this server, every log channel for reachability, each saved Rust server is asked a real RCON command and timed, the kit commands are checked for their {player} and {kit} placeholders, storage is checked, then it lists what to fix first.",
-          "notes": [
-            "It opens up to three fresh RCON connections and changes nothing."
-          ],
-          "options": []
-        },
-        {
-          "name": "import",
-          "summary": "Paste the RCON lines from server.cfg (or host port password on one line). The bot reads them, says which pieces it found and which are missing, warns when rcon.web is 1, then tests the connection and only saves if the server answers.",
-          "notes": [
-            "Nothing is filled in: a field it did not find is reported as missing."
-          ],
-          "options": []
-        },
-        {
-          "name": "export",
-          "summary": "Everything saved, as text you can copy: role slots with role names, log channels with channel names, the kit commands, the servers and the player link counts.",
-          "notes": [
-            "No RCON password is in the export at all — it never leaves the service that talks to your server."
-          ],
-          "options": []
-        },
-        {
-          "name": "reset",
-          "summary": "Clear the saved configuration again after typing RESET in capitals.",
-          "notes": [
-            "Player links, waiting requests and the link panel message are kept. No channel, role or player is deleted."
-          ],
-          "options": []
-        },
-        {
-          "name": "status",
-          "summary": "A checklist of what is saved and what is still missing, with buttons straight into each step, the health check and the name suggestions.",
-          "options": []
-        },
-        {
-          "name": "edit",
-          "summary": "Change a saved server's address, RCON port or password from the picker. New details are tested before anything is saved.",
-          "options": []
-        },
-        {
-          "name": "refresh",
-          "summary": "Open a fresh RCON connection to every saved server and report what each one says.",
-          "options": []
-        }
-      ]
+     "name": "channels",
+     "summary": "Logging channels two ways: pick a log type then its channel, or have the bot create a Spinback category and one channel per type you tick.",
+     "notes": [
+      "A type with no channel is simply switched off. Creating channels is the only step that makes anything in your server, and it shows the exact list first.",
+      "Every channel the bot creates is private to the saved staff roles: `@everyone` is denied View Channel and only those roles (and the bot) keep it.",
+      "A channel of the same name that is already there is reused and relocked rather than duplicated, and creating needs Manage Channels."
+     ]
     },
     {
-      "name": "kits",
-      "group": "kits",
-      "who": "Staff roles, Administrator, Manage Server or the owner",
-      "needsSetup": true,
-      "readOnly": false,
-      "panel": "A wizard panel per subcommand",
-      "summary": "Kits end to end: the real kit names from your server, giving kits over RCON with a cooldown per player and kit, and Kit Studio codes. Emote binds and respawn kits are saved settings that run in game only once a Rust plugin sends emote and respawn events to the bot, which is not connected yet.",
-      "why": "Your kit plugin's own command names, and a give template using {player} and {kit}. The bot will not guess either one.",
-      "subcommands": [
-        {
-          "name": "commands",
-          "summary": "Your kit plugin's list command, give template and the cooldown per player and kit, entered in one form and checked before saving.",
-          "notes": [
-            "The give template is filled with {player} and {kit}; the install command with {code}. Leave a field blank when saving to clear that command."
-          ],
-          "options": []
-        },
-        {
-          "name": "doctor",
-          "summary": "Check the kit setup: which commands are set, whether the give template really has both placeholders, every bind, the respawn kits for each group, the lock state and the install codes held.",
-          "notes": [
-            "Read-only, and it sends nothing to your server: a kit name is only ever checked against what the plugin itself reports."
-          ],
-          "options": []
-        },
-        {
-          "name": "grab",
-          "summary": "Read the real kit names from your server with your list command. With several servers saved, it asks which one.",
-          "notes": [
-            "Needs your list command set first: the bot will not invent the name of one."
-          ],
-          "options": []
-        },
-        {
-          "name": "config",
-          "summary": "The kits panel: binds, delivery settings (list command, give template, cooldown), the pause switch and the emote guide.",
-          "options": []
-        },
-        {
-          "name": "give",
-          "summary": "Pick a linked player (their gamertag is filled in) or type one, then the kit. Sent over RCON, one give per player and kit per cooldown, and none while delivery is paused.",
-          "notes": [
-            "It sends exactly your give template with the player and kit filled in, and shows the command it sent."
-          ],
-          "options": []
-        },
-        {
-          "name": "refresh",
-          "summary": "Clear kit-give cooldowns for one player, one kit, everyone, or every kit.",
-          "notes": [
-            "The bot reports the exact number of records it cleared, and clears nothing it does not hold."
-          ],
-          "options": []
-        },
-        {
-          "name": "auth-spawn",
-          "summary": "Save a respawn kit for an auth group. It runs in game only once a Rust plugin sends respawn events to the bot.",
-          "options": []
-        },
-        {
-          "name": "cooldowns",
-          "summary": "See the kit-give cooldowns running right now. They are held in memory, so a restart clears them.",
-          "options": []
-        },
-        {
-          "name": "build",
-          "summary": "Open Kit Studio on this website, then store the kit's code with /kits add.",
-          "link": "dashboard/kitbuilder.html",
-          "options": []
-        },
-        {
-          "name": "add",
-          "summary": "Preview a Kit Studio code and learn recognised kit names. The bot retains only a hash, decoded length and up to 400 characters of preview text; the original Base64 code is not saved. Nothing is installed on your Rust server.",
-          "notes": [
-            "The preview is private metadata, not a copy of the complete code. The bot never executes the pasted text or sends it over RCON."
-          ],
-          "options": []
-        }
-      ]
+     "name": "server",
+     "summary": "Add or change the Rust server, by typing the details or by pasting the RCON lines from server.cfg.",
+     "notes": [
+      "The address is read in the shapes people actually write it: `51.38.1.2`, `51.38.1.2:28015`, `[2606:4700::1]:28015` or a hostname all work.",
+      "A private address (192.168.x.x, 10.x.x.x, 127.0.0.1) cannot be reached from a cloud host, so it is named as private instead of failing silently."
+     ]
     },
     {
-      "name": "user",
-      "group": "links",
-      "who": "Staff roles, Administrator, Manage Server or the owner",
-      "needsSetup": true,
-      "readOnly": false,
-      "panel": "Pickers and modals, plus a member-facing link panel",
-      "summary": "Player links: the bot's record of which Discord account belongs to which gamertag. Everything player-facing in Spinback runs on this list.",
-      "why": "One staff role and one tested Rust server, because links feed the panels that use them.",
-      "subcommands": [
-        {
-          "name": "whois",
-          "summary": "Press Look someone up and type a gamertag, or part of one: shows the Discord account behind it, and any waiting requests.",
-          "notes": [
-            "Requests that are still waiting are shown too, labelled as waiting rather than linked."
-          ],
-          "options": []
-        },
-        {
-          "name": "pending",
-          "summary": "The waiting list: link requests from the link panel, approved or rejected in one click. The player gets a direct message either way.",
-          "notes": [
-            "A request is a claim, not proof — this is where a person turns it into a link, or throws it out."
-          ],
-          "options": []
-        },
-        {
-          "name": "forcelink",
-          "summary": "Link a Discord user to a gamertag yourself. This is how a genuine request gets approved.",
-          "options": []
-        },
-        {
-          "name": "forceunlink",
-          "summary": "Remove a player link, after a confirmation panel.",
-          "options": []
-        },
-        {
-          "name": "transfer",
-          "summary": "Move a link to a new Discord account or a new gamertag.",
-          "options": []
-        },
-        {
-          "name": "linkpanel",
-          "summary": "Post the member-facing panel with Link account and Unlink buttons. The channel is picked from a list next.",
-          "notes": [
-            "Members press the buttons themselves; the bot checks who is asking before it changes a link."
-          ],
-          "options": []
-        },
-        {
-          "name": "roster",
-          "summary": "Every linked player, page by page, with a Search button for a gamertag or Discord id.",
-          "options": []
-        }
-      ]
+     "name": "suggest",
+     "summary": "Read the role and channel names in this server and propose a match for each slot and log type, with the matching reason shown for every line, then apply the whole list in one press.",
+     "notes": [
+      "A name match is a suggestion, never a decision: Apply writes exactly the list that was on screen."
+     ]
     },
     {
-      "name": "server",
-      "group": "server",
-      "who": "Staff roles, Administrator, Manage Server or the owner",
-      "needsSetup": true,
-      "readOnly": true,
-      "panel": "A reply with Ask again, a jump to setup and the other questions",
-      "summary": "Ask your Rust server over RCON without changing anything. Only the commands on the bot's fixed allowed list are ever sent: serverinfo, playerlist, gettime and status. Whatever the server answers is shown exactly as it arrived, with the round-trip time.",
-      "why": "Setup finished — one staff role and one tested Rust server, because a connection is what answers these.",
-      "subcommands": [
-        {
-          "name": "info",
-          "summary": "Name, players online, map and uptime, as the server reports them.",
-          "options": []
-        },
-        {
-          "name": "players",
-          "summary": "The names and ping the server reports for everyone online.",
-          "options": []
-        },
-        {
-          "name": "time",
-          "summary": "The in-game clock.",
-          "options": []
-        },
-        {
-          "name": "status",
-          "summary": "The server's own status answer, exactly as it arrives.",
-          "options": []
-        },
-        {
-          "name": "check",
-          "summary": "Open a fresh RCON connection right now and time it.",
-          "notes": [
-            "Useful after a fix: it is the same test that decides whether a server can be saved."
-          ],
-          "options": []
-        }
-      ]
+     "name": "doctor",
+     "summary": "The health check: saved role ids are checked against this server, every log channel for reachability, each saved Rust server is asked a real RCON command and timed, the kit commands are checked for their {player} and {kit} placeholders, storage is checked, then it lists what to fix first.",
+     "notes": [
+      "It opens up to three fresh RCON connections and changes nothing."
+     ]
+    },
+    {
+     "name": "import",
+     "summary": "Paste the RCON lines from server.cfg (or host port password on one line). The bot reads them, says which pieces it found and which are missing, warns when rcon.web is 1, then tests the connection and only saves if the server answers.",
+     "notes": [
+      "Nothing is filled in: a field it did not find is reported as missing."
+     ]
+    },
+    {
+     "name": "export",
+     "summary": "Everything saved, as text you can copy: role slots with role names, log channels with channel names, the kit commands, the servers and the player link counts.",
+     "notes": [
+      "No RCON password is in the export at all — it never leaves the service that talks to your server."
+     ]
+    },
+    {
+     "name": "reset",
+     "summary": "Clear the saved configuration again after typing RESET in capitals.",
+     "notes": [
+      "Player links, waiting requests and the link panel message are kept. No channel, role or player is deleted."
+     ]
+    },
+    {
+     "name": "status",
+     "summary": "A checklist of what is saved and what is still missing, with buttons straight into each step, the health check and the name suggestions."
+    },
+    {
+     "name": "edit",
+     "summary": "Change a saved server's address, RCON port or password from the picker. New details are tested before anything is saved."
+    },
+    {
+     "name": "refresh",
+     "summary": "Open a fresh RCON connection right now and report exactly what the server answers, in its own words. One saved server is tested straight away; several give you a list."
     }
-  ]
+   ]
+  },
+  {
+   "name": "kits",
+   "group": "kits",
+   "who": "Staff roles, Administrator, Manage Server or the owner",
+   "needsSetup": true,
+   "readOnly": false,
+   "panel": "A wizard panel per subcommand",
+   "summary": "Emote kits end to end: the real kit names from your server, binds with cooldowns and roles, handing kits out, clearing cooldowns, respawn kits per auth group, and installing kits built in Kit Studio. Every step opens a panel, a picker or a box — nothing to type into the command itself.",
+   "why": "Your kit plugin's own command names, and a give template using {player} and {kit}. The bot will not guess either one.",
+   "subcommands": [
+    {
+     "name": "commands",
+     "summary": "Set your kit plugin's own list command, give template and install command — the settings nothing else could set from Discord.",
+     "notes": [
+      "The give template is filled with {player} and {kit}; the install command with {code}. Leave a field blank when saving to clear that command."
+     ]
+    },
+    {
+     "name": "doctor",
+     "summary": "Check the kit setup: which commands are set, whether the give template really has both placeholders, every bind, the respawn kits for each group, the lock state and the install codes held.",
+     "notes": [
+      "Read-only, and it sends nothing to your server: a kit name is only ever checked against what the plugin itself reports."
+     ]
+    },
+    {
+     "name": "grab",
+     "summary": "Read the real kit names from your Rust server instead of taking a typed list.",
+     "notes": [
+      "Needs your list command set first: the bot will not invent the name of one."
+     ]
+    },
+    {
+     "name": "config",
+     "summary": "The emote kit wizard: binds, cooldowns, roles, lock kits, the emote guide, the kit commands and the kit check."
+    },
+    {
+     "name": "give",
+     "summary": "Give a kit: opens a box for the kit name and the player, by gamertag or by linked Discord user.",
+     "notes": [
+      "It sends exactly your give template with the player and kit filled in, and shows the command it sent."
+     ]
+    },
+    {
+     "name": "refresh",
+     "summary": "Clear cooldowns: choose one player, one kit, every linked player or every kit, then type the name if that scope needs one.",
+     "notes": [
+      "The bot reports the exact number of records it cleared, and clears nothing it does not hold."
+     ]
+    },
+    {
+     "name": "auth-spawn",
+     "summary": "Give an auth group a kit on every respawn: pick the group, then type the kit. Blank stops giving one."
+    },
+    {
+     "name": "cooldowns",
+     "summary": "See the kit cooldown records the bot is holding right now."
+    },
+    {
+     "name": "build",
+     "summary": "Open Kit Studio on this website, or work from an install code.",
+     "link": "dashboard/kitbuilder.html"
+    },
+    {
+     "name": "add",
+     "summary": "Install a kit from a Base64 kit install code, pasted into a box.",
+     "notes": [
+      "It checks the value really is Base64 that decodes to readable text, stores it exactly as given, and never guesses what is inside."
+     ]
+    }
+   ]
+  },
+  {
+   "name": "user",
+   "group": "links",
+   "who": "Staff roles, Administrator, Manage Server or the owner",
+   "needsSetup": true,
+   "readOnly": false,
+   "panel": "Pickers and modals, plus a member-facing link panel",
+   "summary": "Player links: the bot's record of which Discord account belongs to which gamertag. Everything player-facing in Spinback runs on this list.",
+   "why": "One staff role and one tested Rust server, because links feed the panels that use them.",
+   "subcommands": [
+    {
+     "name": "whois",
+     "summary": "Look up which Discord account is behind a gamertag: press the button, type the name. The ids come back as text, so a lookup cannot notify or ping them.",
+     "notes": [
+      "Requests that are still waiting are shown too, labelled as waiting rather than linked."
+     ]
+    },
+    {
+     "name": "pending",
+     "summary": "Every request waiting for confirmation, with an Approve and a Reject button per person. Approving writes the link as you, so the record shows who confirmed it.",
+     "notes": [
+      "A request is a claim, not proof — this is where a person turns it into a link, or throws it out."
+     ]
+    },
+    {
+     "name": "forcelink",
+     "summary": "Link a Discord user to a gamertag yourself. This is how a genuine request gets approved."
+    },
+    {
+     "name": "forceunlink",
+     "summary": "Remove a player link, after a confirmation panel."
+    },
+    {
+     "name": "transfer",
+     "summary": "Move a link to a new Discord account or a new gamertag."
+    },
+    {
+     "name": "linkpanel",
+     "summary": "Post the member-facing panel with Link account and Unlink buttons. The channel is picked from a list next.",
+     "notes": [
+      "Members press the buttons themselves; the bot checks who is asking before it changes a link."
+     ]
+    },
+    {
+     "name": "roster",
+     "summary": "Everyone who is linked, with their gamertag and Discord account, and a button to look somebody up."
+    }
+   ]
+  },
+  {
+   "name": "server",
+   "group": "server",
+   "who": "Staff roles, Administrator, Manage Server or the owner",
+   "needsSetup": true,
+   "readOnly": true,
+   "panel": "A reply with Ask again, a jump to setup and the other questions",
+   "summary": "Ask your Rust server over RCON without changing anything. Only the commands on the bot's fixed allowed list are ever sent: serverinfo, playerlist, gettime and status. Whatever the server answers is shown exactly as it arrived, with the round-trip time.",
+   "why": "Setup finished — one staff role and one tested Rust server, because a connection is what answers these.",
+   "subcommands": [
+    {
+     "name": "info",
+     "summary": "Name, players online, map and uptime, as the server reports them."
+    },
+    {
+     "name": "players",
+     "summary": "The names and ping the server reports for everyone online."
+    },
+    {
+     "name": "time",
+     "summary": "The in-game clock."
+    },
+    {
+     "name": "status",
+     "summary": "The server's own status answer, exactly as it arrives."
+    },
+    {
+     "name": "check",
+     "summary": "Open a fresh RCON connection right now and time it.",
+     "notes": [
+      "Useful after a fix: it is the same test that decides whether a server can be saved."
+     ]
+    }
+   ]
+  }
+ ]
 }

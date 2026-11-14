@@ -35,7 +35,7 @@ import {
   kitGivePanel, kitGiveModal, kitRefreshPanel, kitRefreshModal, kitSpawnPanel, kitSpawnModal,
   kitAddPanel, kitAddModal, giveKit, authSpawnNote,
   refreshCooldowns, permissionNote, wrongGuildNote, pingReply,
-  STAFF_SLOTS, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
+  STAFF_SLOTS, STAFF_ROLE_RECIPES, runSetupPanel, roleBuildPanel, roleBuildResult, rolesPanel, testServers, autocompleteChoices, forceLinkNow,
   deliveryModal, saveDelivery, grabKits, grabKitsRun, installKit, dress, BRAND, serverSnapshot,
   channelSetupPanel, logChannelBuilder, logChannelPlan, logChannelBuilt, serverStepPanel,
   setupSuggest, suggestApplied, setupDoctor, setupImportPanel, setupImportModal, parseServerText,
@@ -647,37 +647,114 @@ function applyProposal(proposal) {
   return { roleLines: roleLines, channelLines: channelLines, roleMisses: roleMisses };
 }
 
-/* The only thing on this service that creates anything in the guild, and only after a person
-   ticks the types and presses Create. Every channel is reported back one by one. */
+/* Everything the bot creates in the guild lives here. Nothing runs until an administrator
+   presses the button that says so, and every role and channel is reported back one by one. */
+
+/* The roles /setup run can make. Colours are cosmetic; the ids saved afterwards are what the
+   bot checks when it decides who may run staff commands. Nothing is granted here: a role that
+   only marks rank is exactly what these are, and Discord permissions stay as they are. */
+async function createStaffRoles() {
+  const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
+  if (!guild) return { created: [], reused: [], failed: ['the bot is not connected to this server right now'], wrote: { ok: false, detail: 'the guild is not available' } };
+  const created = [];
+  const reused = [];
+  const failed = [];
+  let me = null;
+  try { me = guild.members.me || await guild.members.fetchMe(); } catch (error) { me = null; }
+  const canManageRoles = !!(me && me.permissions && me.permissions.has(PermissionFlagsBits.ManageRoles));
+  for (const recipe of STAFF_ROLE_RECIPES) {
+    const slot = recipe[0], name = recipe[1], colour = recipe[2];
+    const already = guild.roles.cache.find(function (r) { return String(r.name).toLowerCase() === name.toLowerCase(); });
+    if (already) {
+      if (String(settings.staffRoles[slot] || '') !== String(already.id)) {
+        settings.staffRoles[slot] = String(already.id);
+        reused.push(name + ' -> <@&' + already.id + '> (a role with that name was already here, so this one was used)');
+      } else {
+        reused.push(name + ' -> <@&' + already.id + '> (already saved)');
+      }
+      continue;
+    }
+    if (!canManageRoles) { failed.push('**' + name + '**: the bot needs **Manage Roles** to make this one. Give it that permission, or pick a role that exists already.'); continue; }
+    try {
+      const role = await guild.roles.create({
+        name: name,
+        color: colour,
+        hoist: false,
+        mentionable: false,
+        permissions: [],
+        reason: 'Spinback RCE staff role, created by /setup run',
+      });
+      if (String(settings.staffRoles[slot] || '') !== String(role.id)) settings.staffRoles[slot] = String(role.id);
+      created.push(name + ' -> <@&' + role.id + '>');
+    } catch (error) {
+      failed.push('**' + name + '**: ' + String((error && error.message) || error).slice(0, 140));
+    }
+  }
+  const wrote = await persistSettings(['staffRoles']);
+  return { created: created, reused: reused, failed: failed, wrote: wrote };
+}
+
 async function createLogChannels(keys) {
   const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
-  if (!guild) return { created: [], failed: ['the bot is not connected to this server right now'], wrote: { ok: false, detail: 'the guild is not available' } };
+  if (!guild) return { created: [], reused: [], failed: ['the bot is not connected to this server right now'], wrote: { ok: false, detail: 'the guild is not available' } };
   const created = [];
+  const reused = [];
   const failed = [];
+  const staffIds = STAFF_SLOTS.map(function (slot) { return settings.staffRoles[slot[0]]; }).filter(Boolean).map(String);
+  let me = null;
+  try { me = guild.members.me || await guild.members.fetchMe(); } catch (error) { me = null; }
+  const botId = (me && me.id) || (client.user && client.user.id);
+  const canManageChannels = !!(me && me.permissions && me.permissions.has(PermissionFlagsBits.ManageChannels));
+  /* @everyone loses View Channel, each saved staff role keeps it, and the bot keeps what it
+     needs to post an embed. A channel is only ever private in this way when the staff roles
+     exist, so a half-finished setup does not hide logs from the people who need them. */
+  function overwritesFor() {
+    const list = [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }];
+    staffIds.forEach(function (id) {
+      list.push({ id: id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+    });
+    if (botId) list.push({ id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] });
+    return list;
+  }
   let parentId = null;
   try {
     let category = guild.channels.cache.find(function (c) { return c.type === ChannelType.GuildCategory && String(c.name).toLowerCase() === 'spinback'; });
-    if (!category) category = await guild.channels.create({ name: 'Spinback', type: ChannelType.GuildCategory, reason: 'Spinback RCE log channels, requested by staff' });
+    if (!category) {
+      category = await guild.channels.create({ name: 'Spinback', type: ChannelType.GuildCategory, reason: 'Spinback RCE log channels, requested by a server administrator' });
+    }
     parentId = category.id;
   } catch (error) {
     failed.push('the Spinback category: ' + String((error && error.message) || error).slice(0, 140));
   }
-  for (const key of (keys || []).slice(0, 10)) {
+  const wanted = (keys || []).slice(0, 10);
+  for (const key of wanted) {
     const type = LOG_TYPES.filter(function (t) { return t[0] === key; })[0];
-    if (!type) continue;
     const name = 'spinback-' + String(key).toLowerCase();
+    const label = type ? type[1] : key;
+    const already = guild.channels.cache.find(function (c) { return c.type === ChannelType.GuildText && String(c.name).toLowerCase() === name; });
+    if (already) {
+      try {
+        await already.permissionOverwrites.set(overwritesFor());
+        settings.logChannels[key] = already.id;
+        reused.push('#' + already.name + ' for ' + label + ' - already there, so its permissions were set rather than making a second one');
+      } catch (error) {
+        failed.push(name + ': it is already there but its permissions could not be set (' + String((error && error.message) || error).slice(0, 100) + ')');
+      }
+      continue;
+    }
+    if (!canManageChannels) { failed.push('**' + name + '**: the bot needs **Manage Channels** to make this one.'); continue; }
     try {
-      const options = { name: name, type: ChannelType.GuildText, topic: 'Spinback RCE ' + type[1], reason: 'Spinback RCE log channel, requested by staff' };
+      const options = { name: name, type: ChannelType.GuildText, topic: 'Spinback RCE ' + label, reason: 'Spinback RCE log channel, requested by a server administrator', permissionOverwrites: overwritesFor() };
       if (parentId) options.parent = parentId;
       const channel = await guild.channels.create(options);
       settings.logChannels[key] = channel.id;
-      created.push('<#' + channel.id + '> for ' + type[1]);
+      created.push('#' + channel.name + ' for ' + label);
     } catch (error) {
       failed.push(name + ': ' + String((error && error.message) || error).slice(0, 140));
     }
   }
-  const wrote = created.length ? await persistSettings(['logChannels']) : { ok: true };
-  return { created: created, failed: failed, wrote: wrote };
+  const wrote = (created.length || reused.length) ? await persistSettings(['logChannels']) : { ok: true };
+  return { created: created, reused: reused, failed: failed, staffIds: staffIds, wrote: wrote };
 }
 const PENDING_GIVE_TTL_MS = 10 * 60 * 1000;
 /* Remembered for ten minutes at most, and never more than 500 at once, so abandoned forms
@@ -750,6 +827,7 @@ function botCtx(interaction) {
     moveLinkFull: function (gamertag, toUserId, toGamertag) { return moveLinkFull(gamertag, toUserId, toGamertag, actor); },
     /* Every RCON command a person causes is written to the RCON log: what was sent, where,
        by whom and what came back. Never the password. */
+    target: function (host, port) { return parseRconTarget(host, port); },
     rconTest: function (o) { return rconLogged(Object.assign({}, o, { allowAny: false }), actor); },
     rconRun: function (o) { return rconLogged(Object.assign({}, o, { allowAny: true }), actor); },
   };
@@ -1214,6 +1292,18 @@ async function runButton(interaction) {
   if (id === 'setup:home') return await answerPanel(interaction, setupPanel(ctx));
   if (id === 'setup:roles') return await answerPanel(interaction, rolesPanel(ctx, 1));
   if (id === 'setup:roles:2' || id === 'setup:linked') return await answerPanel(interaction, rolesPanel(ctx, 2));
+  /* Guided setup: the bot can make the staff roles and the private log channels. */
+  if (id === 'setup:run') return await answerPanel(interaction, runSetupPanel(ctx));
+  if (id === 'setup:run:roles') return await answerPanel(interaction, roleBuildPanel(ctx));
+  if (id === 'setup:run:roles:go') {
+    return await answerPanel(interaction, (async function () {
+      const made = await createStaffRoles();
+      log('setup: ' + made.created.length + ' staff role(s) created, ' + made.reused.length + ' reused, ' + made.failed.length + ' failed');
+      if (made.created.length || made.reused.length) logLater('admin', 'Staff roles set up', who(ctx.actor) + ' ran guided setup: ' + made.created.length + ' role(s) created, ' + made.reused.length + ' reused.');
+      return roleBuildResult(ctx, made);
+    })());
+  }
+  if (id === 'setup:run:channels') return await answerPanel(interaction, logChannelBuilder());
   if (id === 'setup:channels') return await answerPanel(interaction, channelSetupPanel(ctx));
   if (id === 'setup:channels:pick') return await answerPanel(interaction, logTypeMenu(ctx));
   if (id === 'setup:channels:build') return await answerPanel(interaction, logChannelBuilder());
@@ -1225,7 +1315,7 @@ async function runButton(interaction) {
     return await answerPanel(interaction, (async function () {
       const result = await createLogChannels(keys);
       if (result.created.length) logLater('admin', 'Log channels created', who(ctx.actor) + ' had the bot create ' + result.created.length + ' log channel(s): ' + result.created.join(', ') + '.');
-      return logChannelBuilt(result.created, result.failed, result.wrote);
+      return logChannelBuilt(result.created, result.failed, result.wrote, result.reused, result.staffIds);
     })());
   }
   if (id === 'setup:status') return await answerPanel(interaction, setupStatus(ctx));
@@ -1322,7 +1412,7 @@ async function runSelect(interaction) {
   if (id === 'setup:channels:build:pick') {
     const keys = (interaction.values || []).filter(function (k) { return LOG_TYPES.some(function (t) { return t[0] === k; }); }).slice(0, 10);
     pendingBuild.set(interaction.user.id, keys);
-    return await answerPanel(interaction, logChannelPlan(keys));
+    return await answerPanel(interaction, logChannelPlan(keys, ctx));
   }
   if (id.indexOf('setup:channel:') === 0) {
     const typeKey = id.slice('setup:channel:'.length);
@@ -1899,12 +1989,92 @@ function channelKind(channel) {
   return 'other';
 }
 
+/* What counts as a usable RCON address.
+
+   People paste this in every shape there is: 1.2.3.4:28015, [2606:4700::1]:28015, a
+   hostname, the same address the game client shows, or the port left in the box beside it.
+   All of those are read here, so the bot does not refuse an address that is perfectly fine
+   with a message about the public internet that has nothing to do with what was typed.
+   What is still refused is what this service genuinely cannot reach from a cloud host -
+   loopback, a private network, carrier-grade NAT, link-local and multicast - and each case
+   gets its own reason, so the panel can name the real problem instead of guessing. */
+function parseRconTarget(hostInput, portInput) {
+  let host = String(hostInput == null ? '' : hostInput).trim();
+  let portText = String(portInput == null ? '' : portInput).trim();
+  host = host.replace(/^[<"']+/, '').replace(/[>"']+$/, '').trim();
+  host = host.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').trim();
+  host = host.split('/')[0].split('?')[0].trim();
+  if (!host) return { ok: false, reason: 'no-host', detail: 'No server address was given.' };
+  if (host.length > 200) return { ok: false, reason: 'bad-host', detail: 'That address is far too long to be a server address.' };
+
+  let v6 = null;
+  const bracketed = host.match(/^\[([^\]]+)\](?::(\d{1,5}))?$/);
+  if (bracketed) {
+    v6 = bracketed[1];
+    if (bracketed[2] && !portText) portText = bracketed[2];
+  } else if ((host.match(/:/g) || []).length > 1) {
+    v6 = host;
+  } else if (host.indexOf(':') > -1) {
+    const cut = host.lastIndexOf(':');
+    const tail = host.slice(cut + 1);
+    if (/^\d{1,5}$/.test(tail)) { if (!portText) portText = tail; host = host.slice(0, cut).trim(); }
+    else return { ok: false, reason: 'bad-host', detail: 'There is a colon in that address but the part after it is not a port number.' };
+  }
+  if (!host && !v6) return { ok: false, reason: 'no-host', detail: 'No server address was given.' };
+
+  if (!portText) return { ok: false, reason: 'no-port', detail: 'No RCON port was given. It is rcon.port in server.cfg, not the game or query port.' };
+  if (!/^\d{1,5}$/.test(portText)) return { ok: false, reason: 'refused-port', detail: 'A port is a number, and ' + portText.slice(0, 20) + ' is not one.' };
+  const port = Number(portText);
+  if (!(port >= 1 && port <= 65535)) return { ok: false, reason: 'refused-port', detail: 'Port ' + port + ' cannot exist: a port is between 1 and 65535.' };
+
+  if (v6) {
+    const v = v6.toLowerCase().replace(/^\[|\]$/g, '');
+    if (v === '::1' || v === '::') return { ok: false, reason: 'refused-local', detail: 'That is this machine own address, not your server.' };
+    if (v.indexOf('fe80') === 0) return { ok: false, reason: 'refused-private', detail: 'That is a link-local address, which only exists inside one network.' };
+    if (v.indexOf('ff') === 0) return { ok: false, reason: 'refused-private', detail: 'That is a multicast address, which is not a server.' };
+    if (v.charAt(0) === 'f' && (v.charAt(1) === 'c' || v.charAt(1) === 'd')) return { ok: false, reason: 'refused-private', detail: 'That is a private IPv6 address, which the bot cannot reach from a cloud host. Use the public address or the hostname from server.cfg.' };
+    return { ok: true, host: v, port: port, display: '[' + v + ']:' + port, family: 6 };
+  }
+
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const parts = host.split('.').map(Number);
+    if (parts.some(function (n) { return !(n >= 0 && n <= 255); })) return { ok: false, reason: 'bad-host', detail: 'That is not a valid IPv4 address.' };
+    const a = parts[0], b = parts[1];
+    if (a === 127) return { ok: false, reason: 'refused-local', detail: '127.0.0.1 is this machine own address, not your server.' };
+    if (a === 0) return { ok: false, reason: 'bad-host', detail: '0.x.x.x is not a real address.' };
+    if (a >= 224) return { ok: false, reason: 'refused-private', detail: 'That is a multicast or reserved address, which is not a server.' };
+    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+      return { ok: false, reason: 'refused-private', detail: 'That is a local network address (' + host + '), which only exists inside your own network. Use the public IP or the hostname from server.cfg: the bot runs on a cloud host and has to reach the server over the internet.' };
+    }
+    if (a === 169 && b === 254) return { ok: false, reason: 'refused-private', detail: 'That is a link-local address, which only exists inside one network.' };
+    if (a === 100 && b >= 64 && b <= 127) {
+      return { ok: false, reason: 'refused-private', detail: 'That is inside your provider carrier-grade NAT range, which the internet cannot route to. Use the public address or a hostname.' };
+    }
+    return { ok: true, host: host, port: port, display: host + ':' + port, family: 4 };
+  }
+
+  const name = host.toLowerCase();
+  if (name === 'localhost' || /\.localhost$/.test(name) || /\.local$/.test(name) || /\.internal$/.test(name) || /\.lan$/.test(name) || /\.home\.arpa$/.test(name)) {
+    return { ok: false, reason: 'refused-local', detail: 'That name only resolves inside one network, so the bot cannot reach it.' };
+  }
+  if (!/^[a-z0-9_]([a-z0-9._-]*[a-z0-9_])?$/.test(name)) {
+    return { ok: false, reason: 'bad-host', detail: 'That does not look like a hostname or an IP address. Use the address exactly as server.cfg has it, for example 51.38.1.2 or eu01.example.net.' };
+  }
+  return { ok: true, host: host, port: port, display: host + ':' + port, family: 0 };
+}
+
 async function rconRun(options) {
   let release;
   try { release = await acquireRconSlot(); } catch (error) {
     return { ok: false, reason: 'busy', detail: String((error && error.message) || error) };
   }
   try {
+    /* Read the address the way it was typed (port on the end, brackets, a scheme), refuse
+       what cannot be reached with its own reason, then let the network guard vet what is
+       left - including every address a hostname resolves to. */
+    const shape = parseRconTarget(options.host, options.port);
+    if (!shape.ok) return { ok: false, reason: shape.reason, detail: shape.detail };
+    options = Object.assign({}, options, { host: shape.host, port: shape.port });
     const target = rconHostAllowed(options.host) ? await rconResolve(options.host) : null;
     if (!target) {
       return { ok: false, reason: 'refused-host', detail: 'That address is not a public internet host (or did not resolve safely), so the bot will not connect to it.' };

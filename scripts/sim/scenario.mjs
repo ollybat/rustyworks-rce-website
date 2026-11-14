@@ -21,7 +21,7 @@ function last(it) {
   const answers = it.calls.filter((c) => c.body !== undefined && ["reply", "editReply", "update", "showModal", "respond"].includes(c.method));
   return answers.length ? answers[answers.length - 1].body : null;
 }
-function text(value) { return JSON.stringify(value || null); }
+function text(value) { return JSON.stringify(value || null, (k, v) => (typeof v === "bigint" ? String(v) : v)); }
 async function writes() { return (await fetch(SITE + "/__sim/writes")).json(); }
 const latest = (w) => (w && w.length ? w[w.length - 1] : {}) || {};
 
@@ -51,7 +51,9 @@ export async function run({ world, make, interact }) {
 
   /* 4. roles from Discord's own role menu, saved through the website */
   it = await go(make.command(ADMIN, "setup", "run"), "/setup run");
-  expect("/setup run shows the panel", text(last(it)).includes("Spinback RCE setup"), text(last(it)));
+  expect("/setup run shows guided setup", text(last(it)).includes("Guided setup"), text(last(it)));
+  it = await go(make.button(ADMIN, "setup:home"), "the step-by-step setup panel");
+  expect("the step-by-step panel is one press away", text(last(it)).includes("Spinback RCE setup"), text(last(it)).slice(0, 300));
   it = await go(make.button(ADMIN, "setup:roles"), "setup: roles page 1");
   const roleMenus = ((last(it) || {}).components || []).filter((r) => r.components && r.components[0] && r.components[0].type === 6).length;
   expect("roles are picked from role menus (4 on page 1)", roleMenus === 4, text(last(it)));
@@ -358,6 +360,37 @@ export async function run({ world, make, interact }) {
   it = await go(make.select(ADMIN, "string", "kits:give:pick", ["PlayerOne"]), "pick a player to give a kit");
   expect("picking a player fills the give form with their gamertag", (it.calls[0] || {}).method === "showModal" && text(last(it)).includes('"value":"PlayerOne"'), text(last(it)).slice(0, 400));
   expect("every registered command takes no typed option", world.registered.every((c) => (c.options || []).every((o) => o.type === 1 && !(o.options || []).length)), text(world.registered.map((c) => c.name)));
+
+  /* 34. guided setup: the bot makes the staff roles, then log channels private to them */
+  it = await go(make.command(ADMIN, "setup", "run"), "/setup run (guided)");
+  expect("/setup run opens guided setup", text(last(it)).includes("Guided setup") && text(last(it)).includes("setup:run:roles"), text(last(it)).slice(0, 300));
+  it = await go(make.button(ADMIN, "setup:run:roles"), "guided: show the role plan");
+  expect("the role plan lists every role before anything is made", text(last(it)).includes("Create the staff roles?") && text(last(it)).includes("Head Admin") && world.createdRoles.length === 0, text(last(it)).slice(0, 400));
+  it = await go(make.button(ADMIN, "setup:run:roles:go"), "guided: create the roles");
+  expect("missing staff roles are created with no permissions", world.createdRoles.length === 4 && world.createdRoles.every((r) => Array.isArray(r.permissions) && !r.permissions.length), text(world.createdRoles.map((r) => r.name)));
+  expect("an existing role with the same name is reused, not duplicated", !world.createdRoles.some((r) => r.name === "Owner") && text(last(it)).includes("Already here"), text(last(it)).slice(0, 500));
+  it = await go(make.button(ADMIN, "setup:run:roles:go"), "guided: create the roles again");
+  expect("pressing it twice makes nothing new", world.createdRoles.length === 4, text(world.createdRoles.map((r) => r.name)));
+  const createdBefore = world.created.length;
+  it = await go(make.select(ADMIN, "string", "setup:channels:build:pick", ["teleport"]), "guided: tick a log type");
+  expect("the channel plan says who will be able to read it", text(last(it)).includes("Who will be able to read them") && text(last(it)).includes("Head Admin"), text(last(it)).slice(0, 500));
+  it = await go(make.button(ADMIN, "setup:channels:build:go"), "guided: create the channel");
+  const made = world.created.slice(createdBefore).find((c) => c.name === "spinback-teleport");
+  const locks = made ? world.overwrites[made.id] || [] : [];
+  expect("the new log channel hides from @everyone", locks.some((o) => o.id === "100" && (o.deny || []).length), text(locks));
+  expect("every staff role keeps View Channel on it", locks.filter((o) => (o.allow || []).length && o.id !== "100000000000000500").length >= 5, text(locks));
+  expect("the bot keeps what it needs to post there", locks.some((o) => o.id === "100000000000000500" && (o.allow || []).length >= 3), text(locks));
+  it = await go(make.select(ADMIN, "string", "setup:channels:build:pick", ["teleport"]), "guided: tick the same type again");
+  it = await go(make.button(ADMIN, "setup:channels:build:go"), "guided: create the same channel again");
+  expect("an existing log channel is relocked, not duplicated", world.created.filter((c) => c.name === "spinback-teleport").length === 1 && text(last(it)).includes("relocked"), text(last(it)).slice(0, 400));
+
+  /* 35. the server address is read in whatever shape it is typed */
+  it = await go(make.modal(ADMIN, "modal:server:new", { srv_name: "Home", srv_host: "192.168.1.20", srv_port: "28016", srv_pass: "x" }), "a private server address");
+  expect("a private address is refused with the real reason", text(last(it)).includes("address needs fixing") && text(last(it)).includes("local network"), text(last(it)).slice(0, 400));
+  it = await go(make.modal(ADMIN, "modal:server:new", { srv_name: "Shape", srv_host: "rcon://203.0.113.10:28016/", srv_port: "", srv_pass: "x" }), "an address with a scheme and the port on the end");
+  expect("an address with the port on the end is read, then tested", text(last(it)).includes("203.0.113.10:28016") && !text(last(it)).includes("address needs fixing"), text(last(it)).slice(0, 400));
+  it = await go(make.modal(ADMIN, "modal:server:new", { srv_name: "Typo", srv_host: "203.0.113.10:abc", srv_port: "", srv_pass: "x" }), "an address with a broken port");
+  expect("a broken port is named, not guessed", text(last(it)).includes("not a port number"), text(last(it)).slice(0, 400));
 
   /* every interaction: answered, in time, by the rules, within Discord's limits */
   for (const { it: one, label } of all) {

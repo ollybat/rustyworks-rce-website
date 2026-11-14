@@ -2087,7 +2087,10 @@ export default {
        upstream site so the studio never breaks on a half-finished data move. */
     if (url.pathname === "/data/entities.json" || url.pathname.startsWith("/data/presets/")) {
       const local = await env.ASSETS.fetch(request);
-      if (local.status === 200) return withAssetHeaders(local, url.pathname);
+      /* A miss in the asset store comes back as the homepage, so a 200 only counts when the
+         body really is data. Otherwise a page of HTML would be handed back as JSON. */
+      const localIsData = local.status === 200 && !/text\/html/i.test(local.headers.get("content-type") || "");
+      if (localIsData) return withAssetHeaders(local, url.pathname);
       const upstreamPath = url.pathname === "/data/entities.json"
         ? "/media/entitys/entities.json"
         : url.pathname.replace("/data/presets/", "/media/kitbuilder/presets/");
@@ -2101,12 +2104,13 @@ export default {
     if (url.pathname.startsWith("/media/spinback-")) {
       if (request.method === "GET" || request.method === "HEAD") {
         const own = await env.ASSETS.fetch(request);
-        if (own.status === 200) return withAssetHeaders(own, url.pathname);
+        const isHtml = (r) => /text\/html/i.test(r.headers.get("content-type") || "");
+        if (own.status === 200 && !isHtml(own)) return withAssetHeaders(own, url.pathname);
         const local = LOCAL_ALIASES.find((a) => a[0].test(url.pathname));
         if (local) {
           const target = url.pathname.replace(local[0], local[1]);
           const aliased = await env.ASSETS.fetch(new Request(new URL(target, url), request));
-          if (aliased.status === 200) return withAssetHeaders(aliased, target);
+          if (aliased.status === 200 && !isHtml(aliased)) return withAssetHeaders(aliased, target);
         }
       }
       return kitAsset(url, ctx, env);
@@ -2170,36 +2174,70 @@ export default {
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
-    if (assetResponse.status !== 404) return withAssetHeaders(assetResponse, url.pathname);
 
     const method = request.method.toUpperCase();
     const isPageRequest = (method === "GET" || method === "HEAD") &&
       (request.headers.get("accept") || "").includes("text/html");
 
+    /* Some hosts answer a missing file with the homepage instead of a 404. That substitute
+       must not be passed off as the file: a stylesheet, script, image or data file that is
+       not there has to say so, or the browser quietly throws the HTML away and the page is
+       left with no styling or no data. Real pages are HTML too, so for an HTML address the
+       answer only counts as the substitute when it is the homepage itself. */
+    let homepageText = null;
+    const homepage = async () => {
+      if (homepageText === null) {
+        const home = await env.ASSETS.fetch(new URL("/index.html", request.url));
+        homepageText = home.status === 200 ? await home.text() : "";
+      }
+      return homepageText;
+    };
+    const isHomepageFallback = async (response, pathname) => {
+      if (response.status !== 200) return false;
+      if (!/text\/html/i.test(response.headers.get("content-type") || "")) return false;
+      if (pathname === "/" || pathname === "/index.html") return false;
+      const extension = (pathname.match(/\.([a-z0-9]+)$/i) || [])[1];
+      if (extension && extension.toLowerCase() !== "html" && extension.toLowerCase() !== "htm") return true;
+      const home = await homepage();
+      return !!home && (await response.clone().text()) === home;
+    };
+
+    /* The site's own 404 page, still answering 404. */
+    const notFound = async () => {
+      const fallback = await env.ASSETS.fetch(new URL("/404.html", request.url));
+      if (fallback.status === 404) {
+        return new Response("not found", {
+          status: 404,
+          headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
+        });
+      }
+      return new Response(method === "HEAD" ? null : await fallback.arrayBuffer(), {
+        status: 404,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "x-robots-tag": "noindex",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    };
+
+    if (assetResponse.status !== 404 && !(await isHomepageFallback(assetResponse, url.pathname))) {
+      return withAssetHeaders(assetResponse, url.pathname);
+    }
+
     if (isPageRequest) {
-      /* A page asked for without its extension — /status for /status.html — so
-         links people copy out of the address bar stay short. */
+      /* A page asked for without its extension - /status for /status.html - so links people
+         copy out of the address bar stay short. */
       if (!HAS_EXTENSION.test(url.pathname)) {
         const target = url.pathname === "/" ? "/index.html" : url.pathname.replace(/\/+$/, "") + ".html";
         const pretty = await env.ASSETS.fetch(new URL(target, request.url));
-        if (pretty.status !== 404) return withAssetHeaders(pretty, target);
+        if (pretty.status !== 404 && !(await isHomepageFallback(pretty, target))) return withAssetHeaders(pretty, target);
       }
-
-      /* Nothing there: the site's own 404 page, still answering 404. */
-      const fallback = await env.ASSETS.fetch(new URL("/404.html", request.url));
-      if (fallback.status !== 404) {
-        return new Response(method === "HEAD" ? null : await fallback.arrayBuffer(), {
-          status: 404,
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-            "x-robots-tag": "noindex",
-            "x-content-type-options": "nosniff",
-          },
-        });
-      }
+      return await notFound();
     }
 
-    return withAssetHeaders(assetResponse, url.pathname);
+    /* Not a page request, so there is nothing to show a person: answer honestly. */
+    return await notFound();
   },
 };

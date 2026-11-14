@@ -188,7 +188,7 @@ async function apiChecks() {
   out.push(["reconnect needs POST", getReconnect.status === 405]);
   const privateRcon = await (await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
     body: JSON.stringify({ host: "192.168.1.10", port: 28016, password: "x" }) })).json().catch(() => ({}));
-  out.push(["RCON to a private address is refused", privateRcon.reason === "refused-host"]);
+  out.push(["RCON to a private address is refused, saying why", privateRcon.reason === "refused-private" && /local network/.test(privateRcon.detail || "")]);
   const docRcon = await (await request("/api/rcon/test", { method: "POST", headers: { "content-type": "application/json", "x-settings-token": TOKEN },
     body: JSON.stringify({ host: "192.0.2.10", port: 28016, password: "x" }) })).json().catch(() => ({}));
   out.push(["RCON to a documentation range is refused", docRcon.reason === "refused-host"]);

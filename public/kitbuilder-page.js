@@ -98,7 +98,6 @@ const REMAP = {
     ['Additional Content','Chicken Costume DLC'],['Additional Content','Horse Costume DLC'],
     ['Additional Content','Industrial Lights DLC'],['Additional Content','Weapon Racks DLC'],
   ],
-
 };
 
 // Source categories whose items go into Wear slots
@@ -199,7 +198,6 @@ function toLabel(sn) {
     'maxhealthtea':'Max Health Tea','maxhealthtea.advanced':'Adv Max Health Tea','maxhealthtea.pure':'Pure Max Health Tea',
     'radiationresisttea':'Rad Resist Tea','radiationresisttea.advanced':'Adv Rad Resist Tea','radiationresisttea.pure':'Pure Rad Resist Tea',
     'chicken.cooked':'Cooked Chicken','fish.cooked':'Cooked Fish',
-
     'humanmeat.cooked':'Cooked Human Meat','bearmeat.cooked':'Cooked Bear',
     'deermeat.cooked':'Cooked Deer','horsemeat.cooked':'Cooked Horse',
     'meat.pork.cooked':'Cooked Pork','wolfmeat.cooked':'Cooked Wolf',
@@ -236,14 +234,10 @@ function toLabel(sn) {
 async function loadEntities() {
   let raw = {};
   try {
-    raw = await fetch('/data/entities.json').then(r => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    });
+    raw = await fetch('/data/entities.json').then(r => r.json());
   } catch(e) {
-    console.warn('[KitBuilder] entities.json failed to load:', e.message, '- using the local catalogue');
-    await loadLocalCatalogue();
-    return;
+    console.warn('[KitBuilder] entities.json failed to load:', e.message);
+    return; // CATS stays empty — builder will show nothing, not crash
   }
 
   // Build WEARABLE set from Armour + Attire (excluding Horse subcategories)
@@ -261,34 +255,6 @@ async function loadEntities() {
       });
     }
     if (items.length) CATS[catLabel] = items;
-  }
-  /* A reachable file with none of the expected categories is as empty as a failed one. */
-  if (!Object.keys(CATS).length) await loadLocalCatalogue();
-}
-
-/* Fallback: the catalogue this site ships in /data/items.json (about 300 items, grouped
-   by the site's own categories). Used when the upstream item list cannot be reached, so
-   the studio is never empty. */
-async function loadLocalCatalogue() {
-  try {
-    const data = await fetch('/data/items.json').then(r => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    });
-    const order = Array.isArray(data.groups) ? data.groups : [];
-    const byGroup = {};
-    (data.items || []).forEach(it => {
-      if (!it || !it.short) return;
-      const g = it.group || 'Other';
-      (byGroup[g] = byGroup[g] || []).push({ v: it.short, l: it.name || toLabel(it.short) });
-      if (g === 'Clothing & armour') WEARABLE.add(it.short);
-    });
-    const groups = order.concat(Object.keys(byGroup).filter(g => !order.includes(g)));
-    groups.forEach(g => {
-      if (byGroup[g] && byGroup[g].length) CATS[g] = byGroup[g].sort((a, b) => a.l.localeCompare(b.l));
-    });
-  } catch (e) {
-    console.warn('[KitBuilder] local catalogue failed to load too:', e.message);
   }
 }
 
@@ -317,13 +283,6 @@ function closeModal(id){document.getElementById(id).style.display='none'}
 function safeB64Enc(s){try{return btoa(unescape(encodeURIComponent(s)))}catch{return btoa(s)}}
 function safeB64Dec(s){try{return decodeURIComponent(escape(atob(s)))}catch{return atob(s)}}
 function fmtNum(n){return Number(n||0).toLocaleString()}
-/* Kit names go inside double quotes in every command, so a quote or backslash in the name
-   would break all of them. typing=true keeps a trailing underscore while someone types. */
-function cleanKitName(raw, typing=false){
-  let v = String(raw ?? '');
-  if (!typing) v = v.trim();
-  return v.replace(/\s+/g,'_').replace(/["\\]/g,'').toUpperCase().slice(0,64);
-}
 function kitHasItems(){return [...KIT.wear,...KIT.main,...KIT.belt].some(Boolean)}
 	
 // ── Custom Confirm Logic ──
@@ -339,7 +298,6 @@ function openConfirm(title, desc, confirmBtnText = 'Yes', btnClass = 'danger') {
     _confirmResolver = resolve;
   });
 }
-
 function closeConfirmModal(ev) {
   if (ev && ev.target !== document.getElementById('confirmModal')) return;
   document.getElementById('confirmModal').style.display = 'none';
@@ -366,25 +324,6 @@ async function init() {
   document.addEventListener('click', (e) => {
     if (!document.getElementById('qtyPop').contains(e.target)) closeQP();
   });
-  openItemFromHash();
-  window.addEventListener('hashchange', openItemFromHash);
-}
-
-/* The site search links items here as #item=<shortname>: find it, show it and select it, so
-   the next click on a slot places it. */
-function openItemFromHash() {
-  const m = /[#&]item=([^&]+)/.exec(window.location.hash);
-  if (!m) return;
-  let short = '';
-  try { short = decodeURIComponent(m[1]); } catch { return; }
-  let found = null;
-  for (const items of Object.values(CATS)) { found = items.find(i => i.v === short); if (found) break; }
-  document.getElementById('itemSearch').value = found ? found.l : short;
-  filterItems();
-  if (!found) { toast('That item is not in the studio\'s list - showing the closest matches.', true); return; }
-  if (SEL?.v !== found.v) selectItem(found.v, found.l);
-  const tile = [...document.querySelectorAll('.bi')].find(el => el.dataset.v === found.v);
-  if (tile) tile.scrollIntoView({ block: 'nearest' });
 }
 	
 // ── Resizable panel divider ──────────────────────────────────────────────────
@@ -458,7 +397,6 @@ function updateAuthButtons() {
     existing.innerHTML = USER ? '' : notice;
   }
 }
-
 
 // ════════════════════════════════════════════════════════════════════════════
 // MOBILE TABS
@@ -560,7 +498,6 @@ function renderItemGrid(items, isSearch=false) {
 }
 
 function setupBrowserItem(div, item) {
-
   div.addEventListener('click', () => selectItem(item.v, item.l));
   div.addEventListener('dragstart', e => {
     e.dataTransfer.effectAllowed = 'copy';
@@ -661,7 +598,6 @@ function openQtyDialog(pos, idx) {
 }
 
 function onSlotDrop(e, pos, idx) {
-
   const raw = e.dataTransfer.getData('text/plain');
   if (!raw) return;
   let data;
@@ -762,7 +698,6 @@ function qpRemove() {
   renderSlot(QP.pos, QP.idx);
   updateOutput();
   closeQP();
-
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -777,7 +712,7 @@ function buildCommands(name) {
 }
 
 function updateOutput() {
-  KIT.name = cleanKitName(document.getElementById('kitName').value) || 'MY_KIT';
+  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
   if (!kitHasItems()) { document.getElementById('cmdOutput').value = ''; return; }
   document.getElementById('cmdOutput').value = buildCommands(KIT.name).join('\n');
 }
@@ -791,7 +726,7 @@ async function incrementGenerated() {
 }
 
 async function doAction(type) {
-  KIT.name = cleanKitName(document.getElementById('kitName').value) || 'MY_KIT';
+  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
   if (!kitHasItems()) { toast('Add some items to the kit first.', true); return; }
   const cmds = buildCommands(KIT.name);
   if (type === 'commands') {
@@ -837,46 +772,39 @@ function doImport() {
     const dec = safeB64Dec(raw);
     if (dec.toLowerCase().includes('kit ')) text = dec;
   } catch {}
-  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  /* Read everything into a fresh kit first: the current kit is only replaced once at least
-     one line has been understood, so pasting the wrong thing never wipes your work. */
-  const next = { wear: Array(7).fill(null), main: Array(24).fill(null), belt: Array(6).fill(null) };
-  let name = '', added = 0, skipped = 0;
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  // Clear current
+  KIT.wear.fill(null); KIT.main.fill(null); KIT.belt.fill(null);
+  // Parse kit name
   for (const line of lines) {
-    const m = line.match(/^kit\s+add\s+"?([^"\s]+)"?\s+"?([^"\s]+)"?\s+(\d+)(?:\s+\d+)?\s+(wear|main|belt)\b/i);
+    const m = line.match(/^kit\s+add\s+"?([^"\s]+)"?\s+"?([^"\s]+)"?\s+(\d+)(?:\s+\d+)?\s+(wear|main|belt)/i);
     if (!m) continue;
-    const [,kitName,shortname,qtyStr,posRaw] = m;
-    if (!name) name = kitName;
+    const [,,shortname,qtyStr,posRaw] = m;
     const qty = Math.max(1, parseInt(qtyStr)||1);
     const pos = posRaw.toLowerCase();
-    // Find first empty slot; a full container or a non-wearable in Wear is skipped and counted
-    const arr = next[pos];
+    if (!['wear','main','belt'].includes(pos)) continue;
+    // Find first empty slot
+    const arr = KIT[pos];
     const emptyIdx = arr.findIndex(s=>!s);
-    if (emptyIdx === -1 || (pos === 'wear' && !WEARABLE.has(shortname))) { skipped++; continue; }
+    if (emptyIdx === -1) continue;
+    // Check wear constraint
+    if (pos === 'wear' && !WEARABLE.has(shortname)) continue;
     // Find label
     let label = shortname;
     for (const [,items] of Object.entries(CATS)) { const it = items.find(i=>i.v===shortname); if(it){label=it.l;break;} }
     arr[emptyIdx] = {v:shortname,l:label,qty};
-    added++;
   }
-  if (!added) {
-    toast(skipped ? 'None of those items fit: the slots were full or the items cannot be worn.' : 'Nothing to import: paste an install code or lines that start with kit add.', true);
-    return;
-  }
-  KIT.wear = next.wear; KIT.main = next.main; KIT.belt = next.belt;
-  if (name) document.getElementById('kitName').value = cleanKitName(name);
   renderAllSlots(); updateOutput(); closeModal('importModal');
-  toast(skipped ? `✅ Imported ${added} item${added===1?'':'s'} (${skipped} skipped)` : `✅ Imported ${added} item${added===1?'':'s'}`);
+  toast('✅ Kit imported!');
 }
-
 
 // ════════════════════════════════════════════════════════════════════════════
 // SAVE / LOAD / MANAGE
 // ════════════════════════════════════════════════════════════════════════════
 async function saveKit() {
-  if (!USER) { toast('Login to save kits.', true); window.location.href='../login.html'; return; }
+  /* Kits are kept in this browser, so there is no account to check before saving one. */
   if (!kitHasItems()) { toast('Add items before saving.', true); return; }
-  KIT.name = cleanKitName(document.getElementById('kitName').value) || 'MY_KIT';
+  KIT.name = document.getElementById('kitName').value.trim().replace(/\s+/g,'_').toUpperCase() || 'MY_KIT';
   try {
     const data = {wear:KIT.wear,main:KIT.main,belt:KIT.belt};
     const d = await fetch(`${API()}/api/kitbuilder/kits`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({kit_name:KIT.name,kit_data:data})}).then(r=>r.json());
@@ -903,7 +831,7 @@ async function openManageModal() {
 
 async function fetchKitList() {
   const body = document.getElementById('listModalBody');
-  if (!USER) { body.innerHTML = '<p style="color:var(--text-dim);font-size:.88rem;">Login to save and manage kits. <a href="../login.html" style="color:var(--ember);">Login →</a></p>'; return; }
+  if (!USER) { body.innerHTML = '<p style="color:var(--text-dim);font-size:.88rem;">Kits are stored in this browser.</p>'; return; }
   body.textContent = 'Loading…';
   try {
     const d = await fetch(`${API()}/api/kitbuilder/kits`,{credentials:'include'}).then(r=>r.json());
@@ -969,7 +897,6 @@ const _presetCache = new Map();
 function setupServerPresets() {
   const select = document.getElementById("presetMultiplierSelect");
   if (!select) return;
-
 
   PRESET_FILES.forEach(group => {
     const option = document.createElement("option");
@@ -1072,7 +999,6 @@ async function loadPresetKit(kit) {
   toast(`✅ Loaded ${kit.name} (${placed} items)`);
 }
 
-
 // ════════════════════════════════════════════════════════════════════════════
 // SCREENSHOT SYSTEM
 // ════════════════════════════════════════════════════════════════════════════
@@ -1172,7 +1098,6 @@ async function drawScreenshotSlot(ctx, x, y, size, itemData, keyType) {
   ctx.save();
   
   // Base Slot Background
-
   ctx.fillStyle = "rgba(38, 36, 34, 0.95)"; 
   ctx.fillRect(x, y, size, size);
   
@@ -1273,7 +1198,6 @@ async function copyScreenshotImage() {
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       toast("📋 Image copied to clipboard!");
     } catch (err) {
-
       console.error(err);
       toast("Failed to copy image.", true);
     }

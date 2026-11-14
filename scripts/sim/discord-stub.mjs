@@ -12,7 +12,8 @@ import { resolve as resolvePath } from "node:path";
 
 export const GatewayIntentBits = { Guilds: 1 };
 export const Partials = { Channel: 1 };
-export const PermissionFlagsBits = { Administrator: 8n, ManageGuild: 32n, ManageRoles: 268435456n };
+export const PermissionFlagsBits = { Administrator: 8n, ManageGuild: 32n, ManageRoles: 268435456n, ManageChannels: 16n,
+  ViewChannel: 1024n, SendMessages: 2048n, EmbedLinks: 16384n, AttachFiles: 32768n, ReadMessageHistory: 65536n };
 export const ChannelType = { GuildText: 0, GuildCategory: 4 };
 export const Events = {
   ClientReady: "ready", InteractionCreate: "interactionCreate", Error: "error", Debug: "debug",
@@ -30,7 +31,7 @@ export class Collection extends Map {
 }
 
 /* What the pretend Discord saw: messages posted in channels, roles given and taken. */
-export const world = { sent: [], roleChanges: [], registered: [], dms: [], deleted: [], created: [], guildId: process.env.DISCORD_GUILD_ID || "1" };
+export const world = { sent: [], roleChanges: [], registered: [], dms: [], deleted: [], created: [], createdRoles: [], overwrites: {}, guildId: process.env.DISCORD_GUILD_ID || "1" };
 /* a member who keeps direct messages from server members closed */
 const DMS_CLOSED = "100000000000000209";
 /* the one log channel the bot may see but not post in */
@@ -41,7 +42,18 @@ function makeGuild() {
     .map(([id, name, position]) => [id, { id, name, position }]);
   return {
     id: world.guildId, name: "Sim Guild", ownerId: process.env.SIM_OWNER_ID || "100000000000000999", memberCount: 42, icon: null,
-    roles: { cache: new Collection(roles) },
+    roles: {
+      cache: new Collection(roles),
+      get everyone() { return this.cache.get("100"); },
+      /* role creation, for /setup run > Create the roles for me */
+      async create(options) {
+        const id = "1000000000000" + String(700 + world.createdRoles.length).padStart(5, "0");
+        const role = { id, name: options.name, position: 1, color: options.color, permissions: options.permissions };
+        world.createdRoles.push(role);
+        this.cache.set(id, role);
+        return role;
+      },
+    },
     channels: {
       cache: new Collection(["401", "402", "403", "404", "405", "406"].map((n, i) => {
         const id = "1000000000000" + n.padStart(5, "0");
@@ -52,7 +64,9 @@ function makeGuild() {
       async create(options) {
         const id = "1000000000000" + String(600 + world.created.length).padStart(5, "0");
         const channel = { id, name: options.name, type: options.type, parentId: options.parent || null, rawPosition: 99,
-          permissionsFor: () => ({ has: () => true }) };
+          permissionsFor: () => ({ has: () => true }),
+          permissionOverwrites: { set: async (list) => { world.overwrites[id] = list; } } };
+        if (options.permissionOverwrites) world.overwrites[id] = options.permissionOverwrites;
         world.created.push(channel);
         this.cache.set(id, channel);
         return channel;
@@ -68,7 +82,8 @@ function makeGuild() {
     },
     members: {
       /* the bot itself: Manage Roles, and a highest role above Linked (2) and VIP (3) */
-      me: { permissions: perms(268435456n), roles: { highest: { position: 5 } } },
+      me: { id: "100000000000000500", permissions: perms(268435456n | 16n), roles: { highest: { position: 5 } } },
+      async fetchMe() { return this.me; },
       async fetch(id) {
         if (String(id).startsWith("0")) throw new Error("Unknown Member");
         const change = (action) => async (roleId) => { world.roleChanges.push({ userId: String(id), roleId: String(roleId), action }); };

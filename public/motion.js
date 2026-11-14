@@ -15,7 +15,12 @@
     if (document.body.firstChild) document.body.insertBefore(bg, document.body.firstChild);
     else document.body.appendChild(bg);
   }
-  if (!reduce) {
+  /* The animation is a 1.3 MB WebP. Phones and slow or data-saving links keep the
+     poster instead, so the backdrop costs a visitor nothing on a metered plan. */
+  var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  var narrow = window.matchMedia && window.matchMedia('(max-width: 700px)').matches;
+  var frugal = !!(conn && (conn.saveData || /^(slow-2g|2g|3g)$/.test(conn.effectiveType || '')));
+  if (!reduce && !narrow && !frugal) {
     var pre = new Image();
     pre.onload = function () { bg.classList.add('sb-bg-live'); };
     pre.src = '/media/spinback-bg.webp';

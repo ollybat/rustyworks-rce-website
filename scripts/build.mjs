@@ -35,32 +35,109 @@ for (const name of readdirSync(join("build", "client", "media"))) {
   if (RASTER.test(name)) rmSync(join("build", "client", "media", name));
 }
 
-/* Strip JSONC comments without touching strings: a plain //-to-end-of-line replace would
-   also cut "https://..." values in half the day one is added to vars. */
-function stripJsonc(text) {
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === '"') {
-      let j = i + 1;
-      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
-      out += text.slice(i, j + 1);
-      i = j;
-    } else if (c === "/" && text[i + 1] === "/") {
-      while (i < text.length && text[i] !== "\n") i++;
-      out += "\n";
-    } else if (c === "/" && text[i + 1] === "*") {
-      i = text.indexOf("*/", i + 2);
-      if (i === -1) break;
-      i++;
-    } else {
-      out += c;
-    }
-  }
-  return out.replace(/,(\s*[}\]])/g, "$1");
+/* ---------------------------------------------------------------------------
+   Shipping copies
+   ---------------------------------------------------------------------------
+   public/ keeps the readable original of every page, script and stylesheet.
+   What a visitor downloads is built from it here, so the site that goes out
+   carries no commentary and no spacing to read between the lines. Behaviour is
+   untouched: comments and layout go, nothing else - identifiers keep their
+   names, so anything a page reaches by name (an onclick attribute, a shared
+   global, a CSS custom property) still resolves.
+
+   If a file cannot be processed it is copied through exactly as it was: one
+   surprise in one file can never take the site down with it.
+   ------------------------------------------------------------------------- */
+const MINIFY_JS = new Set([".js", ".mjs"]);
+const MINIFY_CSS = new Set([".css"]);
+const MINIFY_HTML = new Set([".html"]);
+
+let esbuild = null;
+try {
+  esbuild = await import("esbuild");
+} catch (error) {
+  console.warn("[build] esbuild is not installed - shipping the readable files unchanged");
 }
+
+function walkFiles(dir) {
+  const found = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...walkFiles(path));
+    else found.push(path);
+  }
+  return found;
+}
+
+/* Markup comments, and only outside script, style, pre and textarea, where a
+   comment-looking sequence can be real content. */
+function stripHtmlComments(source) {
+  const keep = /<(script|style|pre|textarea)\b[\s\S]*?<\/\1>/gi;
+  const parts = [];
+  let last = 0;
+  let match;
+  while ((match = keep.exec(source)) !== null) {
+    parts.push(stripPlainComments(source.slice(last, match.index)), match[0]);
+    last = match.index + match[0].length;
+  }
+  parts.push(stripPlainComments(source.slice(last)));
+  return parts.join("");
+}
+
+function stripPlainComments(text) {
+  return text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+const clientDir = join("build", "client");
+let shipped = 0;
+let unchanged = 0;
+let before = 0;
+let after = 0;
+
+for (const file of walkFiles(clientDir)) {
+  const dot = file.lastIndexOf(".");
+  const ext = dot === -1 ? "" : file.slice(dot).toLowerCase();
+  const isJs = MINIFY_JS.has(ext);
+  const isCss = MINIFY_CSS.has(ext);
+  const isHtml = MINIFY_HTML.has(ext);
+  if (!isJs && !isCss && !isHtml) continue;
+  const original = readFileSync(file, "utf8");
+  before += Buffer.byteLength(original);
+  let stripped = original;
+  try {
+    if (isHtml) {
+      stripped = stripHtmlComments(original);
+    } else if (esbuild) {
+      /* Whitespace and comments only - no syntax simplification and no renamed
+         identifiers, so every name a page reaches from markup keeps working. */
+      const result = esbuild.transform(original, {
+        loader: isCss ? "css" : "js",
+        minifyWhitespace: true,
+        minifySyntax: false,
+        minifyIdentifiers: false,
+        legalComments: "none",
+        target: isCss ? undefined : "es2020",
+      });
+      stripped = (await result).code;
+    }
+  } catch (error) {
+    stripped = original;
+    unchanged += 1;
+    console.warn("[build] left " + file + " as it was: " + error.message);
+  }
+  writeFileSync(file, stripped);
+  after += Buffer.byteLength(stripped);
+  shipped += 1;
+}
+
+console.log("[build] shipping copies: " + shipped + " files, " + before + " -> " + after + " bytes"
+  + (unchanged ? ", " + unchanged + " left readable" : ""));
+
 const rawConfig = readFileSync("wrangler.jsonc", "utf8");
-const config = JSON.parse(stripJsonc(rawConfig));
+const config = JSON.parse(rawConfig.replace(/\/\/[^\n]*/g, "").replace(/,(\s*[}\]])/g, "$1"));
 const manifest = {
   main: "worker.js",
   no_bundle: true,
