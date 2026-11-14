@@ -15,6 +15,8 @@
   var PAGES = [
     ['Home', '/index.html', 'What Spinback is, and what it does'],
     ['Status', '/status.html', 'Live uptime, checks and how the bot is behaving'],
+    ['Servers', '/servers.html', 'Every Rust server the bot has saved, with its state, population and map'],
+    ['Get started', '/start.html', 'The seven steps from adding the bot to a finished setup'],
     ['Commands', '/commands.html', 'Every command and subcommand, who may run it and what it needs set up first'],
     ['/ping', '/commands.html#ping', 'Live bot and website health, measured when you run it'],
     ['/setup', '/commands.html#setup', 'Roles, logging channels and your Rust server RCON connection'],
@@ -52,7 +54,10 @@
     });
     var both = [
       fetch('/data/items.json', { cache: 'force-cache' }).then(function (r) { return r.json(); }).catch(function () { return []; }),
-      fetch('/data/skins.json', { cache: 'force-cache' }).then(function (r) { return r.json(); }).catch(function () { return null; })
+      fetch('/data/skins.json', { cache: 'force-cache' }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      /* The commands page already carries the whole command list, so the palette reads the
+         same file the page does instead of keeping a second copy that could drift. */
+      fetch('/data/commands.json', { cache: 'force-cache' }).then(function (r) { return r.json(); }).catch(function () { return null; })
     ];
     return Promise.all(both).then(function (parts) {
       /* items.json is an object carrying its own note, with the catalogue under .items. */
@@ -82,13 +87,60 @@
           index.push({ title: product.name, sub: sub, kind: isPack ? 'Pack' : 'Product', url: productUrl, hay: (product.name + ' ' + (product.category || '')).toLowerCase() });
         });
       }
+      var commands = parts[2];
+      if (commands && Array.isArray(commands.commands)) {
+        commands.commands.forEach(function (command) {
+          if (!command || !command.name) return;
+          var subs = Array.isArray(command.subcommands) ? command.subcommands : [];
+          index.push({
+            title: '/' + command.name,
+            sub: [command.who, command.summary].filter(Boolean).join(' \u00b7 ').slice(0, 150),
+            kind: 'Command',
+            url: '/commands.html#cmd-' + command.name,
+            hay: (command.name + ' /' + command.name + ' ' + (command.summary || '') + ' ' + (command.group || '') + ' '
+              + subs.map(function (s) { return s && s.name ? s.name : ''; }).join(' ')).toLowerCase()
+          });
+          subs.forEach(function (sub) {
+            if (!sub || !sub.name) return;
+            index.push({
+              title: '/' + command.name + ' ' + sub.name,
+              sub: [sub.summary].concat(Array.isArray(sub.notes) ? sub.notes.slice(0, 1) : []).filter(Boolean).join(' \u00b7 ').slice(0, 170),
+              kind: 'Command',
+              url: '/commands.html#sub-' + command.name + '-' + sub.name,
+              hay: (command.name + ' ' + sub.name + ' /' + command.name + ' ' + sub.name + ' ' + (sub.summary || '')).toLowerCase()
+            });
+          });
+        });
+      }
+      if (commands && Array.isArray(commands.goals)) {
+        commands.goals.forEach(function (goal) {
+          if (!goal || !goal.label) return;
+          index.push({
+            title: goal.label,
+            sub: [goal.want, goal.note].filter(Boolean).join(' \u00b7 ').slice(0, 170),
+            kind: 'Guide',
+            url: '/commands.html' + (goal.href || ''),
+            hay: ((goal.label || '') + ' ' + (goal.want || '') + ' ' + (goal.note || '')).toLowerCase()
+          });
+        });
+      }
       loading = false;
       return index;
     });
   }
 
+  /* Letters of the query in the right order, so "stp srv" still finds "/setup server".
+     Only used after exact, prefix and substring matches have had their turn. */
+  function inOrder(q, hay) {
+    var at = 0;
+    for (var i = 0; i < hay.length && at < q.length; i++) {
+      if (hay.charAt(i) === q.charAt(at)) at++;
+    }
+    return at === q.length;
+  }
+
   function find(query) {
-    var q = query.trim().toLowerCase();
+    var q = query.trim().toLowerCase().replace(/^\/+/, '');
     if (!q) {
       return index.filter(function (row) { return row.kind === 'Page'; }).slice(0, 8);
     }
@@ -101,7 +153,12 @@
       else if (title.indexOf(q) === 0) score = 1;
       else if (title.indexOf(q) > -1) score = 2;
       else if (row.hay.indexOf(q) > -1) score = 3;
-      if (score > -1) scored.push({ row: row, score: score, len: row.title.length });
+      else if (q.length > 2 && row.hay.length && inOrder(q.replace(/\s+/g, ''), row.hay.replace(/[^a-z0-9]+/g, ''))) score = 5;
+      if (score > -1) {
+        /* A page or a command beats a catalogue item when everything else is equal. */
+        if (score > 0 && row.kind !== 'Item' && row.kind !== 'Skin') score -= 0.5;
+        scored.push({ row: row, score: score, len: row.title.length });
+      }
     }
     scored.sort(function (a, b) { return a.score - b.score || a.len - b.len; });
     return scored.slice(0, 40).map(function (entry) { return entry.row; });
@@ -115,8 +172,8 @@
   var top = el('div', 'qs-top');
   var input = el('input');
   input.type = 'search';
-  input.placeholder = 'Search pages, items and skins...';
-  input.setAttribute('aria-label', 'Search pages, items and skins');
+  input.placeholder = 'Search pages, commands, items and skins...';
+  input.setAttribute('aria-label', 'Search pages, commands, items and skins');
   var esc = el('button', 'qs-esc', 'Esc');
   esc.type = 'button';
   top.appendChild(input);
@@ -143,8 +200,8 @@
     if (!results.length) {
       var empty = el('li', 'qs-empty');
       empty.appendChild(document.createTextNode(input.value.trim()
-        ? 'Nothing here matches \u201c' + input.value.trim() + '\u201d. Items and skins are searched by name, short name and category.'
-        : 'Type to search pages, Kit Studio items and store skins.'));
+        ? 'Nothing here matches \u201c' + input.value.trim() + '\u201d. Commands are searched by name and subcommand; items and skins by name, short name and category.'
+        : 'Type to search pages, commands, Kit Studio items and store skins.'));
       list.appendChild(empty);
       count.textContent = '';
       return;
