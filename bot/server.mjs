@@ -539,6 +539,24 @@ async function answerPanel(interaction, payload) {
   try { await interaction.update(body); } catch (error) { log('panel update failed:', String((error && error.message) || error)); }
 }
 
+/* A component from an older build outlives the deploy it came from: Discord keeps the
+   message, but its custom_id no longer matches anything here. Saying nothing in that case
+   shows the member "This interaction failed", so name what happened instead. */
+async function staleComponent(interaction, kind, id) {
+  log('unhandled ' + kind + ':', id);
+  if (typeof interaction.isRepliable !== 'function' || !interaction.isRepliable()) return;
+  const body = {
+    embeds: [panelEmbed(0xfaa81a, 'That one is out of date',
+      'This ' + kind + ' was posted by an earlier version of Spinback, so there is nothing left for it to do.\n\n'
+      + 'Run /help for the panels that are current, and post a fresh one if it was pinned.')],
+    flags: 64,
+  };
+  try {
+    if (interaction.deferred || interaction.replied) await interaction.followUp(body);
+    else await interaction.reply(body);
+  } catch (error) { log(kind + ' fallback reply failed:', String((error && error.message) || error)); }
+}
+
 async function routeInteraction(interaction) {
   try {
     const rightGuild = !!GUILD_ID && interaction.guildId === GUILD_ID;
@@ -554,7 +572,7 @@ async function routeInteraction(interaction) {
     if (interaction.isStringSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isChannelSelectMenu === 'function' && interaction.isChannelSelectMenu()) return await runSelect(interaction);
     if (typeof interaction.isRoleSelectMenu === 'function' && interaction.isRoleSelectMenu()) return await runSelect(interaction);
-    return;
+    return await staleComponent(interaction, 'component', String(interaction.type));
   } catch (error) {
     const message = String((error && error.message) || error);
     log('interaction failed:', message);
@@ -740,7 +758,6 @@ async function runButton(interaction) {
       components: [panelRow([panelButton('user:pending', 'Back to requests', 2)])],
     });
   }
-  log('unhandled button:', id);
   if (id === 'kits:add') return await interaction.showModal(bindModal(null));
   if (id === 'kits:edit') return await answerPanel(interaction, bindList(ctx, 'edit'));
   if (id === 'kits:remove') return await answerPanel(interaction, bindList(ctx, 'remove'));
@@ -760,7 +777,7 @@ async function runButton(interaction) {
     saveBind({ emote: id.slice('kits:role:skip:'.length) }, null, false);
     return await answerPanel(interaction, kitsPanel(ctx));
   }
-
+  return await staleComponent(interaction, 'button', id);
 }
 
 async function runSelect(interaction) {
@@ -838,7 +855,7 @@ async function runSelect(interaction) {
     pendingGive.set(interaction.user.id, first);
     return await interaction.showModal(kitGiveModal());
   }
-  log('unhandled select:', id);
+  return await staleComponent(interaction, 'select menu', id);
 }
 
 async function runModal(interaction) {
@@ -957,7 +974,7 @@ async function runModal(interaction) {
     const wrote = await persistSettings();
     return await answerModal(interaction, setupResetDone(ctx, cleared, wrote));
   }
-  log('unhandled modal:', id);
+  return await staleComponent(interaction, 'form', id);
 }
 
 /* ---------------------------------------------------------------- gateway -- */

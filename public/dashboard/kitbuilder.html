@@ -4,11 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Kit Studio — Spinback RCE</title>
-<meta name="description" content="Build a Rust Console Edition kit slot by slot and copy the ready-to-paste kit commands. Free, no account, saved in your browser.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- The same self-hosted @font-face list as every other page: no render-blocking stylesheet
-     from Google, one origin fewer, and no visitor IP sent to fonts.googleapis.com. -->
-<link rel="stylesheet" href="/media/fonts.css">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Chakra+Petch:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
 <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
 <link rel="shortcut icon" href="/media/spinback-icon.svg">
@@ -23,22 +22,32 @@
   <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/dashboard/kitbuilder.html">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Spinback RCE">
-  <meta property="og:title" content="Kit Studio — Spinback RCE">
+  <meta property="og:title" content="Spinback RCE">
   <meta property="og:description" content="Build a Rust Console Edition loadout slot by slot, read the generated in-game command, and save kits in your browser.">
   <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/dashboard/kitbuilder.html">
   <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:alt" content="Spinback RCE - Kit Studio, the free loadout builder for Rust Console Edition">
+  <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+  <meta name="twitter:image:alt" content="Spinback RCE - Kit Studio, the free loadout builder for Rust Console Edition">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   </head>
 <body class="kb-page">
 
+<!-- The top bar is controls rather than a title, so the page had no first-level heading at all.
+     This one is here for screen readers and search engines and takes no space on screen. -->
+<h1 style="position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0">Kit Studio — Rust Console Edition loadout builder</h1>
+
 <!-- ── TOP BAR ── -->
 <div class="kb-topbar">
-  <a href="../index.html" class="kb-black"><img src="/media/spinback-icon.svg" alt="Spinback RCE" width="30" height="30" style="vertical-align:middle"> ← Home</a>
+  <a href="../index.html" class="kb-black"><img src="/media/spinback-icon.svg" alt="Spinback RCE"> ← Home</a>
   <div class="kb-name-wrap">
     <span class="kb-name-label">Kit:</span>
-    <input type="text" id="kitName" aria-label="Kit name" class="kb-name-input" placeholder="MY_KIT_NAME" maxlength="64"
-           oninput="this.value=cleanKitName(this.value,true);updateOutput()">
+    <input type="text" id="kitName" class="kb-name-input" placeholder="MY_KIT_NAME" maxlength="64"
+           oninput="this.value=this.value.replace(/\s+/g,'_').toUpperCase();updateOutput()">
   </div>
   <div class="kb-statsbar">
     <div class="kb-stat">
@@ -68,7 +77,7 @@
   <div class="kb-browser" id="kbBrowser">
     <!-- Selection indicator -->
     <div class="kb-sel-bar" id="selBar">
-      <img id="selImg" class="kb-sel-img" src="" alt="" onerror="this.style.opacity=0">
+      <img id="selImg" class="kb-sel-img" src="" alt="" width="36" height="36" decoding="async" onerror="this.style.opacity=0">
       <div class="kb-sel-info">
         <div class="kb-sel-name" id="selName">—</div>
         <div class="kb-sel-hint">Tap a slot to place · Tap item again to deselect</div>
@@ -78,7 +87,7 @@
     <!-- Categories -->
     <div class="kb-cats" id="catBar"></div>
     <!-- Search -->
-    <input type="text" id="itemSearch" aria-label="Search items" class="kb-search" placeholder="🔍 Search items…" oninput="filterItems()">
+    <input type="text" id="itemSearch" class="kb-search" placeholder="🔍 Search items…" oninput="filterItems()">
     <!-- Items -->
     <div class="kb-items" id="itemsGrid"></div>
   </div>
@@ -98,7 +107,7 @@
       <div class="add-server-fields" id="presetFields">
         <div class="field" style="margin-bottom: 0;">
           <label>Server Multiplier</label>
-          <select id="presetMultiplierSelect" aria-label="Server multiplier">
+          <select id="presetMultiplierSelect">
             <option value="">-- Select server type --</option>
           </select>
           <div id="presetNote" class="field-help" style="margin-top: 6px;">Pick a server type to load a built-in loadout.</div>
@@ -159,7 +168,7 @@
     <!-- Generated commands output -->
     <div class="kb-output-wrap">
       <div class="kb-output-lbl">Generated Commands</div>
-      <textarea class="kb-output" id="cmdOutput" aria-label="Generated kit commands" readonly
+      <textarea class="kb-output" id="cmdOutput" readonly
         placeholder="Build your kit above — RCON commands appear here…"></textarea>
     </div>
 
@@ -177,7 +186,7 @@
     <div class="modal-b" style="text-align: center;">
       <div class="ss-slider-row">
         <label style="font-size: 0.8rem; color: var(--text-dim);">Size:</label>
-        <input type="range" id="ssSlider" aria-label="Screenshot size" class="ss-slider" min="30" max="200" step="5" value="100" oninput="document.getElementById('ssImg').style.width = this.value + '%'; document.getElementById('ssVal').textContent = this.value + '%';">
+        <input type="range" id="ssSlider" class="ss-slider" min="30" max="200" step="5" value="100" oninput="document.getElementById('ssImg').style.width = this.value + '%'; document.getElementById('ssVal').textContent = this.value + '%';">
         <span id="ssVal" style="font-size: 0.8rem; font-family: monospace;">100%</span>
       </div>
       <div id="ssStatus" style="color: var(--rust); margin-bottom: 10px;">Generating image...</div>
@@ -197,7 +206,7 @@
   <div class="qp-name" id="qpName">—</div>
   <div class="qp-row">
     <button class="qp-adj" onclick="qpAdj(-1)">−</button>
-    <input type="number" id="qpVal" aria-label="Quantity" class="qp-qty" min="1" max="999999999" value="1">
+    <input type="number" id="qpVal" class="qp-qty" min="1" max="999999999" value="1">
     <button class="qp-adj" onclick="qpAdj(1)">+</button>
   </div>
   <div class="qp-btns">
@@ -217,7 +226,7 @@
       <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px;">
         Paste a <strong>Base64 install code</strong> <em>or</em> raw <strong>RCON kit commands</strong>. Both formats are auto-detected.
       </p>
-      <textarea id="importTa" aria-label="Install code or kit commands to import" class="modal-ta"
+      <textarea id="importTa" class="modal-ta"
         placeholder="Paste Base64 install code or RCON commands (kit add ...)"></textarea>
     </div>
     <div class="modal-f">
