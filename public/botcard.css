@@ -1,0 +1,108 @@
+/* ==========================================================================
+   Spinback RCE - the bot card in the bottom right corner
+
+   Loaded last, after every other stylesheet, so it never has to fight an
+   earlier rule and style.css is left exactly as it is. It shows the bot's own
+   Discord picture and its live state, both read from the read-only status
+   proxy, and it can be put away for good - the choice is kept in this browser
+   only.
+   ========================================================================== */
+
+.rw-botcard {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(340px, calc(100vw - 32px));
+  padding: 12px 34px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(232, 132, 63, .38);
+  background: linear-gradient(150deg, rgba(12, 8, 5, .94), rgba(20, 12, 7, .9));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(10px);
+  transform: translateY(14px);
+  opacity: 0;
+  transition: opacity .35s ease, transform .35s ease;
+  pointer-events: none;
+}
+.rw-botcard.is-in { opacity: 1; transform: none; pointer-events: auto; }
+.rw-botcard[hidden] { display: none; }
+
+.rw-botcard__avatar {
+  flex: 0 0 auto;
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(0, 0, 0, .5);
+}
+.rw-botcard__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.rw-botcard__body { min-width: 0; }
+.rw-botcard__name {
+  margin: 0;
+  font-family: 'Oswald', system-ui, sans-serif;
+  font-size: .95rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #f6ede4;
+}
+.rw-botcard__state {
+  margin: 2px 0 0;
+  font-size: .78rem;
+  line-height: 1.35;
+  color: #cbb8a6;
+}
+.rw-botcard__state .rw-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: #e8a33d;
+  vertical-align: 1px;
+}
+.rw-botcard__state.is-ok .rw-dot { background: #2ecc71; }
+.rw-botcard__state.is-bad .rw-dot { background: #e05252; }
+.rw-botcard__cta {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: .76rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: #ffd9b0;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(232, 132, 63, .5);
+}
+.rw-botcard__cta:hover { color: #fff; border-bottom-color: #fff; }
+
+.rw-botcard__close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #a99280;
+  font-size: .85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.rw-botcard__close:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+
+@media (max-width: 620px) {
+  .rw-botcard { max-width: calc(100vw - 24px); padding: 10px 30px 10px 10px; }
+  .rw-botcard__name { font-size: .86rem; }
+  .rw-botcard__state { font-size: .74rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-botcard { transition: none; transform: none; }
+}
