@@ -2457,9 +2457,17 @@ createServer(async (req, res) => {
          card. The server's address is not public: it is in the full diagnostics below. */
       avatar: botAvatarUrl(),
       rcon: (function () {
+        /* the check's own words, with the server's address and any IP taken out */
+        function publicDetail(check, server) {
+          if (!check || check.ok || !check.detail) return null;
+          let t = String(check.detail);
+          [server.host, server.ip].filter(Boolean).forEach((h) => { t = t.split(String(h)).join('the server'); });
+          t = t.replace(/\[?[0-9a-f]{0,4}(:[0-9a-f]{0,4}){3,7}\]?(:\d+)?/gi, 'the server').replace(/\b\d{1,3}(\.\d{1,3}){3}(:\d+)?\b/g, 'the server');
+          return t.slice(0, 200);
+        }
         const first = (settings.servers || [])[0];
         const check = first ? serverChecks[first.id] : null;
-        return first ? { connected: !!(check && check.ok), serverName: first.name, checkedAt: check ? check.at : null, reason: check && !check.ok ? check.reason : (check ? null : 'not-checked-yet') } : null;
+        return first ? { connected: !!(check && check.ok), serverName: first.name, checkedAt: check ? check.at : null, reason: check && !check.ok ? check.reason : (check ? null : 'not-checked-yet'), detail: publicDetail(check, first) } : null;
       })(),
       uptimeSeconds: Math.round((Date.now() - state.since) / 1000),
       stats: { guilds: state.guilds, gateway: state.gateway },

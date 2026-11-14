@@ -177,6 +177,7 @@ async function apiChecks() {
   }
   out.push(["the background check reports the Rust connection publicly", !!(watched.rcon && watched.rcon.checkedAt && watched.rcon.connected === false && watched.rcon.serverName)]);
   out.push(["the Rust server's address is not public", !!watched.rcon && !("host" in watched.rcon) && !("port" in watched.rcon) && !JSON.stringify(watched).includes("203.0.113.10")]);
+  out.push(["the public check says why, in words", typeof watched.rcon.detail === "string" && watched.rcon.detail.length > 0]);
   const full = await (await request("/api/status", { headers: { "x-settings-token": TOKEN } })).json().catch(() => ({}));
   out.push(["the website (with the token) still gets full diagnostics", "tokenShape" in full && "guildInfo" in full]);
   for (const [path, method] of [["/api/guilds", "GET"], ["/api/guild", "GET"], ["/api/rcon/test", "POST"], ["/api/reconnect", "POST"], ["/api/oauth/exchange", "POST"]]) {

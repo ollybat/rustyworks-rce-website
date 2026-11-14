@@ -99,16 +99,81 @@
     var rcon = data.rcon || null;
     var where = rcon && rcon.serverName ? rcon.serverName : 'your Rust server';
     if (!online) return { text: 'Offline or restarting - see the Status page', kind: 'bad' };
-    if (!rcon) return { text: 'Online - RCON status not reported yet', kind: 'ok' };
+    if (!('rcon' in data)) return { text: 'Online - RCON status not reported yet', kind: 'ok' };
+    if (!rcon) return { text: 'Online - no Rust server linked yet, use /setup run in Discord', kind: 'ok' };
     if (rcon.connected) return { text: 'Online - RCON connected to ' + where, kind: 'ok' };
     return { text: 'Online - RCON not connected: set it up in Discord', kind: 'bad' };
+  }
+
+  /* Some pages leave a place for the full notice, so a person who came looking for a
+     feature that needs the game is told in a sentence rather than left to guess. It is
+     only ever filled from what the bot reported, including the name of the Discord
+     server, and it empties itself again the moment the connection is there. */
+  function renderNotice(data) {
+    var host = document.getElementById('rwRconNotice');
+    if (!host) return;
+    while (host.firstChild) host.removeChild(host.firstChild);
+    if (!data || typeof data !== 'object') return;
+    var rcon = data.rcon;
+    if (!('rcon' in data)) return;
+    if (rcon && rcon.connected) return;
+    var where = (data.guildInfo && data.guildInfo.name) || 'Your Discord server';
+
+    var section = document.createElement('section');
+    section.className = 'rw-rcon';
+    section.setAttribute('role', 'status');
+
+    var heading = document.createElement('h2');
+    heading.textContent = 'RCON Connection Required';
+
+    var lead = document.createElement('p');
+    var strong = document.createElement('strong');
+    strong.textContent = where;
+    lead.appendChild(strong);
+    lead.appendChild(document.createTextNode(' is not connected via RCON. This feature requires an active RCON connection.'));
+
+    var list = document.createElement('dl');
+    list.className = 'rw-rcon__facts';
+    var pairs = [
+      ['Server', where],
+      ['How to Connect', 'Ensure your server RCON credentials are configured and the connection is active.']
+    ];
+    if (rcon && rcon.reason) pairs.push(['What the check said', String(rcon.reason) + (rcon.detail ? ' - ' + String(rcon.detail).slice(0, 200) : '')]);
+    pairs.forEach(function (pair) {
+      var dt = document.createElement('dt');
+      dt.textContent = pair[0];
+      var dd = document.createElement('dd');
+      dd.textContent = pair[1];
+      list.appendChild(dt);
+      list.appendChild(dd);
+    });
+
+    var how = document.createElement('p');
+    how.className = 'rw-rcon__how';
+    var a = document.createElement('a');
+    a.href = '/commands.html#setup';
+    a.textContent = 'Open the setup steps';
+    how.appendChild(a);
+    how.appendChild(document.createTextNode(' - in Discord, /setup run walks through it and tests the address before saving.'));
+
+    section.appendChild(heading);
+    section.appendChild(lead);
+    section.appendChild(list);
+    section.appendChild(how);
+    host.appendChild(section);
+  }
+
+  function paint(data) {
+    var said = describe(data);
+    say(said.text, said.kind);
+    renderNotice(data);
   }
 
   var controller = ('AbortController' in window) ? new AbortController() : null;
   var timer = setTimeout(function () { if (controller) controller.abort(); }, 12000);
   fetch('/api/status', Object.assign({ headers: { accept: 'application/json' }, cache: 'no-store' }, controller ? { signal: controller.signal } : {}))
     .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
-    .then(function (data) { var said = describe(data); say(said.text, said.kind); })
+    .then(paint)
     .catch(function () { say('Status unavailable right now - see the Status page', 'bad'); })
     .then(function () { clearTimeout(timer); });
 })();
