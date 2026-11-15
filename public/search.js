@@ -129,7 +129,7 @@
     });
   }
 
-  /* Letters of the query in the right order, so "stp srv" still finds "/setup server".
+  /* Letters of the query in the right order, so "stp srv" still finds "/setup".
      Only used after exact, prefix and substring matches have had their turn. */
   function inOrder(q, hay) {
     var at = 0;

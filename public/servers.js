@@ -217,7 +217,7 @@
     if (!shown.length) {
       var empty = mk("p", "sv-empty", state.servers.length
         ? "No server matches that search or filter."
-        : "The bot has not reported any server yet. Once a server is set up through /setup server in Discord, it appears here with its state and population.");
+        : "The bot has not reported any server yet. Once a server is set up through /setup in Discord, it appears here with its state and population.");
       list.appendChild(empty);
     } else {
       shown.forEach(function (server) { list.appendChild(card(server)); });
@@ -314,7 +314,7 @@
         state.error = list.length
           ? "The bot is not publishing a full server list yet, so this page is showing the one server its public status carries. Population and the map appear here as soon as the bot reports them per server."
           : (alive
-            ? "The bot is online and has no Rust server saved yet. /setup server in Discord is the step that adds one, and every server added there appears here with its state, population and map."
+            ? "The bot is online and has no Rust server saved yet. /setup in Discord is the step that adds one, and every server added there appears here with its state, population and map."
             : "The bot's Discord gateway is not connected right now, so there is no server to report. The row above is what it last said about itself, and this page keeps checking.");
         finish();
       });
