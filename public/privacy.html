@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <script>
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("spinback-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Privacy and what we store - Spinback RCE</title>
+    <meta name="application-name" content="Spinback RCE">
+    <meta name="description" content="What Spinback RCE keeps: the settings the bot stores, what this website holds, what is never shown, and the commands that remove it. No accounts, no analytics, no tracking.">
+    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/privacy.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Spinback RCE">
+    <meta property="og:title" content="Privacy and what we store - Spinback RCE">
+    <meta property="og:description" content="What the bot keeps, what the site holds, what is never shown, and how to have it removed.">
+    <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/privacy.html">
+    <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
+    <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="/theme.js"></script>
+    <script src="/config.js" defer></script>
+    <script src="/page.js" defer></script>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+    <link rel="stylesheet" href="/site-pro.css">
+    <link rel="stylesheet" href="/privacy.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="sp-header">
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async">Spinback<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
+            <a href="status.html">Status</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="sp-hero">
+        <div class="wrap">
+          <span class="sp-kicker">Privacy, plainly</span>
+          <h1 class="sp-title">What we store</h1>
+          <p class="sp-lede">
+            Spinback is a Discord bot for Rust Console Edition servers, and this website is a helper that reads
+            what the bot publishes. This page lists what is kept, where it lives, what is never shown, and the
+            exact commands that remove it. It is written from the bot's and the site's own code rather than from
+            good intentions, and it names the one thing here that is genuinely sensitive: <strong>your server's
+            RCON password</strong>, which has to be stored for the bot to connect at all.
+          </p>
+          <div class="pv-strip">
+            <span class="pv-tile"><strong>none</strong> accounts on this site</span>
+            <span class="pv-tile"><strong>none</strong> analytics or tracking</span>
+            <span class="pv-tile"><strong>1</strong> thing in your browser: the theme you picked</span>
+            <span class="pv-tile"><strong>owner only</strong> cookies, while signing in</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="pv-section">
+        <div class="wrap">
+          <div class="pv-grid">
+            <article class="pv-card">
+              <h2>On this website</h2>
+              <ul class="pv-list">
+                <li><strong>The only thing kept in your browser is your theme choice.</strong> It is one local storage key (<span class="pv-code">spinback-theme</span>), plus a one-time flag left behind when that key was renamed. Clear site data and both go.</li>
+                <li><strong>No cookies for visitors.</strong> The only cookie this site sets is a signed session cookie, marked HttpOnly, SameSite=Lax and Secure, and only while the bot's owner signs in to the owner tools. It expires by itself.</li>
+                <li><strong>No analytics, no advertising, no tracking pixels, no social embeds, no third-party scripts.</strong> Nothing here follows you to another page.</li>
+                <li><strong>One third-party request:</strong> the fonts come from Google's font service (<span class="pv-code">fonts.googleapis.com</span> for the stylesheet, <span class="pv-code">fonts.gstatic.com</span> for the files), so Google sees the request your browser makes, exactly as it would on any site using it. Everything else is served from this domain.</li>
+                <li><strong>Outbound links are just links.</strong> The Discord support server and two community server sites are ordinary anchors: nothing loads from them until you click.</li>
+                <li><strong>The host sees requests, like any web host.</strong> That is a web server log, not a profile, and it is not used to build one.</li>
+                <li><strong>Uptime samples contain no visitor data.</strong> The Status page charts the bot's own uptime and guild count; that history is about the bot, not about you.</li>
+              </ul>
+            </article>
+
+            <article class="pv-card">
+              <h2>What the bot keeps</h2>
+              <ul class="pv-list">
+                <li><strong>Your saved configuration:</strong> staff role ids with their names, log channel ids, the Rust servers you add, kits, installs, and the Discord accounts you link.</li>
+                <li><strong>Your Rust servers:</strong> a name, an address, an RCON port and an RCON password. The password is the sensitive one - it is stored because the bot has to connect with it.</li>
+                <li><strong>Discord ids:</strong> the server, role, channel and user ids needed to act on your server. That is the minimum, and it is all of it.</li>
+                <li><strong>One gateway intent only - Guilds.</strong> The bot never asks Discord for the message content intent, so it cannot read ordinary messages even if it wanted to. Log channels receive the bot's own notices.</li>
+                <li><strong>Where it lives depends on how the bot was set up, and the bot tells you which:</strong> run <span class="pv-code">/setup status</span> or <span class="pv-code">/ping</span> and read the settings line. It reports whether settings are held on this website, in a Postgres database, on the bot's own disk, or in memory only - and memory only means they are lost on the next restart.</li>
+              </ul>
+            </article>
+
+            <article class="pv-card">
+              <h2>What is never shown</h2>
+              <ul class="pv-list">
+                <li><strong>RCON passwords.</strong> No page, no log and no Discord message prints one. Anything running in a browser is told only whether a password is set, never its value; the full copy is handed to the bot alone, against a shared token.</li>
+                <li><strong>The shared settings token,</strong> which is what lets the bot read and write its own settings.</li>
+                <li><strong>The owner's Discord client secret and session secret,</strong> used for the owner's sign-in and nothing else.</li>
+                <li><strong>Nothing is sold, shared, or used to train anything.</strong> Your settings go nowhere except the store that the settings line names, and the pages you can already see.</li>
+              </ul>
+            </article>
+
+            <article class="pv-card">
+              <h2>How to remove it</h2>
+              <ul class="pv-list">
+                <li><span class="pv-code">/setup export</span> first - it prints everything saved for your server, so you can keep a copy before changing anything.</li>
+                <li><span class="pv-code">/setup reset</span> clears the saved configuration for your server. It asks you to type RESET in capitals, so it cannot happen by accident.</li>
+                <li><span class="pv-code">/setup edit</span> replaces a saved server's address, RCON port or password.</li>
+                <li><span class="pv-code">/setup roles</span> and <span class="pv-code">/setup channels</span> unset a slot: choose none for it and the saved id goes.</li>
+                <li><strong>Anything else, including a linked account,</strong> is a request in the Discord support server. There is no self-service command for that yet, and this page will not pretend there is.</li>
+              </ul>
+            </article>
+
+            <article class="pv-card pv-card--wide">
+              <h2>What this site is not</h2>
+              <p>
+                It has no accounts for visitors, no dashboard, no way to change a server from a browser, and no
+                require-you-to-sign-in step. It reads the bot's own public status and repeats it, and nothing it
+                shows can alter a server. The only signed-in part of it belongs to the bot's owner. The site and the
+                bot are run by the same team, and this page is kept in step with both: if the bot ever changes what
+                it stores, this page changes with it.
+              </p>
+            </article>
+
+            <article class="pv-card pv-card--wide">
+              <h2>Last updated</h2>
+              <p>
+                November 2026, written against the bot's settings store, the site's own storage keys, and the
+                permissions the bot asks Discord for. Questions about any of it belong in the Discord support
+                server - the same place the bot lives.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async" loading="lazy">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+            <a href="privacy.html">Privacy and what we store</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+            <a href="dashboard/colortext.html">Colour Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">Support - Spinback 5X EU &middot; 2026<br><span class="foot-fine">&copy; <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</span></div>
+      </div>
+    </footer>
+  </body>
+</html>
