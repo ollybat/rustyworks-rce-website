@@ -13,7 +13,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Get started - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
-    <meta name="description" content="Set up Spinback RCE in about ten minutes: invite the bot, run /setup server, make the staff roles and log channels, connect your Rust server over RCON and give your first kit. Every step is a button you press.">
+    <meta name="description" content="Set up Spinback RCE in about ten minutes: invite the bot, run /setup, make the staff roles and log channels, connect your Rust server over RCON and give your first kit. Every step is a button you press.">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/start.html">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Spinback RCE">
@@ -127,8 +127,8 @@
             <li class="st-step">
               <span class="st-step__num" aria-hidden="true">2</span>
               <div class="st-step__body">
-                <h3>Run <code>/setup server</code></h3>
-                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
+                <h3>Run <code>/setup</code></h3>
+                <p class="st-copyline"><code>/setup</code><button type="button" class="st-copy" data-copy="/setup">Copy</button></p>
                 <p>The guided panel: staff roles, then log channels, then your Rust server last. Each step is optional and independent, and every item reports back with a reason if it fails.</p>
               </div>
             </li>
@@ -136,7 +136,7 @@
               <span class="st-step__num" aria-hidden="true">3</span>
               <div class="st-step__body">
                 <h3>Create the staff roles</h3>
-                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
+                <p class="st-copyline"><code>/setup</code><button type="button" class="st-copy" data-copy="/setup">Copy</button></p>
                 <p>The roles it creates are saved as your staff roles. From then on, only those roles, Administrator and the server owner can run staff commands: nobody else, including the bot's own linked role.</p>
               </div>
             </li>
@@ -144,7 +144,7 @@
               <span class="st-step__num" aria-hidden="true">4</span>
               <div class="st-step__body">
                 <h3>Make the log channels</h3>
-                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
+                <p class="st-copyline"><code>/setup</code><button type="button" class="st-copy" data-copy="/setup">Copy</button></p>
                 <p>The channels it makes are private to the saved staff roles by default, so members cannot read them. Pick the log types you want and the channel for each; clearing a channel switches that type off.</p>
               </div>
             </li>
@@ -152,7 +152,7 @@
               <span class="st-step__num" aria-hidden="true">5</span>
               <div class="st-step__body">
                 <h3>Connect the Rust server</h3>
-                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
+                <p class="st-copyline"><code>/setup</code><button type="button" class="st-copy" data-copy="/setup">Copy</button></p>
                 <p>Host, RCON port and password. The connection is tested live before anything is saved, and the panel names the reason when it fails rather than guessing. The RCON port is the one from <code>server.cfg</code>, not the port players join on.</p>
               </div>
             </li>
@@ -235,21 +235,21 @@
               <h3>No servers are listed here</h3>
               <ul class="st-list">
                 <li>Two honest reasons, and the page tells you which: the bot is up and has no Rust server saved yet, or it had one and forgot it because of the point above.</li>
-                <li>The step that adds one is <a href="commands.html#sub-setup-server">/setup server</a>: it tests the address before saving, so a wrong port or password never lands in your settings.</li>
+                <li>The step that adds one is <a href="commands.html#sub-setup-server">/setup</a>: it tests the address before saving, so a wrong port or password never lands in your settings.</li>
                 <li>This site never shows an RCON address or a password, and it never guesses a server’s state: anything the bot has not reported says so.</li>
               </ul>
             </article>
             <article class="st-card">
               <h3>A panel asks for RCON</h3>
               <ul class="st-list">
-                <li>Kits and emblems reach your Rust server, so the connection has to exist first: <a href="commands.html#sub-setup-server">/setup server</a> is that step.</li>
+                <li>Kits and emblems reach your Rust server, so the connection has to exist first: <a href="commands.html#sub-setup-server">/setup</a> is that step.</li>
                 <li>A private address (192.168.x.x, 10.x.x.x, 127.0.0.1) cannot be reached from a host on the internet, so it is named as private instead of failing silently.</li>
               </ul>
             </article>
             <article class="st-card">
               <h3>A button says this has not been set up yet</h3>
               <ul class="st-list">
-                <li><a href="commands.html#sub-setup-server">/setup server</a> walks the whole thing: your roles, your log channels, then your Rust server. Kits come after that.</li>
+                <li><a href="commands.html#sub-setup-server">/setup</a> walks the whole thing: your roles, your log channels, then your Rust server. Kits come after that.</li>
                 <li>Nothing is created until you press Create, no step needs an earlier one to be finished, and you can stop halfway without leaving anything broken.</li>
               </ul>
             </article>
