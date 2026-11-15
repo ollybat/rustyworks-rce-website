@@ -23,10 +23,36 @@
     holder.appendChild(line);
   }
 
+  function addManifestLink() {
+    if (document.querySelector('link[rel="manifest"]')) return;
+    var link = document.createElement("link");
+    link.rel = "manifest";
+    link.href = "/manifest.webmanifest";
+    document.head.appendChild(link);
+  }
+
+  /* The studio pages run their own top bar instead of the site header, and the Colour
+     Studio has no link home at all, so this adds one when a page is missing any way
+     back. It stays out of the way on pages that already link to the site. */
+  function addStudioHomeLink() {
+    if (location.pathname.indexOf("/dashboard/") !== 0) return;
+    if (document.querySelector('a[href="../index.html"], a[href="/index.html"], a[href="index.html"]')) return;
+    var foot = document.querySelector("footer") || document.body;
+    var line = document.createElement("p");
+    line.className = "foot-fine foot-studio-home";
+    var link = document.createElement("a");
+    link.href = "/index.html";
+    link.textContent = "Back to the Spinback RCE website";
+    line.appendChild(link);
+    foot.appendChild(line);
+  }
+
   function init() {
     var year = document.getElementById("year");
     if (year) year.textContent = String(new Date().getFullYear());
     addPrivacyLink();
+    addManifestLink();
+    addStudioHomeLink();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
