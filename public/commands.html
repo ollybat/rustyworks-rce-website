@@ -12,12 +12,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Commands - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
-    <meta name="description" content="The Spinback RCE command list has been cleared and is being written again from scratch. This page says plainly what exists right now: nothing.">
+    <meta name="description" content="Every Spinback RCE command: setup, emote kits, account linking, queue skips and server moderation, with who may run each one and what it needs set up first. Where the owner has not described something, the card says so instead of guessing.">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/commands.html">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Spinback RCE">
     <meta property="og:title" content="Commands - Spinback RCE">
-    <meta property="og:description" content="The command list has been cleared and is being written again from scratch. Nothing on this page is current yet.">
+    <meta property="og:description" content="Six command groups and 37 subcommands, written from the owner list. Staff commands run in the game only once a Rust server is linked and tested.">
     <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/commands.html">
     <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta property="og:image:width" content="1200">
@@ -41,6 +41,7 @@
     <script src="/motion.js" defer></script>
     <script src="/site-plus.js" defer></script>
     <script src="/search.js" defer></script>
+    <script src="/commands.js" defer></script>
     <link rel="stylesheet" href="/theme-spinback.css">
     <link rel="stylesheet" href="/motion.css">
     <link rel="stylesheet" href="/site-plus.css">
@@ -48,7 +49,7 @@
     <link rel="stylesheet" href="/site-pro.css">
     <link rel="stylesheet" href="/commands.css">
     <link rel="stylesheet" href="/commands-goals.css">
-    <!-- The command cards, the goal picker and the filter bar used to live in this page and
+    <!-- The cards, the filter bar and the permission table are drawn by /commands.js from data/commands.json, and the goal picker waits until goals exist and
          were drawn by /commands.js from data/commands.json. Both files are still in the
          repository, untouched: when the new command set exists, this page links them again.
          Nothing was kept of the old list itself - data/commands.json is now deliberately
@@ -75,45 +76,105 @@
     <main id="main">
       <section class="sp-hero">
         <div class="wrap">
-          <span class="sp-kicker">Cleared on request - being rebuilt</span>
+          <span class="sp-kicker">Six command groups, 37 subcommands</span>
           <h1 class="sp-title">Commands</h1>
           <p class="sp-lede">
-            This page used to describe six commands and thirty-five subcommands. That list has been
-            <strong>deleted on request</strong>, and no copy of it was kept, so there is nothing here to show
-            until the new set is written. What you are reading is the honest state of it: a blank page, not a
-            broken one.
+            Written from the owner's list of commands, and nothing else: where a description has not been
+            given, the card says so rather than inventing one. <strong>No command takes a typed option</strong> -
+            each one opens a panel, a picker or a box. Staff commands are gated: they only run in the game once
+            a Rust server is linked and its connection has been tested.
           </p>
           <div class="cmd-stats" id="cmdStats">
-            <span class="cmd-stat"><strong>0</strong> commands described</span>
-            <span class="cmd-stat"><strong>0</strong> subcommands described</span>
-            <span class="cmd-stat"><strong>rebuilt from scratch</strong> in progress</span>
+            <span class="cmd-stat"><strong id="statCommands">-</strong> commands</span>
+            <span class="cmd-stat"><strong id="statSubs">-</strong> subcommands</span>
+            <span class="cmd-stat"><strong id="statOptions">-</strong> options</span>
+            <span class="cmd-stat"><strong>15</strong> log channels</span>
+            <span class="cmd-stat"><strong>6</strong> role slots</span>
+            <span class="cmd-stat"><strong id="statStaff">-</strong> staff-only</span>
+            <span class="cmd-stat"><strong id="statSetup">-</strong> need setup first</span>
           </div>
+        </div>
+      </section>
+
+      <section class="sp-section" aria-labelledby="gateTitle">
+        <div class="wrap">
+          <h2 class="cmd-goals__title" id="gateTitle">When these commands run</h2>
+          <p class="cmd-note">Every command except the setup group only runs in the game once a Rust server is linked and its connection has been tested.</p>
+        </div>
+      </section>
+
+      <div class="cmd-bar" id="cmdBar">
+        <div class="wrap cmd-bar__inner">
+          <div class="cmd-bar__search">
+            <label class="cmd-bar__label" for="cmdSearch">Search</label>
+            <input type="search" id="cmdSearch" placeholder="Try: ban, kit, link, queue, rcon" autocomplete="off" spellcheck="false">
+            <kbd class="cmd-bar__kbd">/</kbd>
+          </div>
+          <div class="cmd-bar__chips" id="cmdChips" role="group" aria-label="Filter commands"></div>
+          <div class="cmd-bar__actions">
+            <span class="cmd-count" id="cmdCount" role="status" aria-live="polite">loading...</span>
+            <button type="button" class="cmd-btn" id="copyAll">Copy all</button>
+            <button type="button" class="cmd-btn" id="downloadJson">Download JSON</button>
+          </div>
+        </div>
+      </div>
+
+      <section class="sp-section cmd-list-section">
+        <div class="wrap">
+          <div class="cmd-list" id="cmdList">
+            <p class="cmd-empty">Reading the command list...</p>
+          </div>
+          <noscript>
+            <p class="cmd-note">The command cards are drawn by JavaScript. Everything else on this page works without it, and the same list is available as JSON at <a href="data/commands.json">data/commands.json</a>.</p>
+          </noscript>
+          <h2 class="cmd-goals__title" style="margin-top:30px">Who may run these</h2>
+          <div id="permTable"></div>
         </div>
       </section>
 
       <section class="sp-section">
         <div class="wrap">
-          <div class="cmd-list" id="cmdList">
-            <div class="cmd-empty">
-              <p>The new command set has not been written yet.</p>
-              <p>When it is, this page becomes the full list again: every command, every subcommand, who may
-              run it, what it needs set up first, and an honest "not reported" wherever the bot cannot know
-              something. The empty catalogue is already published at
-              <a href="data/commands.json">data/commands.json</a>, and the site-wide search will pick the new
-              commands up the same day they land, because both read that one file.</p>
-            </div>
-          </div>
+          <h2 class="cmd-goals__title">What setup asks for</h2>
 
-          <h2 class="cmd-goals__title" style="margin-top:26px">What still works</h2>
-          <p class="cmd-note">
-            The rest of the site is untouched: <a href="start.html">Get started</a>,
-            <a href="servers.html">Servers</a> and <a href="status.html">Status</a> describe the bot itself, not
-            its commands, and the two studios in the footer are separate tools. The bot's own command set is a
-            separate matter from this page - it is cleared on Discord by whoever can deploy the bot, and the
-            steps are written up in the repository as bot/CLEAR-COMMANDS.md.
-          </p>
+          <h3 class="cmd-goals__lead">Staff Role Assignments</h3>
+          <p class="cmd-note">Step 1 of /setup server. These roles control who can use staff commands. Changes are instant.</p>
+          <ul class="cmd-note">
+              <li>👑 <strong>Owner Role *</strong> - Owner</li>
+              <li>🛡️ <strong>Co-Owner Role</strong> - Co-Owner</li>
+              <li>⚔️ <strong>Head Admin Role</strong> - Head Admin</li>
+              <li>🔧 <strong>Admin Role</strong> - Admin</li>
+              <li>🔨 <strong>Moderator Role</strong> - Moderator</li>
+              <li>🔗 <strong>Linked Role *</strong> - Linked</li>
+          </ul>
+          <p class="cmd-note">Owner Role and Linked Role are the required ones; Co-Owner, Head Admin, Admin and Moderator can be left blank.</p>
+
+          <h3 class="cmd-goals__lead" style="margin-top:22px">Log Channel Assignments</h3>
+          <p class="cmd-note">Step 2 of /setup server. Select a Discord text channel for each log type, or create them. Leave blank to disable that log.</p>
+          <ul class="cmd-note">
+              <li>🖥️ <strong>Server Log</strong> - <em>#server log</em></li>
+              <li>📟 <strong>Console Log</strong> - <em>#rw-console</em></li>
+              <li>⌨️ <strong>Command Log</strong> - <em>#rw-command</em></li>
+              <li>📤 <strong>RCON Command Usage</strong> - <em>#rw-command-usage</em></li>
+              <li>🔗 <strong>Linking Log</strong> - <em>#rw-linking</em></li>
+              <li>💀 <strong>Killfeed Log</strong> - <em>#rw-killfeed</em></li>
+              <li>🚁 <strong>EventFeed Log</strong> - <em>#rw-eventfeed</em></li>
+              <li>🎭 <strong>Emote Kits Log</strong> - <em>#rw-emotekits</em></li>
+              <li>🛡️ <strong>Admin Log</strong> - <em>#rw-admin</em></li>
+              <li>🧱 <strong>Zorp Log</strong> - <em>#rw-zorp</em></li>
+              <li>🌀 <strong>Teleport Log</strong> - <em>#rw-teleport</em></li>
+              <li>🏷️ <strong>Clan Log</strong> - <em>#rw-clans</em></li>
+              <li>🏇 <strong>Catch-A-Ride Log</strong> - <em>#rw-catcharide</em></li>
+              <li>👋 <strong>Join/Leave Log</strong> - <em>#rw-joinleave</em></li>
+              <li>❌ <strong>Error Log</strong> - <em>#rw-error</em></li>
+          </ul>
+
+          <h3 class="cmd-goals__lead" style="margin-top:22px">Rust Server Connections</h3>
+          <p class="cmd-note">Step 3 of /setup server: the server's name, IP, RCON port and password. The connection is tested before anything is saved. 0/3 servers linked. The bot reconnects automatically within a minute.</p>
+          <p class="cmd-note">Manage a connection afterwards with <a href="#cmd-setup">/setup edit</a>, <a href="#cmd-setup">/setup refresh</a> or <a href="#cmd-setup">/setup remove</a>.</p>
         </div>
       </section>
+
+      <div id="cmdToasts" class="cmd-toasts" role="status" aria-live="polite"></div>
     </main>
 
     <footer>

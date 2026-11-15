@@ -1,8 +1,388 @@
 {
   "site": "https://spinback-j7ao5f.camelai.app",
-  "updated": "Cleared on request. This file deliberately contains no commands: the set is being rewritten from scratch, so nothing here should be treated as current.",
-  "status": "cleared",
-  "groups": [],
-  "commands": [],
-  "goals": []
+  "updated": "Written from the owner's own list of commands. No date is recorded here because none was given.",
+  "status": "the command set the owner asked for; the bot side is not deployed yet",
+  "gate": "Every command except the setup group only runs in the game once a Rust server is linked and its connection has been tested.",
+  "serverLimit": 3,
+  "serversLinked": 0,
+  "groups": [
+    {
+      "key": "all",
+      "label": "All"
+    },
+    {
+      "key": "setup",
+      "label": "Setup"
+    },
+    {
+      "key": "kits",
+      "label": "Emote Kits"
+    },
+    {
+      "key": "user",
+      "label": "User"
+    },
+    {
+      "key": "queue",
+      "label": "Queue Skip"
+    },
+    {
+      "key": "server",
+      "label": "Server"
+    }
+  ],
+  "commands": [
+    {
+      "name": "setup",
+      "group": "setup",
+      "needsSetup": false,
+      "readOnly": false,
+      "who": "Administrator or Manage Server",
+      "why": "Administrator or Manage Server on this Discord.",
+      "panel": "A three-step panel: roles, log channels, then the Rust server details.",
+      "summary": "Sets the bot up for this Discord: your staff roles, your log channels, and the Rust servers it looks after. Nothing else on this page runs in the game until a server is linked and its connection has been tested.",
+      "subcommands": [
+        {
+          "name": "server",
+          "summary": "Opens three steps: 1) Roles (Owner, Co-Owner, Head Admin, Admin, Moderator, Linked), 2) Logging channels (create them or pick your own), 3) your Rust server's name, IP, RCON port and password. The connection is tested before anything is saved. Needs Administrator or Manage Server.",
+          "notes": [
+            "The connection is tested before anything is saved, so a wrong password is refused rather than stored.",
+            "Owner and Linked are the two roles marked required; Co-Owner, Head Admin, Admin and Moderator can be left blank.",
+            "Each server you add takes one of the three server slots."
+          ]
+        },
+        {
+          "name": "view",
+          "summary": "Show your roles, servers (Connected or Offline) and log channels."
+        },
+        {
+          "name": "remove",
+          "summary": "Remove one Rust server, or wipe the whole bot setup for this Discord."
+        },
+        {
+          "name": "edit",
+          "summary": "Change a server's IP, RCON port or password."
+        },
+        {
+          "name": "refresh",
+          "summary": "Force a reconnect of a server's RCON connection."
+        }
+      ]
+    },
+    {
+      "name": "kits",
+      "group": "kits",
+      "needsSetup": true,
+      "readOnly": false,
+      "who": "KITMANAGER for grab and config; the staff roles you set for the rest",
+      "why": "A linked Rust server, plus the KITMANAGER role for grab and config.",
+      "panel": "The kits panel: binds, cooldowns, roles and locks, up to three kits per emote.",
+      "summary": "Emote Kits: the kit names the bot reads from the server, the binds that give them, their cooldowns and the roles allowed to use them.",
+      "subcommands": [
+        {
+          "name": "grab",
+          "summary": "KITMANAGER. Copies the real kit names from the Rust server."
+        },
+        {
+          "name": "config",
+          "summary": "KITMANAGER. Opens the kits panel where you add, edit, remove and view binds with cooldowns, roles and up to 3 kits per emote; Lock Kits; Emote Guide.",
+          "notes": [
+            "Up to three kits per emote.",
+            "Binds carry their own cooldown and role."
+          ]
+        },
+        {
+          "name": "give",
+          "summary": "Give a kit to a gamertag or a linked Discord user."
+        },
+        {
+          "name": "refresh",
+          "summary": "Clear kit cooldowns for one user, one kit, all linked users or all kits."
+        },
+        {
+          "name": "authspawn",
+          "summary": "Give a kit to everyone in an Auth Group (User, VIP, Moderator, Admin, Owner) each time they respawn. One kit per group."
+        },
+        {
+          "name": "build",
+          "summary": "Kit Studio: build a kit, import an install code or choose from 18 pre-made kits."
+        },
+        {
+          "name": "add",
+          "summary": "Install a kit from a Base64 Kit Install Code."
+        }
+      ]
+    },
+    {
+      "name": "user",
+      "group": "user",
+      "needsSetup": true,
+      "readOnly": false,
+      "who": "The staff roles you set in /setup server",
+      "why": "A linked Rust server. Linking is what ties a Discord account to a gamertag.",
+      "panel": "Not stated yet - the owner has not described what this opens.",
+      "summary": "Account linking between Discord and the game, and the tools that manage links.",
+      "subcommands": [
+        {
+          "name": "linkpanel",
+          "summary": "Post a panel with Link Account and Unlink buttons in a channel."
+        },
+        {
+          "name": "forcelink",
+          "summary": ""
+        },
+        {
+          "name": "forceunlink",
+          "summary": ""
+        },
+        {
+          "name": "transfer",
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "name": "lookup",
+      "group": "user",
+      "needsSetup": true,
+      "readOnly": true,
+      "who": "The staff roles you set in /setup server",
+      "why": "A linked Rust server.",
+      "panel": "Not stated yet - the owner has not described what this opens.",
+      "summary": "",
+      "subcommands": []
+    },
+    {
+      "name": "queue-skip",
+      "group": "queue",
+      "needsSetup": true,
+      "readOnly": false,
+      "who": "The staff roles you set in /setup server",
+      "why": "A linked Rust server, and a player linked to a Discord account.",
+      "panel": "Not stated yet - the owner has not described what this opens.",
+      "summary": "Queue Skip Passes: give them, take them back, and check someone else's balance.",
+      "subcommands": [
+        {
+          "name": "give",
+          "summary": "Give a linked player Queue Skip Passes."
+        },
+        {
+          "name": "remove",
+          "summary": "Take Queue Skip Passes from a linked player."
+        },
+        {
+          "name": "balance",
+          "summary": "Check another player's Queue Skip balance."
+        }
+      ]
+    },
+    {
+      "name": "server",
+      "group": "server",
+      "needsSetup": true,
+      "readOnly": false,
+      "who": "The staff roles you set in /setup server",
+      "why": "A linked Rust server with an RCON password the bot can use.",
+      "panel": "Not stated yet - the owner has not described what this opens.",
+      "summary": "Moderation on the Rust server itself: bans, kicks, warnings, mutes, and the game's VIP, Moderator, Admin and Owner auth levels.",
+      "subcommands": [
+        {
+          "name": "add-ban",
+          "summary": "Ban a player from the Rust server for a number of hours with a reason. Optionally ban their Discord too."
+        },
+        {
+          "name": "remove-ban",
+          "summary": "Unban a player, optionally unbanning their Discord user as well."
+        },
+        {
+          "name": "kick",
+          "summary": "Kick a player from the server."
+        },
+        {
+          "name": "add-warn",
+          "summary": "Give a player an official warning."
+        },
+        {
+          "name": "remove-warn",
+          "summary": "Clear all of a player's warnings."
+        },
+        {
+          "name": "mute-chat",
+          "summary": "Mute a player's Quick Chat."
+        },
+        {
+          "name": "unmute-chat",
+          "summary": "Unmute a player's Quick Chat."
+        },
+        {
+          "name": "mute-voice",
+          "summary": "Mute a player's voice chat."
+        },
+        {
+          "name": "unmute-voice",
+          "summary": "Unmute a player's voice chat."
+        },
+        {
+          "name": "list-bans",
+          "summary": "List players banned on the server."
+        },
+        {
+          "name": "add-vip",
+          "summary": "Give a gamertag the game's VIP auth level."
+        },
+        {
+          "name": "remove-vip",
+          "summary": "Remove a gamertag's VIP auth level."
+        },
+        {
+          "name": "add-moderator",
+          "summary": "Give a gamertag the game's Moderator auth level."
+        },
+        {
+          "name": "remove-moderator",
+          "summary": "Remove a gamertag's Moderator auth level."
+        },
+        {
+          "name": "add-admin",
+          "summary": "Give a gamertag the game's Admin auth level."
+        },
+        {
+          "name": "remove-admin",
+          "summary": "Remove a gamertag's Admin auth level."
+        },
+        {
+          "name": "add-owner",
+          "summary": "Give a gamertag the game's Owner auth level."
+        },
+        {
+          "name": "remove-owner",
+          "summary": "Remove a gamertag's Owner auth level."
+        }
+      ]
+    }
+  ],
+  "goals": [],
+  "setup": {
+    "note": "Role changes are instant. Leave a log channel blank to disable that log.",
+    "roles": [
+      {
+        "emoji": "👑",
+        "name": "Owner Role",
+        "value": "Owner",
+        "required": true
+      },
+      {
+        "emoji": "🛡️",
+        "name": "Co-Owner Role",
+        "value": "Co-Owner",
+        "required": false
+      },
+      {
+        "emoji": "⚔️",
+        "name": "Head Admin Role",
+        "value": "Head Admin",
+        "required": false
+      },
+      {
+        "emoji": "🔧",
+        "name": "Admin Role",
+        "value": "Admin",
+        "required": false
+      },
+      {
+        "emoji": "🔨",
+        "name": "Moderator Role",
+        "value": "Moderator",
+        "required": false
+      },
+      {
+        "emoji": "🔗",
+        "name": "Linked Role",
+        "value": "Linked",
+        "required": true
+      }
+    ],
+    "logChannels": [
+      {
+        "emoji": "🖥️",
+        "name": "Server Log",
+        "example": "#server log"
+      },
+      {
+        "emoji": "📟",
+        "name": "Console Log",
+        "example": "#rw-console"
+      },
+      {
+        "emoji": "⌨️",
+        "name": "Command Log",
+        "example": "#rw-command"
+      },
+      {
+        "emoji": "📤",
+        "name": "RCON Command Usage",
+        "example": "#rw-command-usage"
+      },
+      {
+        "emoji": "🔗",
+        "name": "Linking Log",
+        "example": "#rw-linking"
+      },
+      {
+        "emoji": "💀",
+        "name": "Killfeed Log",
+        "example": "#rw-killfeed"
+      },
+      {
+        "emoji": "🚁",
+        "name": "EventFeed Log",
+        "example": "#rw-eventfeed"
+      },
+      {
+        "emoji": "🎭",
+        "name": "Emote Kits Log",
+        "example": "#rw-emotekits"
+      },
+      {
+        "emoji": "🛡️",
+        "name": "Admin Log",
+        "example": "#rw-admin"
+      },
+      {
+        "emoji": "🧱",
+        "name": "Zorp Log",
+        "example": "#rw-zorp"
+      },
+      {
+        "emoji": "🌀",
+        "name": "Teleport Log",
+        "example": "#rw-teleport"
+      },
+      {
+        "emoji": "🏷️",
+        "name": "Clan Log",
+        "example": "#rw-clans"
+      },
+      {
+        "emoji": "🏇",
+        "name": "Catch-A-Ride Log",
+        "example": "#rw-catcharide"
+      },
+      {
+        "emoji": "👋",
+        "name": "Join/Leave Log",
+        "example": "#rw-joinleave"
+      },
+      {
+        "emoji": "❌",
+        "name": "Error Log",
+        "example": "#rw-error"
+      }
+    ],
+    "servers": {
+      "linked": 0,
+      "max": 3,
+      "note": "The bot reconnects automatically within a minute."
+    }
+  }
 }
