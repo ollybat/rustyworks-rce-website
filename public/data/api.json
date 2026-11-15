@@ -1,0 +1,33 @@
+{
+  "site": "https://spinback-j7ao5f.camelai.app",
+  "updated": "The public, read-only data behind Spinback RCE - nothing here writes, and nothing here needs a key",
+  "rules": [
+    "Read-only: no endpoint changes a Rust server, a setting or a Discord server.",
+    "No keys, no accounts, no tokens: everything listed here is public.",
+    "Anything the bot has not measured is null or absent, never guessed.",
+    "The bot's endpoints allow any origin (CORS: *). The site's own files are ordinary static files."
+  ],
+  "bot": [
+    { "path": "/api/status", "state": "live", "what": "The bot's own health: online, version, uptime seconds, guild count, gateway latency and the kind of storage its settings live in." },
+    { "path": "/api/shim", "state": "live", "what": "Whether the website-check shim is loaded, the window the full check gets, and the cheaper file it prefers." },
+    { "path": "/api/guilds", "state": "live", "what": "The Discord servers the bot is in, as ids and names only." },
+    { "path": "/api/servers", "state": "not-live-yet", "http": 405, "what": "The Rust servers the bot looks after, per server, with state and population. Written and reviewed, not published yet; the Servers page falls back to /api/status meanwhile." }
+  ],
+  "site": [
+    { "path": "/data/commands.json", "what": "Every command, subcommand and goal the bot registers, with who may run it and what it needs first.", "fields": ["site", "updated", "groups", "commands", "goals"] },
+    { "path": "/data/items.json", "what": "The item catalogue Kit Studio uses: display name, short name, stack size, and where each entry came from.", "fields": ["note", "generated", "groups", "items"] },
+    { "path": "/data/skins.json", "what": "The Rust Console Edition store as it was read on 11 November 2026: products, the skins inside them, release dates, gallery images and counts.", "fields": ["note", "updated", "source", "fields", "counts", "products", "skins", "news"] },
+    { "path": "/data/api.json", "what": "This index.", "fields": ["site", "updated", "rules", "bot", "site", "never"] },
+    { "path": "/health.json", "what": "The cheapest true answer to whether this site is up.", "fields": ["ok", "app", "part", "kind", "note"] },
+    { "path": "/api.html", "what": "The same list, written out for people.", "fields": [] },
+    { "path": "/sitemap.xml", "what": "Every public page.", "fields": [] },
+    { "path": "/manifest.webmanifest", "what": "Install metadata for the site.", "fields": ["name", "short_name", "description", "id", "start_url"] }
+  ],
+  "never": [
+    "RCON passwords - no endpoint returns one to anything running in a browser; a page may be told only whether one is set",
+    "the shared settings token",
+    "the owner's Discord client secret and session secret",
+    "message content - the bot asks Discord for a single gateway intent, Guilds, so it cannot read messages"
+  ],
+  "botHost": "https://rustyworks-rce-website-production.up.railway.app"
+}

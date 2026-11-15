@@ -1,0 +1,24 @@
+/* API page. Scoped to .api-* so nothing else on the site changes shape. */
+.api-strip { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: center; margin: 22px auto 0; padding: 12px 18px; max-width: 900px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2); }
+.api-tile { font-size: 0.86rem; color: var(--text-dim); }
+.api-tile strong { color: var(--ember); font-weight: 600; margin-right: 4px; }
+.api-section { padding: 34px 0 10px; }
+.api-h2 { margin: 30px 0 12px; font-size: 1.15rem; }
+.api-h2:first-child { margin-top: 0; }
+.api-table { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius, 16px); background: var(--panel); padding: 12px; }
+.api-row { display: grid; grid-template-columns: minmax(160px, 240px) 110px 1fr; gap: 12px; align-items: baseline; padding: 9px 10px; border-radius: 10px; font-size: 0.9rem; color: var(--text-dim); }
+.api-row--head { color: var(--text); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.75; }
+.api-row:not(.api-row--head):nth-child(odd) { background: var(--panel-2); }
+.api-path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; color: var(--ember); word-break: break-word; }
+.api-state { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.api-state.is-live { color: #6cc24a; }
+.api-state.is-pending { color: #e0a54a; }
+.api-note { margin: 12px 0 0; font-size: 0.9rem; color: var(--text-dim); }
+.api-code { margin: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius, 16px); background: #0e0b08; color: #f4ece4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; line-height: 1.6; overflow-x: auto; }
+.api-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.api-list li { position: relative; padding-left: 18px; font-size: 0.91rem; color: var(--text-dim); line-height: 1.55; }
+.api-list li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: 50%; background: var(--ember); opacity: 0.8; }
+.api-list strong { color: var(--text, inherit); font-weight: 600; }
+.api-code, .api-code-inline { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+span.api-code { font-size: 0.85em; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--ember); }
+@media (max-width: 620px) { .api-row { grid-template-columns: 1fr; gap: 4px; } .api-row--head { display: none; } }

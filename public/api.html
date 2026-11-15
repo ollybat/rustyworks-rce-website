@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <script>
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("spinback-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>The API - Spinback RCE</title>
+    <meta name="application-name" content="Spinback RCE">
+    <meta name="description" content="The public, read-only data behind Spinback RCE: the bot's status endpoints and the site's own JSON files, with what each one carries and what it never will.">
+    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/api.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Spinback RCE">
+    <meta property="og:title" content="The API - Spinback RCE">
+    <meta property="og:description" content="Read-only JSON: the bot's status endpoints and the command, item and store data the site itself uses.">
+    <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/api.html">
+    <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
+    <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <script src="/theme.js"></script>
+    <script src="/config.js" defer></script>
+    <script src="/page.js" defer></script>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+    <link rel="stylesheet" href="/site-pro.css">
+    <link rel="stylesheet" href="/api.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="sp-header">
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async">Spinback<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
+            <a href="status.html">Status</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="sp-hero">
+        <div class="wrap">
+          <span class="sp-kicker">Read-only, no keys, no accounts</span>
+          <h1 class="sp-title">The data behind this site</h1>
+          <p class="sp-lede">
+            Everything Spinback publishes is plain JSON over ordinary HTTPS. There is no key to ask for, no
+            sign-up, and nothing you can change: the bot's own status and the files this site reads are the whole
+            of it. Anything the bot has not measured is <strong>null</strong> or absent, never guessed, and the
+            machine-readable index of all of it is one file: <a href="/data/api.json">/data/api.json</a>.
+          </p>
+          <div class="api-strip">
+            <span class="api-tile"><strong>read-only</strong> nothing here writes</span>
+            <span class="api-tile"><strong>CORS</strong> the bot's endpoints allow any origin</span>
+            <span class="api-tile"><strong>no keys</strong> every endpoint is public</span>
+            <span class="api-tile"><strong>honest</strong> unknown stays unknown</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="api-section">
+        <div class="wrap">
+          <h2 class="api-h2">What the bot publishes</h2>
+          <div class="api-table" role="table" aria-label="The bot's public endpoints">
+            <div class="api-row api-row--head" role="row">
+              <span role="columnheader">Endpoint</span><span role="columnheader">State</span><span role="columnheader">What it carries</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/api/status</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">The bot's own health: online, version string, uptime seconds, guild count, gateway latency, and the kind of storage its settings live in.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/api/shim</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">Whether the website-check shim is loaded in the bot process, the window it gives the full check, and the cheaper file it prefers.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/api/guilds</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">The Discord servers the bot is in, as ids and names only.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/api/servers</span>
+              <span class="api-state is-pending" role="cell">not live yet</span>
+              <span role="cell">The Rust servers the bot looks after, per server, with state and population. The route is written and reviewed and is not published yet, so the Servers page reads /api/status instead and says which source it used.</span>
+            </div>
+          </div>
+          <p class="api-note">
+            Every one of these lives on the bot's own host, not on this site. They are labelled <em>live</em> only
+            where a request to them right now answers, and the site itself tells you which source a page read: the
+            Servers page prints it under the filter row.
+          </p>
+
+          <h2 class="api-h2">What this site serves</h2>
+          <div class="api-table" role="table" aria-label="Files this site serves">
+            <div class="api-row api-row--head" role="row">
+              <span role="columnheader">Path</span><span role="columnheader">State</span><span role="columnheader">What it carries</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/data/commands.json</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">Every command, all 35 subcommands and the 12 goals the bot registers, with who may run each one and what it needs set up first. This is the same file the Commands page draws and the site search indexes, so they cannot drift apart.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/data/items.json</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">The item catalogue Kit Studio uses: display name, short name, stack size, and a note on where each entry came from.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/data/skins.json</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">The Rust Console Edition store as it was read on 11 November 2026: the store products, the skins inside each one, the release date each product carries, gallery images, and the counts. The file states its own source and date.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/data/api.json</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span class="cell">This index, in machine-readable form: the same list, the fields each file carries, and the rules above.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/health.json</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">The cheapest true answer to "is this site up". A tiny static file, which is why the bot's website check prefers it over the full config check.</span>
+            </div>
+            <div class="api-row" role="row">
+              <span class="api-path" role="cell">/sitemap.xml and /manifest.webmanifest</span>
+              <span class="api-state is-live" role="cell">live</span>
+              <span role="cell">Every public page, and the install metadata the browser uses to pin the site.</span>
+            </div>
+          </div>
+
+          <h2 class="api-h2">How to read it</h2>
+          <pre class="api-code">// Any language, any language's HTTP client. No headers required.
+// The bot's host, for its own endpoints:
+//   https://rustyworks-rce-website-production.up.railway.app
+//
+//   GET /api/status        -> { online, version, uptimeSeconds, guilds, latencyMs, storage, ... }
+//   GET /api/guilds        -> { guilds: [ { id, name } ] }
+//   GET /api/shim          -> { active, window, raceMs, prefers, follows }
+//   GET /api/servers       -> not published yet (405)
+//
+// And on this site:
+//   GET /data/commands.json
+//   GET /data/items.json
+//   GET /data/skins.json
+//   GET /health.json
+//
+// Cache politely: the site's JSON files carry cache headers, and the bot's
+// status answers from memory. One request a minute is plenty for a status
+// page; there is no rate limit to test, only a host to be kind to.</pre>
+
+          <h2 class="api-h2">What is deliberately not here</h2>
+          <ul class="api-list">
+            <li><strong>RCON passwords.</strong> No endpoint returns one to anything running in a browser. A page may be told only whether a password is set.</li>
+            <li><strong>The shared settings token and the owner's Discord secrets.</strong> There is no endpoint for either, and no way to ask for one.</li>
+            <li><strong>Message content.</strong> The bot asks Discord for a single gateway intent, <span class="api-code">Guilds</span>, so it cannot read ordinary messages and has none to publish.</li>
+            <li><strong>Anything writable.</strong> There is no POST, no PUT, no webhook. If a future version adds an action, it will be a Discord command first, not an endpoint here.</li>
+          </ul>
+
+          <h2 class="api-h2">Written against the code</h2>
+          <p class="api-note">
+            This page and its index are kept in step with what actually answers: the bot's endpoints were requested
+            today, and the store data carries the date it was read. When /api/servers goes live, the word
+            <em>not live yet</em> comes off this page in the same push.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async" loading="lazy">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+            <a href="privacy.html">Privacy and what we store</a>
+            <a href="api.html">The API</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+          </div>
+          <div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">Support - Spinback 5X EU &middot; 2026<br><span class="foot-fine">&copy; <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</span></div>
+      </div>
+    </footer>
+  </body>
+</html>
