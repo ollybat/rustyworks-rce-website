@@ -10,16 +10,14 @@
       } catch (e) {}
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Commands — Spinback RCE</title>
+    <title>Commands - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
-    <meta
-      name="description"
-      content="Every Spinback RCE command and subcommand: what it does, who may run it, what it needs set up first, and the options it takes. Searchable, with copy-ready examples.">
+    <meta name="description" content="The Spinback RCE command list has been cleared and is being written again from scratch. This page says plainly what exists right now: nothing.">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/commands.html">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Spinback RCE">
-    <meta property="og:title" content="Commands — Spinback RCE">
-    <meta property="og:description" content="Six commands, every subcommand and option, who may run what, and what the bot refuses to guess.">
+    <meta property="og:title" content="Commands - Spinback RCE">
+    <meta property="og:description" content="The command list has been cleared and is being written again from scratch. Nothing on this page is current yet.">
     <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/commands.html">
     <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
     <meta property="og:image:width" content="1200">
@@ -27,9 +25,7 @@
     <meta property="og:image:type" content="image/jpeg">
     <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
-    <meta name="twitter:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
     <meta name="twitter:card" content="summary_large_image">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="/media/fonts.css">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="/ui-extras.css">
@@ -39,26 +35,25 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0b0704">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script src="/theme.js"></script>
     <script src="/config.js" defer></script>
     <script src="/page.js" defer></script>
     <script src="/motion.js" defer></script>
     <script src="/site-plus.js" defer></script>
     <script src="/search.js" defer></script>
-    <script src="/commands.js" defer></script>
     <link rel="stylesheet" href="/theme-spinback.css">
     <link rel="stylesheet" href="/motion.css">
     <link rel="stylesheet" href="/site-plus.css">
     <link rel="stylesheet" href="/search.css">
     <link rel="stylesheet" href="/site-pro.css">
     <link rel="stylesheet" href="/commands.css">
-  <link rel="stylesheet" href="/botcard.css">
-  <link rel="stylesheet" href="/commands-goals.css">
-  <script src="/botcard.js" defer></script>
-</head>
+    <link rel="stylesheet" href="/commands-goals.css">
+    <!-- The command cards, the goal picker and the filter bar used to live in this page and
+         were drawn by /commands.js from data/commands.json. Both files are still in the
+         repository, untouched: when the new command set exists, this page links them again.
+         Nothing was kept of the old list itself - data/commands.json is now deliberately
+         empty, and it is the only place the old list lived. -->
+  </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="sp-header">
@@ -67,171 +62,60 @@
           <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async">Spinback<span class="accent">RCE</span></a>
           <div class="nav-links" id="navLinks">
             <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
             <a href="status.html">Status</a>
             <a href="commands.html" aria-current="page">Commands</a>
             <a href="settings.html">Settings</a>
-            <a href="servers.html">Servers</a>
           </div>
-          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">☰</button>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
         </nav>
       </div>
     </header>
 
     <main id="main">
-      <section class="cmd-hero">
+      <section class="sp-hero">
         <div class="wrap">
-          <span class="sp-kicker">Everything the bot answers to</span>
+          <span class="sp-kicker">Cleared on request - being rebuilt</span>
           <h1 class="sp-title">Commands</h1>
           <p class="sp-lede">
-            Every command and subcommand — what it does, who may run it, and what it needs set
-            up first. <strong>No command takes a typed option:</strong> each one opens a panel, a picker or a box,
-            so there is nothing to copy off this page and nothing to get wrong at 2am. Search it, filter it. Where the bot cannot know
-            something, this page says so instead of guessing, because the bot refuses to guess too.
+            This page used to describe six commands and thirty-five subcommands. That list has been
+            <strong>deleted on request</strong>, and no copy of it was kept, so there is nothing here to show
+            until the new set is written. What you are reading is the honest state of it: a blank page, not a
+            broken one.
           </p>
           <div class="cmd-stats" id="cmdStats">
-            <span class="cmd-stat"><strong id="statCommands">—</strong> commands</span>
-            <span class="cmd-stat"><strong id="statSubs">—</strong> subcommands</span>
-            <span class="cmd-stat"><strong id="statOptions">—</strong> options</span>
-            <span class="cmd-stat"><strong>15</strong> log types</span>
-            <span class="cmd-stat"><strong>6</strong> role slots</span>
-            <span class="cmd-stat"><strong id="statStaff">—</strong> staff-only</span>
-            <span class="cmd-stat"><strong id="statSetup">—</strong> need setup first</span>
+            <span class="cmd-stat"><strong>0</strong> commands described</span>
+            <span class="cmd-stat"><strong>0</strong> subcommands described</span>
+            <span class="cmd-stat"><strong>rebuilt from scratch</strong> in progress</span>
           </div>
         </div>
       </section>
 
-      <section class="cmd-goals" aria-labelledby="cmdGoalsTitle">
-        <h2 id="cmdGoalsTitle">Start here: what do you want to do?</h2>
-        <p class="cmd-goals__lead">One press jumps to the exact subcommand, with what it needs first.</p>
-        <div class="cmd-goals__grid" id="cmdGoals"></div>
-      </section>
-
-      <div class="cmd-bar" id="cmdBar">
-        <div class="wrap cmd-bar__inner">
-          <div class="cmd-bar__search">
-            <label class="cmd-bar__label" for="cmdSearch">Search</label>
-            <input type="search" id="cmdSearch" placeholder="Try: give, cooldown, rcon, link, roster" autocomplete="off" spellcheck="false">
-            <kbd class="cmd-bar__kbd">/</kbd>
-          </div>
-          <div class="cmd-bar__chips" id="cmdChips" role="group" aria-label="Filter commands"></div>
-          <div class="cmd-bar__actions">
-            <span class="cmd-count" id="cmdCount" role="status" aria-live="polite">loading…</span>
-            <button type="button" class="cmd-btn" id="copyAll">Copy all</button>
-            <button type="button" class="cmd-btn" id="downloadJson">Download JSON</button>
-          </div>
-        </div>
-      </div>
-
-      <section class="sp-section cmd-list-section">
+      <section class="sp-section">
         <div class="wrap">
           <div class="cmd-list" id="cmdList">
-            <p class="cmd-empty">Reading the command list…</p>
+            <div class="cmd-empty">
+              <p>The new command set has not been written yet.</p>
+              <p>When it is, this page becomes the full list again: every command, every subcommand, who may
+              run it, what it needs set up first, and an honest "not reported" wherever the bot cannot know
+              something. The empty catalogue is already published at
+              <a href="data/commands.json">data/commands.json</a>, and the site-wide search will pick the new
+              commands up the same day they land, because both read that one file.</p>
+            </div>
           </div>
-          <noscript>
-            <p class="cmd-note">The command cards are drawn by JavaScript. Everything else on this page works without it, and the same list is available as JSON at <a href="data/commands.json">data/commands.json</a>.</p>
-          </noscript>
-        </div>
-      </section>
 
-      <section class="sp-section" id="gate">
-        <div class="wrap">
-          <div class="sp-head">
-            <span class="sp-kicker">The gate</span>
-            <h2 class="sp-title">Nothing runs until setup is finished</h2>
-            <p class="sp-lede">
-              Two things have to exist first: at least one staff role saved, and one Rust server linked and tested
-              over RCON. Until then every command answers with that checklist instead of doing anything at all.
-              <code>/setup</code> is the one exception, because it is how you get there, and <code>/ping</code>
-              and <code>/help</code> still work: they only report.
-            </p>
-          </div>
-          <div class="cmd-grid2">
-            <div class="cmd-note">
-              <h3>The roles you save are the staff roles</h3>
-              <ul>
-                <li>Six slots: Owner, Co-Owner, Head Admin, Admin, Moderator and Linked.</li>
-                <li>Anyone holding one of those roles may run staff commands.</li>
-                <li>Administrator, Manage Server and the server owner always count, so nothing can lock you out.</li>
-                <li>Put into practice on every command, button, menu and modal — not just hidden from the command list.</li>
-              </ul>
-            </div>
-            <div class="cmd-note">
-              <h3>Why a link is not taken on trust</h3>
-              <ul>
-                <li>A player asking to link is making a claim, not offering proof.</li>
-                <li>The bot records it as <strong>waiting</strong>, never as linked.</li>
-                <li>Staff confirm it with <code>/user forcelink</code>, or the server verifies it in game.</li>
-                <li>Looking somebody up prints ids as text, so it cannot notify or ping them.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="sp-section" id="permissions">
-        <div class="wrap">
-          <div class="sp-head">
-            <span class="sp-kicker">At a glance</span>
-            <h2 class="sp-title">Who may run what</h2>
-            <p class="sp-lede">The whole matrix, drawn from the same list the cards use. Read-only means the command either reports or opens a panel: it cannot change your game.</p>
-          </div>
-          <div class="cmd-table-wrap">
-            <table class="cmd-table" id="permTable">
-              <caption class="cmd-sr">Permissions and requirements per command</caption>
-              <thead><tr><th scope="col">Command</th><th scope="col">Who</th><th scope="col">Needs setup</th><th scope="col">Read-only</th><th scope="col">What it opens</th></tr></thead>
-              <tbody><tr><td colspan="5">Reading the list…</td></tr></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section class="sp-section" id="limits">
-        <div class="wrap">
-          <div class="sp-head">
-            <span class="sp-kicker">Said plainly</span>
-            <h2 class="sp-title">What Spinback will not do</h2>
-            <p class="sp-lede">A command that quietly invents a plugin command name, a price or a kit list is worse than one that refuses. These are the limits, on purpose.</p>
-          </div>
-          <div class="cmd-grid2">
-            <div class="cmd-note">
-              <h3>It refuses rather than guesses</h3>
-              <ul>
-                <li>No invented kit plugin commands: give it your own, or nothing is sent.</li>
-                <li>No invented emote names, prices, rarities or dates.</li>
-                <li>No made-up server numbers: every figure on <code>/ping</code> is measured at that moment.</li>
-                <li>No reading your Rust server beyond the four allowed RCON questions.</li>
-              </ul>
-            </div>
-            <div class="cmd-note">
-              <h3>And what that means for you</h3>
-              <ul>
-                <li>If a panel says a save stayed in the bot's memory, it could not reach its own storage — it tells you that plainly.</li>
-                <li>If RCON times out, you get the reason and the usual causes, not a green tick.</li>
-                <li>If a link request is unproven, it stays waiting until a person or the server confirms it.</li>
-                <li>If a command cannot do something, it says which step is missing.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="cta-band">
-        <div class="wrap">
-          <div class="cta-inner reveal">
-            <h2>Ready to wire it up?</h2>
-            <p>Start with <code>/setup run</code> in Discord: roles, log channels, then your Rust server.</p>
-            <div class="u-row">
-              <a href="settings.html" class="btn ghost">Settings</a>
-              <a href="servers.html" class="btn btn-discord">Servers</a>
-            </div>
-          </div>
+          <h2 class="cmd-goals__title" style="margin-top:26px">What still works</h2>
+          <p class="cmd-note">
+            The rest of the site is untouched: <a href="start.html">Get started</a>,
+            <a href="servers.html">Servers</a> and <a href="status.html">Status</a> describe the bot itself, not
+            its commands, and the two studios in the footer are separate tools. The bot's own command set is a
+            separate matter from this page - it is cleared on Discord by whoever can deploy the bot, and the
+            steps are written up in the repository as bot/CLEAR-COMMANDS.md.
+          </p>
         </div>
       </section>
     </main>
 
-    <div class="cmd-toasts" id="cmdToasts" role="status" aria-live="polite"></div>
-
-    <!-- ============ FOOTER ============ -->
     <footer>
       <div class="wrap">
         <div class="foot-grid">
@@ -242,10 +126,12 @@
           <div class="foot-col">
             <h4>Bot Help</h4>
             <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
             <a href="commands.html">Commands</a>
             <a href="settings.html">Settings</a>
+            <a href="privacy.html">Privacy and what we store</a>
+            <a href="api.html">The API</a>
             <a href="dashboard/kitbuilder.html">Kit Studio</a>
-            <a href="dashboard/colortext.html">Colour Studio</a>
           </div>
           <div class="foot-col">
             <h4>Community</h4>
@@ -253,11 +139,7 @@
             <a href="status.html">Status</a>
           </div>
         </div>
-        <div class="foot-bottom">Support - Spinback 5X EU &middot; 2026<br><span class="foot-fine">© <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</span></div>
-        <div class="foot-app">
-          <button type="button" id="rwInstallBtn">📲 Get the Spinback app</button>
-          <small>Open Spinback from your home screen. Free, no app store needed.</small>
-        </div>
+        <div class="foot-bottom">Support - Spinback 5X EU &middot; 2026<br><span class="foot-fine">&copy; <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</span></div>
       </div>
     </footer>
   </body>
