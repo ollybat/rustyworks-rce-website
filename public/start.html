@@ -13,7 +13,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Get started - Spinback RCE</title>
     <meta name="application-name" content="Spinback RCE">
-    <meta name="description" content="Set up Spinback RCE in about ten minutes: invite the bot, run /setup run, make the staff roles and log channels, connect your Rust server over RCON and give your first kit. Every step is a button you press.">
+    <meta name="description" content="Set up Spinback RCE in about ten minutes: invite the bot, run /setup server, make the staff roles and log channels, connect your Rust server over RCON and give your first kit. Every step is a button you press.">
     <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/start.html">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Spinback RCE">
@@ -127,8 +127,8 @@
             <li class="st-step">
               <span class="st-step__num" aria-hidden="true">2</span>
               <div class="st-step__body">
-                <h3>Run <code>/setup run</code></h3>
-                <p class="st-copyline"><code>/setup run</code><button type="button" class="st-copy" data-copy="/setup run">Copy</button></p>
+                <h3>Run <code>/setup server</code></h3>
+                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
                 <p>The guided panel: staff roles, then log channels, then your Rust server last. Each step is optional and independent, and every item reports back with a reason if it fails.</p>
               </div>
             </li>
@@ -136,7 +136,7 @@
               <span class="st-step__num" aria-hidden="true">3</span>
               <div class="st-step__body">
                 <h3>Create the staff roles</h3>
-                <p class="st-copyline"><code>/setup roles</code><button type="button" class="st-copy" data-copy="/setup roles">Copy</button></p>
+                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
                 <p>The roles it creates are saved as your staff roles. From then on, only those roles, Administrator and the server owner can run staff commands: nobody else, including the bot's own linked role.</p>
               </div>
             </li>
@@ -144,7 +144,7 @@
               <span class="st-step__num" aria-hidden="true">4</span>
               <div class="st-step__body">
                 <h3>Make the log channels</h3>
-                <p class="st-copyline"><code>/setup channels</code><button type="button" class="st-copy" data-copy="/setup channels">Copy</button></p>
+                <p class="st-copyline"><code>/setup server</code><button type="button" class="st-copy" data-copy="/setup server">Copy</button></p>
                 <p>The channels it makes are private to the saved staff roles by default, so members cannot read them. Pick the log types you want and the channel for each; clearing a channel switches that type off.</p>
               </div>
             </li>
@@ -160,7 +160,7 @@
               <span class="st-step__num" aria-hidden="true">6</span>
               <div class="st-step__body">
                 <h3>Your first kit</h3>
-                <p class="st-copyline"><code>/kits commands</code><button type="button" class="st-copy" data-copy="/kits commands">Copy</button></p>
+                <p class="st-copyline"><code>/kits config</code><button type="button" class="st-copy" data-copy="/kits config">Copy</button></p>
                 <p>Save the list command your kit plugin uses and the give command you already type, then <code>/kits grab</code> reads the real kit names straight from your server and <code>/kits give</code> sends your own give command with the player and kit filled in. The bot never invents a kit name.</p>
               </div>
             </li>
@@ -168,8 +168,8 @@
               <span class="st-step__num" aria-hidden="true">7</span>
               <div class="st-step__body">
                 <h3>Check it</h3>
-                <p class="st-copyline"><code>/setup doctor</code><button type="button" class="st-copy" data-copy="/setup doctor">Copy</button><code>/ping</code><button type="button" class="st-copy" data-copy="/ping">Copy</button></p>
-                <p><code>/setup doctor</code> names anything that is still missing and what to press next. <code>/ping</code> measures the bot, the gateway and this website at the moment you run it.</p>
+                <p class="st-copyline"><code>/setup view</code><button type="button" class="st-copy" data-copy="/setup view">Copy</button><code>/setup view</code><button type="button" class="st-copy" data-copy="/setup view">Copy</button></p>
+                <p><code>/setup view</code> shows what the bot has saved for this Discord: your roles, your servers as Connected or Offline, and your log channels. For whether the bot and this website are up right now, the Status page measures that every time you open it.</p>
               </div>
             </li>
           </ol>
@@ -216,7 +216,7 @@
             Nothing here guesses: where the bot cannot know an answer it says so, and so does this page.</p>
           <div class="st-cards">
             <article class="st-card">
-              <h3>"The website is not answering" in /ping</h3>
+              <h3>The website is not answering</h3>
               <ul class="st-list">
                 <li>That line is a live request from the bot to this site, with a 2.5 second limit on it.</li>
                 <li>This site answers in tens of milliseconds, and in under two seconds even on the first request from a place it has never been asked before, so a timeout means that one check was slow, not that the site is down.</li>
@@ -249,7 +249,7 @@
             <article class="st-card">
               <h3>A button says this has not been set up yet</h3>
               <ul class="st-list">
-                <li><a href="commands.html#sub-setup-run">/setup run</a> walks the whole thing: roles, log channels, the Rust server, then kits.</li>
+                <li><a href="commands.html#sub-setup-server">/setup server</a> walks the whole thing: your roles, your log channels, then your Rust server. Kits come after that.</li>
                 <li>Nothing is created until you press Create, no step needs an earlier one to be finished, and you can stop halfway without leaving anything broken.</li>
               </ul>
             </article>

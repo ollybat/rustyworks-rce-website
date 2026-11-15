@@ -98,7 +98,7 @@
     var where = rcon && rcon.serverName ? rcon.serverName : 'your Rust server';
     if (!online) return { text: 'Offline or restarting - see the Status page', kind: 'bad' };
     if (!('rcon' in data)) return { text: 'Online - RCON status not reported yet', kind: 'ok' };
-    if (!rcon) return { text: 'Online - no Rust server linked yet, use /setup run in Discord', kind: 'ok' };
+    if (!rcon) return { text: 'Online - no Rust server linked yet, use /setup server in Discord', kind: 'ok' };
     if (rcon.connected) return { text: 'Online - RCON connected to ' + where, kind: 'ok' };
     return { text: 'Online - RCON not connected: set it up in Discord', kind: 'bad' };
   }
@@ -152,7 +152,7 @@
     a.href = '/commands.html#setup';
     a.textContent = 'Open the setup steps';
     how.appendChild(a);
-    how.appendChild(document.createTextNode(' - in Discord, /setup run walks through it and tests the address before saving.'));
+    how.appendChild(document.createTextNode(' - in Discord, /setup server walks through it and tests the address before saving.'));
 
     section.appendChild(heading);
     section.appendChild(lead);

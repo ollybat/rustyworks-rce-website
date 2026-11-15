@@ -113,7 +113,7 @@
                 <li><strong>Your Rust servers:</strong> a name, an address, an RCON port and an RCON password. The password is the sensitive one - it is stored because the bot has to connect with it.</li>
                 <li><strong>Discord ids:</strong> the server, role, channel and user ids needed to act on your server. That is the minimum, and it is all of it.</li>
                 <li><strong>One gateway intent only - Guilds.</strong> The bot never asks Discord for the message content intent, so it cannot read ordinary messages even if it wanted to. Log channels receive the bot's own notices.</li>
-                <li><strong>Where it lives depends on how the bot was set up, and the bot tells you which:</strong> run <span class="pv-code">/setup status</span> or <span class="pv-code">/ping</span> and read the settings line. It reports whether settings are held on this website, in a Postgres database, on the bot's own disk, or in memory only - and memory only means they are lost on the next restart.</li>
+                <li><strong>Where it lives depends on how the bot was set up, and the bot tells you which:</strong> run <span class="pv-code">/setup view</span> and read the settings line. It reports whether settings are held on this website, in a Postgres database, on the bot's own disk, or in memory only - and memory only means they are lost on the next restart.</li>
               </ul>
             </article>
 
@@ -130,10 +130,10 @@
             <article class="pv-card">
               <h2>How to remove it</h2>
               <ul class="pv-list">
-                <li><span class="pv-code">/setup export</span> first - it prints everything saved for your server, so you can keep a copy before changing anything.</li>
-                <li><span class="pv-code">/setup reset</span> clears the saved configuration for your server. It asks you to type RESET in capitals, so it cannot happen by accident.</li>
+                <li>There is no export command in the current set, so ask in the support server and someone will send you whatever is saved for your server before you change anything.</li>
+                <li><span class="pv-code">/setup remove</span> clears the saved configuration: one Rust server, or the whole bot setup for this Discord.</li>
                 <li><span class="pv-code">/setup edit</span> replaces a saved server's address, RCON port or password.</li>
-                <li><span class="pv-code">/setup roles</span> and <span class="pv-code">/setup channels</span> unset a slot: choose none for it and the saved id goes.</li>
+                <li>Roles and log channels are changed by running <span class="pv-code">/setup server</span> again: the first step is the roles, the second is the log channels, and leaving a log channel blank disables that log.</li>
                 <li><strong>Anything else, including a linked account,</strong> is a request in the Discord support server. There is no self-service command for that yet, and this page will not pretend there is.</li>
               </ul>
             </article>
