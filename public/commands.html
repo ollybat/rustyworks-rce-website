@@ -41,7 +41,6 @@
     <script src="/motion.js" defer></script>
     <script src="/site-plus.js" defer></script>
     <script src="/search.js" defer></script>
-    <script src="/commands.js" defer></script>
     <link rel="stylesheet" href="/theme-spinback.css">
     <link rel="stylesheet" href="/motion.css">
     <link rel="stylesheet" href="/site-plus.css">
@@ -49,7 +48,7 @@
     <link rel="stylesheet" href="/site-pro.css">
     <link rel="stylesheet" href="/commands.css">
     <link rel="stylesheet" href="/commands-goals.css">
-    <!-- The cards, the filter bar and the permission table are drawn by /commands.js from data/commands.json, and the goal picker waits until goals exist and
+    <!-- The cards and the filter row are drawn by the small script at the bottom of this page from data/commands.json, which is mirrored from the bot repository one command file at a time and
          were drawn by /commands.js from data/commands.json. Both files are still in the
          repository, untouched: when the new command set exists, this page links them again.
          Nothing was kept of the old list itself - data/commands.json is now deliberately
@@ -76,29 +75,23 @@
     <main id="main">
       <section class="sp-hero">
         <div class="wrap">
-          <span class="sp-kicker">Six command groups, 37 subcommands</span>
+          <span class="sp-kicker">36 commands, mirrored from the bot</span>
           <h1 class="sp-title">Commands</h1>
           <p class="sp-lede">
-            Written from the owner's list of commands, and nothing else: where a description has not been
-            given, the card says so rather than inventing one. <strong>No command takes a typed option</strong> -
-            each one opens a panel, a picker or a box. Staff commands are gated: they only run in the game once
-            a Rust server is linked and its connection has been tested.
+            Every command the bot registers, taken from its own source one file at a time: the name, the
+            description, the tier that may run it, the usage line and the options. Nothing on this page was
+            written by hand except the group labels in the filter row - where a file does not state something,
+            the card leaves it out rather than filling it in.
           </p>
           <div class="cmd-stats" id="cmdStats">
-            <span class="cmd-stat"><strong id="statCommands">-</strong> commands</span>
-            <span class="cmd-stat"><strong id="statSubs">-</strong> subcommands</span>
-            <span class="cmd-stat"><strong id="statOptions">-</strong> options</span>
-            <span class="cmd-stat"><strong>15</strong> log channels</span>
-            <span class="cmd-stat"><strong>6</strong> role slots</span>
-            <span class="cmd-stat"><strong id="statStaff">-</strong> staff-only</span>
-            <span class="cmd-stat"><strong id="statSetup">-</strong> need setup first</span>
+            <span class="cmd-stat"><strong id="statCommands">36</strong> commands</span>
+            <span class="cmd-stat"><strong id="statOptions">20</strong> take options</span>
+            <span class="cmd-stat"><strong>staff</strong> tiers are enforced by the bot, not by this page</span>
           </div>
         </div>
       </section>
 
-      <section class="sp-section" aria-labelledby="gateTitle">
-        <div class="wrap">
-          <h2 class="cmd-goals__title" id="gateTitle">When these commands run</h2>
+      <h2 class="cmd-goals__title" id="gateTitle">When these commands run</h2>
           <p class="cmd-note">Every command except the setup group only runs in the game once a Rust server is linked and its connection has been tested.</p>
         </div>
       </section>
@@ -107,32 +100,21 @@
         <div class="wrap cmd-bar__inner">
           <div class="cmd-bar__search">
             <label class="cmd-bar__label" for="cmdSearch">Search</label>
-            <input type="search" id="cmdSearch" placeholder="Try: ban, kit, link, queue, rcon" autocomplete="off" spellcheck="false">
-            <kbd class="cmd-bar__kbd">/</kbd>
+            <input type="search" id="cmdSearch" placeholder="Try: clan, zone, kit, ban, portal" autocomplete="off" spellcheck="false">
           </div>
           <div class="cmd-bar__chips" id="cmdChips" role="group" aria-label="Filter commands"></div>
-          <div class="cmd-bar__actions">
-            <span class="cmd-count" id="cmdCount" role="status" aria-live="polite">loading...</span>
-            <button type="button" class="cmd-btn" id="copyAll">Copy all</button>
-            <button type="button" class="cmd-btn" id="downloadJson">Download JSON</button>
-          </div>
+          <div class="cmd-bar__actions"><span class="cmd-count" id="cmdCount" role="status" aria-live="polite">loading...</span></div>
         </div>
       </div>
 
       <section class="sp-section cmd-list-section">
         <div class="wrap">
-          <div class="cmd-list" id="cmdList">
-            <p class="cmd-empty">Reading the command list...</p>
-          </div>
-          <noscript>
-            <p class="cmd-note">The command cards are drawn by JavaScript. Everything else on this page works without it, and the same list is available as JSON at <a href="data/commands.json">data/commands.json</a>.</p>
-          </noscript>
+          <div class="cmd-list" id="cmdList"><p class="cmd-empty">Reading the command list...</p></div>
+          <noscript><p class="cmd-note">The cards are drawn by JavaScript. The same list is at <a href="data/commands.json">data/commands.json</a>.</p></noscript>
         </div>
       </section>
 
-      <section class="sp-section">
-        <div class="wrap">
-          <h2 class="cmd-goals__title">What setup asks for</h2>
+                <h2 class="cmd-goals__title">What setup asks for</h2>
 
           <h3 class="cmd-goals__lead">Staff Role Assignments</h3>
           <p class="cmd-note">Step 1 of /setup server. These roles control who can use staff commands. Changes are instant.</p>
@@ -172,7 +154,80 @@
         </div>
       </section>
 
-      <div id="cmdToasts" class="cmd-toasts" role="status" aria-live="polite"></div>
+      <section class="sp-section">
+        <div class="wrap">
+          <h2 class="cmd-goals__title">Not on this page yet</h2>
+          <p class="cmd-note">Two things are still missing from the site and are next: the full option list for the handful of commands whose files build options in a way this mirror has not read yet, and the in-game console lines the bot sends to a Rust server. The console command itself is mirrored here - it takes a whole line - but the list of lines the bot sends on your behalf has not been published.</p>
+        </div>
+      </section>
+
+      <script>
+      (function () {
+        var DATA = null, state = { term: '', group: 'all' };
+        var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); };
+        function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+        function matches(c, term) {
+          if (!term) return true;
+          var hay = [c.name, c.summary, c.who, c.usage].concat((c.options || []).map(function (o) { return o.name + ' ' + o.description; })).join(' ').toLowerCase();
+          return hay.indexOf(term) > -1;
+        }
+        function chips() {
+          var box = document.getElementById('cmdChips'); if (!box || !DATA) return;
+          box.textContent = '';
+          (DATA.groups || []).forEach(function (g) {
+            var n = g.key === 'all' ? DATA.commands.length : DATA.commands.filter(function (c) { return c.group === g.key; }).length;
+            var b = el('button', 'cmd-chip' + (state.group === g.key ? ' is-active' : ''), '');
+            b.type = 'button'; b.setAttribute('aria-pressed', state.group === g.key ? 'true' : 'false');
+            b.appendChild(el('span', null, g.label)); b.appendChild(el('em', null, String(n)));
+            b.addEventListener('click', function () { state.group = g.key; chips(); draw(); });
+            box.appendChild(b);
+          });
+        }
+        function card(c) {
+          var a = el('article', 'cmd-card'); a.id = 'cmd-' + c.name;
+          var hd = el('header', 'cmd-card__head'), t = el('div', 'cmd-card__title');
+          t.appendChild(el('h2', null, '/' + c.name)); hd.appendChild(t); a.appendChild(hd);
+          if (c.summary) a.appendChild(el('p', 'cmd-card__summary', c.summary));
+          var badges = el('div', 'cmd-badges');
+          badges.appendChild(el('span', 'cmd-badge' + (String(c.who).indexOf('everyone') > -1 ? ' is-open' : ' is-staff'), 'tier: ' + (c.who || 'not stated')));
+          if (c.needsSetup) badges.appendChild(el('span', 'cmd-badge is-warn', 'needs a linked server'));
+          a.appendChild(badges);
+          if (c.usage) { var u = el('p', 'cmd-note', 'Usage: '); u.appendChild(el('code', null, c.usage)); a.appendChild(u); }
+          if ((c.options || []).length) {
+            var dl = document.createElement('details'); dl.className = 'cmd-sub';
+            var sm = el('summary', 'cmd-sub__summary', '');
+            sm.appendChild(el('code', 'cmd-sub__usage', (c.options.length) + ' option' + (c.options.length === 1 ? '' : 's')));
+            dl.appendChild(sm);
+            var tb = el('div', 'cmd-sub__body');
+            (c.options).forEach(function (o) {
+              var p = el('p', 'cmd-note', '');
+              p.appendChild(el('code', null, o.name + ' : ' + o.type + (o.required ? ' (required)' : '')));
+              p.appendChild(document.createTextNode(' ' + (o.description || '')));
+              tb.appendChild(p);
+            });
+            dl.appendChild(tb); a.appendChild(dl);
+          } else {
+            a.appendChild(el('p', 'cmd-note', 'No options: the command is used on its own.'));
+          }
+          return a;
+        }
+        function draw() {
+          var box = document.getElementById('cmdList'); if (!box || !DATA) return;
+          box.textContent = '';
+          var term = state.term.trim().toLowerCase();
+          var rows = DATA.commands.filter(function (c) { return (state.group === 'all' || c.group === state.group) && matches(c, term); });
+          rows.forEach(function (c) { box.appendChild(card(c)); });
+          if (!rows.length) box.appendChild(el('p', 'cmd-empty', 'Nothing matches "' + state.term + '" in this filter.'));
+          var n = document.getElementById('cmdCount');
+          if (n) n.textContent = rows.length + ' of ' + DATA.commands.length + ' command' + (DATA.commands.length === 1 ? '' : 's');
+        }
+        var s = document.getElementById('cmdSearch');
+        if (s) s.addEventListener('input', function () { state.term = s.value; draw(); });
+        fetch('data/commands.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+          DATA = d; chips(); draw();
+        }).catch(function (e) { var box = document.getElementById('cmdList'); if (box) { box.textContent = ''; box.appendChild(el('p', 'cmd-empty', 'The command list could not be read (' + e + ').')); } });
+      })();
+      </script>
     </main>
 
     <footer>

@@ -1,388 +1,888 @@
 {
   "site": "https://spinback-j7ao5f.camelai.app",
-  "updated": "Written from the owner's own list of commands. No date is recorded here because none was given.",
-  "status": "the command set the owner asked for; the bot side is not deployed yet",
-  "gate": "Every command except the setup group only runs in the game once a Rust server is linked and its connection has been tested.",
-  "serverLimit": 3,
-  "serversLinked": 0,
+  "source": "Mirrored from github.com/ollybat/spinback-rce-bot at src/commands, one file per command. Names, descriptions, tiers, usages and options are copied from those files; nothing here was written by hand except the group labels.",
+  "updated": "Mirrored from the bot repository on request.",
   "groups": [
     {
       "key": "all",
       "label": "All"
     },
     {
-      "key": "setup",
-      "label": "Setup"
+      "key": "start",
+      "label": "Start here"
+    },
+    {
+      "key": "server",
+      "label": "Server"
     },
     {
       "key": "kits",
       "label": "Emote Kits"
     },
     {
-      "key": "user",
-      "label": "User"
+      "key": "clans",
+      "label": "Clans"
     },
     {
-      "key": "queue",
-      "label": "Queue Skip"
+      "key": "zones",
+      "label": "Zones (zorp)"
     },
     {
-      "key": "server",
-      "label": "Server"
+      "key": "info",
+      "label": "Players and info"
     }
   ],
   "commands": [
     {
       "name": "setup",
-      "group": "setup",
+      "group": "start",
+      "summary": "Set up roles, log channels and the Rust server",
+      "who": "owner",
+      "tier": "owner",
+      "usage": "setup",
+      "options": [],
+      "subcommands": [],
       "needsSetup": false,
-      "readOnly": false,
-      "who": "Administrator or Manage Server",
-      "why": "Administrator or Manage Server on this Discord.",
-      "panel": "A three-step panel: roles, log channels, then the Rust server details.",
-      "summary": "Sets the bot up for this Discord: your staff roles, your log channels, and the Rust servers it looks after. Nothing else on this page runs in the game until a server is linked and its connection has been tested.",
-      "subcommands": [
-        {
-          "name": "server",
-          "summary": "Opens three steps: 1) Roles (Owner, Co-Owner, Head Admin, Admin, Moderator, Linked), 2) Logging channels (create them or pick your own), 3) your Rust server's name, IP, RCON port and password. The connection is tested before anything is saved. Needs Administrator or Manage Server.",
-          "notes": [
-            "The connection is tested before anything is saved, so a wrong password is refused rather than stored.",
-            "Owner and Linked are the two roles marked required; Co-Owner, Head Admin, Admin and Moderator can be left blank.",
-            "Each server you add takes one of the three server slots."
-          ]
-        },
-        {
-          "name": "view",
-          "summary": "Show your roles, servers (Connected or Offline) and log channels."
-        },
-        {
-          "name": "remove",
-          "summary": "Remove one Rust server, or wipe the whole bot setup for this Discord."
-        },
-        {
-          "name": "edit",
-          "summary": "Change a server's IP, RCON port or password."
-        },
-        {
-          "name": "refresh",
-          "summary": "Force a reconnect of a server's RCON connection."
-        }
-      ]
+      "readOnly": false
     },
     {
-      "name": "kits",
-      "group": "kits",
-      "needsSetup": true,
-      "readOnly": false,
-      "who": "KITMANAGER for grab and config; the staff roles you set for the rest",
-      "why": "A linked Rust server, plus the KITMANAGER role for grab and config.",
-      "panel": "The kits panel: binds, cooldowns, roles and locks, up to three kits per emote.",
-      "summary": "Emote Kits: the kit names the bot reads from the server, the binds that give them, their cooldowns and the roles allowed to use them.",
-      "subcommands": [
-        {
-          "name": "grab",
-          "summary": "KITMANAGER. Copies the real kit names from the Rust server."
-        },
-        {
-          "name": "config",
-          "summary": "KITMANAGER. Opens the kits panel where you add, edit, remove and view binds with cooldowns, roles and up to 3 kits per emote; Lock Kits; Emote Guide.",
-          "notes": [
-            "Up to three kits per emote.",
-            "Binds carry their own cooldown and role."
-          ]
-        },
-        {
-          "name": "give",
-          "summary": "Give a kit to a gamertag or a linked Discord user."
-        },
-        {
-          "name": "refresh",
-          "summary": "Clear kit cooldowns for one user, one kit, all linked users or all kits."
-        },
-        {
-          "name": "authspawn",
-          "summary": "Give a kit to everyone in an Auth Group (User, VIP, Moderator, Admin, Owner) each time they respawn. One kit per group."
-        },
-        {
-          "name": "build",
-          "summary": "Kit Studio: build a kit, import an install code or choose from 18 pre-made kits."
-        },
-        {
-          "name": "add",
-          "summary": "Install a kit from a Base64 Kit Install Code."
-        }
-      ]
+      "name": "help",
+      "group": "start",
+      "summary": "Every command, by staff tier, on a card you can page through",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "help [page:]",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": false,
+      "readOnly": false
+    },
+    {
+      "name": "ping",
+      "group": "start",
+      "summary": "Health check: bot latency, the settings store, RCON, feeds and what is down",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "ping",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": false,
+      "readOnly": false
     },
     {
       "name": "user",
-      "group": "user",
+      "group": "info",
+      "summary": "Your link: your in-game name, your clan and your zone",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "user",
+      "options": [],
+      "subcommands": [],
       "needsSetup": true,
-      "readOnly": false,
-      "who": "The staff roles you set in /setup server",
-      "why": "A linked Rust server. Linking is what ties a Discord account to a gamertag.",
-      "panel": "Not stated yet - the owner has not described what this opens.",
-      "summary": "Account linking between Discord and the game, and the tools that manage links.",
-      "subcommands": [
-        {
-          "name": "linkpanel",
-          "summary": "Post a panel with Link Account and Unlink buttons in a channel."
-        },
-        {
-          "name": "forcelink",
-          "summary": ""
-        },
-        {
-          "name": "forceunlink",
-          "summary": ""
-        },
-        {
-          "name": "transfer",
-          "summary": ""
-        }
-      ]
+      "readOnly": false
     },
     {
-      "name": "lookup",
-      "group": "user",
+      "name": "players",
+      "group": "info",
+      "summary": "Who is on the Rust server right now, and which clan each name wears",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "players",
+      "options": [],
+      "subcommands": [],
       "needsSetup": true,
-      "readOnly": true,
-      "who": "The staff roles you set in /setup server",
-      "why": "A linked Rust server.",
-      "panel": "Not stated yet - the owner has not described what this opens.",
-      "summary": "",
-      "subcommands": []
-    },
-    {
-      "name": "queue-skip",
-      "group": "queue",
-      "needsSetup": true,
-      "readOnly": false,
-      "who": "The staff roles you set in /setup server",
-      "why": "A linked Rust server, and a player linked to a Discord account.",
-      "panel": "Not stated yet - the owner has not described what this opens.",
-      "summary": "Queue Skip Passes: give them, take them back, and check someone else's balance.",
-      "subcommands": [
-        {
-          "name": "give",
-          "summary": "Give a linked player Queue Skip Passes."
-        },
-        {
-          "name": "remove",
-          "summary": "Take Queue Skip Passes from a linked player."
-        },
-        {
-          "name": "balance",
-          "summary": "Check another player's Queue Skip balance."
-        }
-      ]
+      "readOnly": false
     },
     {
       "name": "server",
       "group": "server",
+      "summary": "Whether the Rust server is up, who is on, and the bot\\u2019s own readings",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "server",
+      "options": [],
+      "subcommands": [],
       "needsSetup": true,
-      "readOnly": false,
-      "who": "The staff roles you set in /setup server",
-      "why": "A linked Rust server with an RCON password the bot can use.",
-      "panel": "Not stated yet - the owner has not described what this opens.",
-      "summary": "Moderation on the Rust server itself: bans, kicks, warnings, mutes, and the game's VIP, Moderator, Admin and Owner auth levels.",
-      "subcommands": [
+      "readOnly": false
+    },
+    {
+      "name": "kits",
+      "group": "kits",
+      "summary": "Emote kits: make them, hand them out, clear cooldowns, set respawn kits",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "kits <build|give|refresh> [auth spawn]",
+      "options": [
         {
-          "name": "add-ban",
-          "summary": "Ban a player from the Rust server for a number of hours with a reason. Optionally ban their Discord too."
+          "name": "build",
+          "type": "subcommand",
+          "description": "The kit panel: make, edit, set binds, choose respawn kits",
+          "required": false
         },
         {
-          "name": "remove-ban",
-          "summary": "Unban a player, optionally unbanning their Discord user as well."
+          "name": "kit",
+          "type": "string",
+          "description": "Open one kit straight away",
+          "required": false
         },
         {
-          "name": "kick",
-          "summary": "Kick a player from the server."
+          "name": "page",
+          "type": "integer",
+          "description": "Which page of the list",
+          "required": false
         },
         {
-          "name": "add-warn",
-          "summary": "Give a player an official warning."
+          "name": "give",
+          "type": "subcommand",
+          "description": "Give a kit to a gamertag, or to a member who ran /user",
+          "required": true
         },
         {
-          "name": "remove-warn",
-          "summary": "Clear all of a player's warnings."
+          "name": "kit",
+          "type": "string",
+          "description": "Which kit",
+          "required": true
         },
         {
-          "name": "mute-chat",
-          "summary": "Mute a player's Quick Chat."
+          "name": "who",
+          "type": "string",
+          "description": "A gamertag, as typed in game",
+          "required": false
         },
         {
-          "name": "unmute-chat",
-          "summary": "Unmute a player's Quick Chat."
+          "name": "member",
+          "type": "user",
+          "description": "Or a Discord member the bot has linked",
+          "required": false
         },
         {
-          "name": "mute-voice",
-          "summary": "Mute a player's voice chat."
+          "name": "clear",
+          "type": "boolean",
+          "description": "Clear their cooldown first",
+          "required": false
         },
         {
-          "name": "unmute-voice",
-          "summary": "Unmute a player's voice chat."
+          "name": "refresh",
+          "type": "subcommand",
+          "description": "Clear kit cooldowns: one person, one kit, or everything",
+          "required": false
         },
         {
-          "name": "list-bans",
-          "summary": "List players banned on the server."
+          "name": "kit",
+          "type": "string",
+          "description": "Every cooldown this kit holds",
+          "required": false
         },
         {
-          "name": "add-vip",
-          "summary": "Give a gamertag the game's VIP auth level."
+          "name": "member",
+          "type": "user",
+          "description": "One person, and every kit they took",
+          "required": false
         },
         {
-          "name": "remove-vip",
-          "summary": "Remove a gamertag's VIP auth level."
+          "name": "all",
+          "type": "boolean",
+          "description": "Everybody, every kit (admin)",
+          "required": false
         },
         {
-          "name": "add-moderator",
-          "summary": "Give a gamertag the game's Moderator auth level."
+          "name": "auth",
+          "type": "group",
+          "description": "Who is in an Auth Group in Rust",
+          "required": false
         },
         {
-          "name": "remove-moderator",
-          "summary": "Remove a gamertag's Moderator auth level."
+          "name": "spawn",
+          "type": "subcommand",
+          "description": "The kit an Auth Group is handed each time its members respawn",
+          "required": false
         },
         {
-          "name": "add-admin",
-          "summary": "Give a gamertag the game's Admin auth level."
+          "name": "group",
+          "type": "string",
+          "description": "Which Auth Group",
+          "required": false
         },
         {
-          "name": "remove-admin",
-          "summary": "Remove a gamertag's Admin auth level."
+          "name": "kit",
+          "type": "string",
+          "description": "Which kit - leave it out to pick one from a list",
+          "required": false
         },
         {
-          "name": "add-owner",
-          "summary": "Give a gamertag the game's Owner auth level."
-        },
-        {
-          "name": "remove-owner",
-          "summary": "Remove a gamertag's Owner auth level."
+          "name": "off",
+          "type": "boolean",
+          "description": "Give this group nothing on respawn",
+          "required": false
         }
-      ]
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "Servers",
+      "group": "server",
+      "summary": "Run a line on the Rust server console",
+      "who": "not stated",
+      "tier": null,
+      "usage": "console <line> | console again [n] | console #2",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "leaderboard",
+      "group": "info",
+      "summary": "The clan boards: most members, who holds ground, and who is busiest",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "leaderboard [board:]",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "where-am-i",
+      "group": "info",
+      "summary": "Ask the game where you are standing, and show the numbers",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "where-am-i [user:@name]",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "description": "Staff: somebody else, by their link",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-create",
+      "group": "clans",
+      "summary": "Start a clan: a name, a tag and a colour",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-create name:Rust Raiders tag:RUST colour:aqua",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "What the clan is called",
+          "required": true
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "description": "The short tag worn in front, like RUST",
+          "required": true
+        },
+        {
+          "name": "colour",
+          "type": "string",
+          "description": "The colour the clan card wears - only the ones this server allows",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-info",
+      "group": "clans",
+      "summary": "Show a clan: members, home, zone, code (yours by default)",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-info clan:RUST",
+      "options": [
+        {
+          "name": "clan",
+          "type": "string",
+          "description": "A name, [TAG] or join code",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-view",
+      "group": "clans",
+      "summary": "Staff: look inside any clan, or list every one",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "clan-view clan:RUST",
+      "options": [
+        {
+          "name": "clan",
+          "type": "string",
+          "description": "A name, [TAG] or code",
+          "required": false
+        },
+        {
+          "name": "all",
+          "type": "boolean",
+          "description": "Every clan at a glance",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-edit",
+      "group": "clans",
+      "summary": "Change your clan name, tag, colour or note",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-edit colour:gold note:Recruiting for the next wipe",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "A new name",
+          "required": false
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "description": "A new tag",
+          "required": false
+        },
+        {
+          "name": "colour",
+          "type": "string",
+          "description": "A new colour - only the ones this server allows",
+          "required": false
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "description": "A line under the clan title",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-delete",
+      "group": "clans",
+      "summary": "Disband your clan - staff may name any clan, or wipe them all",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-delete confirm:True",
+      "options": [
+        {
+          "name": "clan",
+          "type": "string",
+          "description": "Staff: a name, [TAG] or code instead of your own",
+          "required": false
+        },
+        {
+          "name": "all",
+          "type": "boolean",
+          "description": "Staff (admin): remove every clan",
+          "required": false
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "description": "Say True to mean it",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-invite",
+      "group": "clans",
+      "summary": "Invite somebody to your clan, or cancel an invitation",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-invite user:@name",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "description": "Who to invite, or whose invitation to cancel",
+          "required": true
+        },
+        {
+          "name": "cancel",
+          "type": "boolean",
+          "description": "Cancel the invitation instead of sending one",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-join",
+      "group": "clans",
+      "summary": "Join a clan with its code, or accept an invitation",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-join code:ABC123",
+      "options": [
+        {
+          "name": "code",
+          "type": "string",
+          "description": "The join code, if nobody invited you",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-kick",
+      "group": "clans",
+      "summary": "Remove a member from your clan (leader and co-leaders)",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-kick user:@name",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "description": "The member to remove",
+          "required": true
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-promote",
+      "group": "clans",
+      "summary": "Make a clan member a co-leader (the leader decides this)",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-promote user:@name",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "description": "The member to promote",
+          "required": true
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-demote",
+      "group": "clans",
+      "summary": "Take a co-leader back down to member",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-demote user:@name",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "description": "The co-leader to demote",
+          "required": true
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-leave",
+      "group": "clans",
+      "summary": "Leave your clan (a leader hands it on, or it disbands)",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-leave",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-transfer",
+      "group": "clans",
+      "summary": "Staff: hand a clan to another member",
+      "who": "admin",
+      "tier": "admin",
+      "usage": "clan-transfer user:@name clan:RUST",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "description": "The member who takes it",
+          "required": true
+        },
+        {
+          "name": "clan",
+          "type": "string",
+          "description": "Which clan, when it is not yours",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-sethome",
+      "group": "clans",
+      "summary": "Set the clan home to where you are standing - once, and only a leader may",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-sethome",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-sync",
+      "group": "clans",
+      "summary": "Put your clan role and private channel in place, or repair them",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-sync [clan] [all]",
+      "options": [
+        {
+          "name": "clan",
+          "type": "string",
+          "description": "Staff: a name, [TAG] or code instead of your own",
+          "required": false
+        },
+        {
+          "name": "all",
+          "type": "boolean",
+          "description": "Staff (admin): put every clan in order",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-code",
+      "group": "clans",
+      "summary": "Show your clan join code",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-code",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-codechange",
+      "group": "clans",
+      "summary": "Make a new join code, so the old one stops working",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "clan-codechange",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "clan-config",
+      "group": "clans",
+      "summary": "Staff: open the clan settings panel",
+      "who": "coOwner",
+      "tier": "coOwner",
+      "usage": "clan-config",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "active-clans",
+      "group": "clans",
+      "summary": "Every clan on the server, biggest first",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "active-clans",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-create",
+      "group": "zones",
+      "summary": "Create your clan zone where you are standing, and pick how big it is",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "zorp-create size:60 name:Main base",
+      "options": [
+        {
+          "name": "size",
+          "type": "integer",
+          "description": "How wide the zone is, in metres - only the sizes this server allows",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "A name for the zone, like Main base",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-toggle",
+      "group": "zones",
+      "summary": "Switch your clan zone between green and red",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "zorp-toggle",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-delete",
+      "group": "zones",
+      "summary": "Remove your clan zone - admins may name any zone, or clear them all",
+      "who": "everyone",
+      "tier": "everyone",
+      "usage": "zorp-delete",
+      "options": [
+        {
+          "name": "zone",
+          "type": "string",
+          "description": "Admins: a zone name or an admin zone",
+          "required": false
+        },
+        {
+          "name": "all",
+          "type": "boolean",
+          "description": "Admins: clear every clan zone (asks for confirm)",
+          "required": false
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "description": "With all: say True to mean it",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-forceedit",
+      "group": "zones",
+      "summary": "Staff: force a zone colour or size, whatever the clan wanted",
+      "who": "admin",
+      "tier": "admin",
+      "usage": "zorp-forceedit zone:RUST colour:red",
+      "options": [
+        {
+          "name": "zone",
+          "type": "string",
+          "description": "A clan name, a zone name or an admin zone",
+          "required": true
+        },
+        {
+          "name": "colour",
+          "type": "string",
+          "description": "Force this state",
+          "required": false
+        },
+        {
+          "name": "size",
+          "type": "integer",
+          "description": "Force this size, 10-300 metres",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-config",
+      "group": "zones",
+      "summary": "Staff: open the zorp settings panel",
+      "who": "coOwner",
+      "tier": "coOwner",
+      "usage": "zorp-config",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-createadmin",
+      "group": "zones",
+      "summary": "Staff: a white admin zone where you are standing, for events and safe areas",
+      "who": "admin",
+      "tier": "admin",
+      "usage": "zorp-createadmin name:Trade Post size:60 pvp:False build:True",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "What the zone is called",
+          "required": true
+        },
+        {
+          "name": "size",
+          "type": "integer",
+          "description": "How wide it is, 10-300 metres",
+          "required": false
+        },
+        {
+          "name": "pvp",
+          "type": "boolean",
+          "description": "Allow PvP inside",
+          "required": false
+        },
+        {
+          "name": "damage",
+          "type": "boolean",
+          "description": "Allow damage to buildings",
+          "required": false
+        },
+        {
+          "name": "build",
+          "type": "boolean",
+          "description": "Allow building inside",
+          "required": false
+        },
+        {
+          "name": "enter",
+          "type": "string",
+          "description": "A line shown on the way in",
+          "required": false
+        },
+        {
+          "name": "leave",
+          "type": "string",
+          "description": "A line shown on the way out",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-portal",
+      "group": "zones",
+      "summary": "Staff: portals - add, remove or list them. The entrance is where you stand",
+      "who": "admin",
+      "tier": "admin",
+      "usage": "zorp-portal action:add name:South Shop to:-450 1200",
+      "options": [
+        {
+          "name": "action",
+          "type": "string",
+          "description": "What to do",
+          "required": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "The portal name - suggestions list the ones that exist",
+          "required": false
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "description": "Exit, like -450 1200 - or leave it off and set it from where you stand",
+          "required": false
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "description": "A line about it",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
+    },
+    {
+      "name": "zorp-bansystem",
+      "group": "zones",
+      "summary": "Staff: the zorp ban list - add, remove or read it",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "zorp-bansystem action:add gamertag:locanthinshing reason:roof camping",
+      "options": [
+        {
+          "name": "action",
+          "type": "string",
+          "description": "What to do",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "user",
+          "description": "A Discord member",
+          "required": false
+        },
+        {
+          "name": "gamertag",
+          "type": "string",
+          "description": "An in-game name - suggestions list linked or banned names",
+          "required": false
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "description": "Why, for the record",
+          "required": false
+        },
+        {
+          "name": "hours",
+          "type": "integer",
+          "description": "How long it lasts, 1-720 hours - leave it out for one that stands",
+          "required": false
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false
     }
   ],
   "goals": [],
-  "setup": {
-    "note": "Role changes are instant. Leave a log channel blank to disable that log.",
-    "roles": [
-      {
-        "emoji": "👑",
-        "name": "Owner Role",
-        "value": "Owner",
-        "required": true
-      },
-      {
-        "emoji": "🛡️",
-        "name": "Co-Owner Role",
-        "value": "Co-Owner",
-        "required": false
-      },
-      {
-        "emoji": "⚔️",
-        "name": "Head Admin Role",
-        "value": "Head Admin",
-        "required": false
-      },
-      {
-        "emoji": "🔧",
-        "name": "Admin Role",
-        "value": "Admin",
-        "required": false
-      },
-      {
-        "emoji": "🔨",
-        "name": "Moderator Role",
-        "value": "Moderator",
-        "required": false
-      },
-      {
-        "emoji": "🔗",
-        "name": "Linked Role",
-        "value": "Linked",
-        "required": true
-      }
-    ],
-    "logChannels": [
-      {
-        "emoji": "🖥️",
-        "name": "Server Log",
-        "example": "#server log"
-      },
-      {
-        "emoji": "📟",
-        "name": "Console Log",
-        "example": "#rw-console"
-      },
-      {
-        "emoji": "⌨️",
-        "name": "Command Log",
-        "example": "#rw-command"
-      },
-      {
-        "emoji": "📤",
-        "name": "RCON Command Usage",
-        "example": "#rw-command-usage"
-      },
-      {
-        "emoji": "🔗",
-        "name": "Linking Log",
-        "example": "#rw-linking"
-      },
-      {
-        "emoji": "💀",
-        "name": "Killfeed Log",
-        "example": "#rw-killfeed"
-      },
-      {
-        "emoji": "🚁",
-        "name": "EventFeed Log",
-        "example": "#rw-eventfeed"
-      },
-      {
-        "emoji": "🎭",
-        "name": "Emote Kits Log",
-        "example": "#rw-emotekits"
-      },
-      {
-        "emoji": "🛡️",
-        "name": "Admin Log",
-        "example": "#rw-admin"
-      },
-      {
-        "emoji": "🧱",
-        "name": "Zorp Log",
-        "example": "#rw-zorp"
-      },
-      {
-        "emoji": "🌀",
-        "name": "Teleport Log",
-        "example": "#rw-teleport"
-      },
-      {
-        "emoji": "🏷️",
-        "name": "Clan Log",
-        "example": "#rw-clans"
-      },
-      {
-        "emoji": "🏇",
-        "name": "Catch-A-Ride Log",
-        "example": "#rw-catcharide"
-      },
-      {
-        "emoji": "👋",
-        "name": "Join/Leave Log",
-        "example": "#rw-joinleave"
-      },
-      {
-        "emoji": "❌",
-        "name": "Error Log",
-        "example": "#rw-error"
-      }
-    ],
-    "servers": {
-      "linked": 0,
-      "max": 3,
-      "note": "The bot reconnects automatically within a minute."
-    }
+  "tiers": {
+    "owner": 1,
+    "everyone": 24,
+    "moderator": 4,
+    "": 1,
+    "admin": 4,
+    "coOwner": 2
   }
 }
