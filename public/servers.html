@@ -54,6 +54,13 @@
     <link rel="stylesheet" href="/servers.css">
     <link rel="stylesheet" href="/botcard.css">
     <script src="/botcard.js" defer></script>
+      <style>
+      .sv-shot { margin: 14px 0 6px; }
+      .sv-shot img { max-width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); box-shadow: 0 18px 40px rgba(0,0,0,.35); }
+      .sv-modules { list-style: none; padding: 0; margin: 10px 0 6px; display: flex; flex-wrap: wrap; gap: 8px; }
+      .sv-modules li { font-size: .86rem; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.04); }
+      @media (max-width: 700px) { .sv-modules { gap: 6px; } .sv-modules li { font-size: .8rem; } }
+    </style>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -153,6 +160,23 @@
             </div>
           </div>
           <p class="cmd-note">Those four values - the flag, the name, the region, the state and the player count - were given to us by hand, not measured. Every server the bot looks after will show measured numbers here the moment its server list is published on this site, and this card then becomes one of them rather than a note.</p>
+        </div>
+      </section>
+
+      <section class="sp-section" id="sensorSection">
+        <div class="wrap">
+          <h2 class="cmd-goals__title">Server Sensor</h2>
+          <p class="cmd-note">The panel below is a screenshot of the bot's own dashboard, given to us by the owner - not a drawing of ours and not live data. Its own footnote says: <em>Data is collected every 5 minutes via RCON servers.info. Metrics are cleared on server wipe - Showing last 24h.</em> So those numbers belong to one server at one moment (9 players, 97,485 entities, 29.0 FPS, 1,304 MB) and are the bot's view of a Rust server, not this page's.</p>
+          <figure class="sv-shot">
+            <img src="/media/server-sensor.webp" width="1600" height="674" alt="Screenshot of the bot dashboard: a Server Sensor panel with entity count, framerate, memory used and player count graphs, and a left sidebar of bot modules" loading="lazy" decoding="async">
+            <figcaption class="cmd-note">Screenshot supplied by the owner. The top phone bar, the Discord message row and the dashboard's licence line were trimmed out of the picture; nothing inside the panel was changed.</figcaption>
+          </figure>
+          <h3 class="cmd-goals__title">The modules that screenshot lists</h3>
+          <p class="cmd-note">Read straight off the sidebar of the same dashboard, left to right, with Store and Emote Binds at the top and Server Sensor at the bottom:</p>
+          <ul class="sv-modules">
+            <li>Store</li><li>Emote Binds</li><li>Entity Spawn</li><li>Dial-A-Ride</li><li>Kit Builder</li><li>Custom Zones</li><li>GRP System</li><li>SRP System</li><li>Economy</li><li>Home Teleport</li><li>Prison System</li><li>Battle Pass</li><li>Daily Drops</li><li>Skip Night</li><li>Inactivity</li><li>Bounty</li><li>Events</li><li>Support Tickets</li><li>Server Alerts</li><li>Command Groups</li><li>Kill Feed</li><li>Player Stats</li><li>Node Spawning</li><li>Minigames</li><li>Live RCON Feed</li><li>Server Sensor</li>
+          </ul>
+          <p class="cmd-note">Those are module names from the dashboard, not commands - the commands the bot registers are on the <a href="/commands.html">Commands page</a>, mirrored from its source.</p>
         </div>
       </section>
 
