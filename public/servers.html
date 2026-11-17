@@ -54,18 +54,6 @@
     <link rel="stylesheet" href="/servers.css">
     <link rel="stylesheet" href="/botcard.css">
     <script src="/botcard.js" defer></script>
-      <style>
-      .sv-sensor { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 10px; }
-      .sv-sensor__tile { border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,.03); display: flex; flex-direction: column; gap: 4px; }
-      .sv-sensor__label { font-size: .74rem; letter-spacing: .14em; text-transform: uppercase; opacity: .62; }
-      .sv-sensor__value { font-size: 1.9rem; line-height: 1.05; font-variant-numeric: tabular-nums; }
-      .sv-sensor__range { font-size: .78rem; opacity: .68; }
-      @media (max-width: 860px) { .sv-sensor { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sv-sensor__value { font-size: 1.6rem; } }
-      @media (max-width: 460px) { .sv-sensor { grid-template-columns: 1fr; } }
-      .sv-modules { list-style: none; padding: 0; margin: 10px 0 6px; display: flex; flex-wrap: wrap; gap: 8px; }
-      .sv-modules li { font-size: .86rem; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.04); }
-      @media (max-width: 700px) { .sv-modules { gap: 6px; } .sv-modules li { font-size: .8rem; } }
-    </style>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -168,27 +156,6 @@
         </div>
       </section>
 
-      <section class="sp-section" id="sensorSection">
-        <div class="wrap">
-          <h2 class="cmd-goals__title">Server Sensor</h2>
-          <p class="cmd-note">The four readings below are the ones the bot dashboard showed for a Rust server on 05/03/2026 at 01:52, with the low and high each one reached over the last 24 hours. They are a snapshot the owner sent us, not a live feed - this site has no RCON connection of its own. Its own footnote says data is collected every 5 minutes via RCON servers.info, and that metrics are cleared when the server wipes.</p>
-
-          <div class="sv-sensor" role="group" aria-label="Server Sensor readings">
-            <div class="sv-sensor__tile"><span class="sv-sensor__label">Entities</span><strong class="sv-sensor__value">97,485</strong><span class="sv-sensor__range">24h low 81,692 &middot; high 97,485</span></div>
-            <div class="sv-sensor__tile"><span class="sv-sensor__label">FPS</span><strong class="sv-sensor__value">29.0</strong><span class="sv-sensor__range">24h low 12 FPS &middot; high 56 FPS</span></div>
-            <div class="sv-sensor__tile"><span class="sv-sensor__label">Memory</span><strong class="sv-sensor__value">1,304 MB</strong><span class="sv-sensor__range">24h low 818 MB &middot; high 1,516 MB</span></div>
-            <div class="sv-sensor__tile"><span class="sv-sensor__label">Players</span><strong class="sv-sensor__value">9</strong><span class="sv-sensor__range">24h low 0 &middot; high 14</span></div>
-          </div>
-          <p class="cmd-note">The dashboard polls every 5 minutes and can show 1h, 6h, 24h or 7D; the readings above are the 24h view. When a Rust server is linked and its list is published, these four tiles are the shape that server's own numbers will take. Until then the card above carries the flag, name, region, state and player count exactly as you gave them to us by hand, and nothing on this page is measured live.</p>
-
-          <h3 class="cmd-goals__title">The modules that screenshot lists</h3>
-          <p class="cmd-note">Read straight off the sidebar of the same dashboard, left to right, with Store and Emote Binds at the top and Server Sensor at the bottom:</p>
-          <ul class="sv-modules">
-            <li>Store</li><li>Emote Binds</li><li>Entity Spawn</li><li>Dial-A-Ride</li><li>Kit Builder</li><li>Custom Zones</li><li>GRP System</li><li>SRP System</li><li>Economy</li><li>Home Teleport</li><li>Prison System</li><li>Battle Pass</li><li>Daily Drops</li><li>Skip Night</li><li>Inactivity</li><li>Bounty</li><li>Events</li><li>Support Tickets</li><li>Server Alerts</li><li>Command Groups</li><li>Kill Feed</li><li>Player Stats</li><li>Node Spawning</li><li>Minigames</li><li>Live RCON Feed</li><li>Server Sensor</li>
-          </ul>
-          <p class="cmd-note">Those are module names from the dashboard, not commands - the commands the bot registers are on the <a href="/commands.html">Commands page</a>, mirrored from its source.</p>
-        </div>
-      </section>
 
 </main>
 
