@@ -1,0 +1,175 @@
+/* Winter layer - loaded last on every page.
+   The site's own seasonal engine (theme.js + style.css) already reads the calendar and builds
+   the Christmas pieces: flakes, the sleigh, shooting stars, the top ribbon. This file does not
+   repeat any of that. It adds the depth, the 3D touches and the small furniture around it. */
+
+:root {
+  --wg-ice: #bfe9ff;
+  --wg-frost: #eef8ff;
+  --wg-gold: #f5c451;
+  --wg-deep: #0b1620;
+}
+
+/* ---------- my own ambient layers, so nothing fights the season's fog ---------- */
+#wg-sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+#wg-sky i { position: absolute; display: block; }
+#wg-aurora {
+  position: absolute; inset: -12% -12% -12% -12%;
+  background:
+    radial-gradient(1050px 600px at 10% -6%, rgba(130, 205, 255, .16), transparent 60%),
+    radial-gradient(880px 500px at 94% 2%, rgba(185, 145, 255, .12), transparent 62%),
+    radial-gradient(760px 460px at 48% 108%, rgba(80, 200, 180, .10), transparent 60%);
+  animation: wg-drift 28s ease-in-out infinite alternate;
+}
+#wg-stars {
+  position: absolute; inset: 0; opacity: .55;
+  background-image:
+    radial-gradient(1.5px 1.5px at 18% 26%, rgba(255, 255, 255, .55), transparent 60%),
+    radial-gradient(1.4px 1.4px at 72% 12%, rgba(255, 255, 255, .45), transparent 60%),
+    radial-gradient(1.6px 1.6px at 44% 68%, rgba(255, 255, 255, .36), transparent 60%),
+    radial-gradient(1.2px 1.2px at 88% 54%, rgba(255, 255, 255, .42), transparent 60%);
+  background-size: 460px 460px;
+  animation: wg-twinkle 9s ease-in-out infinite alternate;
+}
+@keyframes wg-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(0, -22px, 0) scale(1.05); } }
+@keyframes wg-twinkle { from { opacity: .38; } to { opacity: .6; } }
+main, .sp-hero, .sp-section, header, .sp-header, footer { z-index: 2; }
+
+/* ---------- the season's top ribbon, given a little more life ---------- */
+.rw-ribbon {
+  background-image: linear-gradient(100deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .22) 50%, rgba(255, 255, 255, 0) 70%);
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  animation: wg-sheen 9s ease-in-out infinite;
+}
+@keyframes wg-sheen { 0% { background-position: 140% 0; } 55%, 100% { background-position: -60% 0; } }
+
+/* ---------- frost on the cards, and a lean towards the pointer ---------- */
+.sp-card, .cmd-card, .sv-tile, .sp-compare, .pp-panel {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform .4s cubic-bezier(.2, .7, .2, 1), box-shadow .4s ease, border-color .4s ease;
+}
+.sp-card::after, .cmd-card::after, .sv-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .7), transparent);
+  pointer-events: none;
+}
+.sp-card:hover, .cmd-card:hover, .sv-tile:hover, .sp-compare:hover {
+  border-color: rgba(191, 233, 255, .45);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45), 0 0 0 1px rgba(191, 233, 255, .12);
+}
+.wg-tilt { transition: transform .12s linear, box-shadow .4s ease, border-color .4s ease; }
+
+/* ---------- depth on the headings, and a flake to mark a section ---------- */
+.sp-title { text-shadow: 0 1px 0 rgba(255, 255, 255, .14), 0 10px 26px rgba(0, 0, 0, .45); }
+.wg-section-flake { display: inline-block; margin-right: .45em; opacity: .9; animation: wg-bob 4.5s ease-in-out infinite; }
+@keyframes wg-bob { 50% { transform: translateY(-3px) rotate(-7deg); } }
+
+/* ---------- the wordmark wears a little ice ---------- */
+.logo .accent {
+  background: linear-gradient(100deg, #e6f6ff, #8fd0ff 45%, var(--wg-gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---------- nav, buttons and fields get a frozen edge ---------- */
+.nav-links a { position: relative; }
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 100%; bottom: -3px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--wg-ice), transparent);
+  transition: right .28s ease;
+}
+.nav-links a:hover::after, .nav-links a[aria-current="page"]::after { right: 0; }
+.btn { position: relative; overflow: hidden; }
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -60%;
+  width: 55%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .28), transparent);
+  transform: skewX(-14deg);
+  transition: left .5s ease;
+}
+.btn:hover::after { left: 105%; }
+input[type="search"], input[type="text"], input[type="number"], select, textarea {
+  border-color: rgba(191, 233, 255, .28) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid rgba(191, 233, 255, .55);
+  outline-offset: 1px;
+}
+
+/* ---------- the moving furniture I add ---------- */
+#wg-progress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 40;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--wg-ice), #9fd8ff 40%, var(--wg-gold));
+  box-shadow: 0 0 12px rgba(191, 233, 255, .5);
+}
+.wg-controls {
+  position: fixed; right: 16px; bottom: 18px; z-index: 30;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+}
+.wg-btn {
+  font: inherit; font-size: .8rem; line-height: 1; padding: 9px 12px; border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  background: rgba(10, 22, 32, .72);
+  color: #eef8ff; cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .4);
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.wg-btn:hover { transform: translateY(-2px); border-color: rgba(191, 233, 255, .6); background: rgba(16, 34, 48, .82); }
+.wg-btn:focus-visible { outline: 2px solid var(--wg-gold); outline-offset: 2px; }
+#wg-top { opacity: 0; pointer-events: none; transform: translateY(6px); transition: opacity .3s ease, transform .3s ease; }
+#wg-top.is-on { opacity: 1; pointer-events: auto; transform: none; }
+
+/* ---------- the snow globe: a real 3D turn ---------- */
+.hero, .sp-hero, .rw-video-hero { position: relative; }
+.wg-globe { position: absolute; right: 4px; bottom: -4px; width: 140px; height: 140px; perspective: 640px; z-index: 3; }
+.wg-globe__ball {
+  position: absolute; inset: 0 0 8px 0; border-radius: 50%;
+  transform-style: preserve-3d;
+  animation: wg-spin 22s linear infinite;
+  background: radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .92), rgba(190, 230, 255, .36) 40%, rgba(12, 24, 34, .6) 100%);
+  box-shadow: inset 0 0 34px rgba(255, 255, 255, .4), inset 0 -18px 30px rgba(0, 60, 90, .35), 0 20px 44px rgba(0, 0, 0, .5);
+  border: 1px solid rgba(255, 255, 255, .34);
+  overflow: hidden;
+}
+.wg-globe__ball img { position: absolute; left: 50%; top: 50%; width: 52%; transform: translate(-50%, -50%) translateZ(16px); filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .45)); }
+.wg-globe__drift i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: rgba(255, 255, 255, .85); animation: wg-fall linear infinite; }
+.wg-globe__base {
+  position: absolute; left: 50%; bottom: -6px; width: 86px; height: 16px; transform: translateX(-50%);
+  border-radius: 0 0 14px 14px; background: linear-gradient(180deg, #3c5a6b, #22333d);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, .45);
+}
+@keyframes wg-spin { from { transform: rotateY(-14deg); } to { transform: rotateY(346deg); } }
+@keyframes wg-fall { from { transform: translate3d(0, -14px, 0); opacity: 0; } 15% { opacity: .9; } to { transform: translate3d(6px, 132px, 0); opacity: 0; } }
+
+/* ---------- the small season chip in the footer ---------- */
+.wg-season {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px;
+  border: 1px solid rgba(191, 233, 255, .3); background: rgba(191, 233, 255, .08);
+  font-size: .74rem; letter-spacing: .04em; color: var(--wg-frost);
+}
+
+/* ---------- quiet for anyone who asked for less motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  #wg-aurora, #wg-stars, .rw-ribbon, .wg-globe__ball, .wg-globe__drift i, .wg-section-flake { animation: none !important; }
+  html { scroll-behavior: auto; }
+  .sp-card, .cmd-card, .sv-tile, .sp-compare { transition: none; }
+  .btn::after { display: none; }
+}
+@media (max-width: 900px) { .wg-globe { display: none; } }
+@media (max-width: 640px) { .wg-controls { right: 10px; bottom: 12px; } }
+
