@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <script>
+      document.documentElement.className += " js";
+      try {
+        var rwTheme = localStorage.getItem("spinback-theme");
+        if (rwTheme === "light" || rwTheme === "dark") document.documentElement.setAttribute("data-theme", rwTheme);
+      } catch (e) {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Make a Christmas card - Spinback RCE</title>
+    <meta name="application-name" content="Spinback RCE">
+    <meta name="description" content="Make a Christmas card for your clan: type a name, a message and a signature, and the card is drawn in your own browser. Nothing is uploaded or stored.">
+    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/card.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Spinback RCE">
+    <meta property="og:title" content="The API - Spinback RCE">
+    <meta property="og:description" content="Read-only JSON: the bot's status endpoints and the command, item and store data the site itself uses.">
+    <meta property="og:url" content="https://spinback-j7ao5f.camelai.app/card.html">
+    <meta property="og:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:alt" content="Spinback RCE - the free all-in-one Discord bot for Rust Console Edition">
+    <meta name="twitter:image" content="https://spinback-j7ao5f.camelai.app/media/og-card.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="/media/fonts.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/ui-extras.css">
+    <link rel="stylesheet" href="sections.css">
+    <link rel="icon" type="image/svg+xml" href="/media/spinback-icon.svg">
+    <link rel="shortcut icon" href="/media/spinback-icon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0704">
+    <script src="/theme.js"></script>
+    <script src="/config.js" defer></script>
+    <script src="/page.js" defer></script>
+    <script src="/motion.js" defer></script>
+    <script src="/site-plus.js" defer></script>
+    <script src="/search.js" defer></script>
+    <link rel="stylesheet" href="/theme-spinback.css">
+    <link rel="stylesheet" href="/motion.css">
+    <link rel="stylesheet" href="/site-plus.css">
+    <link rel="stylesheet" href="/search.css">
+    <link rel="stylesheet" href="/site-pro.css">
+    <link rel="stylesheet" href="/api.css">
+    <link rel="stylesheet" href="/winter.css">
+  <link rel="stylesheet" href="/christmas.css">
+  <style>
+      .xg-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+      .xg-grid canvas { width: 100%; height: auto; border-radius: 16px; border: 1px solid rgba(255,209,102,.28); box-shadow: 0 24px 60px rgba(0,0,0,.5); background: #060d1a; }
+      .xg-fields { display: flex; flex-direction: column; gap: 10px; }
+      .xg-fields label { font-size: .78rem; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
+      .xg-fields input, .xg-fields textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(191,233,255,.28); background: rgba(255,255,255,.04); color: inherit; font: inherit; }
+      .xg-fields textarea { min-height: 92px; resize: vertical; }
+      .xg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+      @media (max-width: 880px) { .xg-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="sp-header">
+      <div class="wrap">
+        <nav>
+          <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async">Spinback<span class="accent">RCE</span></a>
+          <div class="nav-links" id="navLinks">
+            <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
+            <a href="status.html">Status</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+          </div>
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-controls="navLinks" aria-expanded="false">&#9776;</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="sp-hero">
+        <div class="wrap">
+          <span class="sp-kicker">Made in your browser</span>
+          <h1 class="sp-title">Make a Christmas card</h1>
+          <p class="sp-lede">Type a name, a message and a signature, and the card below redraws as you go. It is drawn on a canvas inside this tab: nothing you type is sent anywhere, stored, or seen by the bot.</p>
+        </div>
+      </section>
+      <section class="sp-section">
+        <div class="wrap">
+          <div class="xg-grid">
+            <canvas id="xgCard" width="1280" height="720" aria-label="A Christmas card drawn from what you type"></canvas>
+            <div class="xg-fields">
+              <label for="xgName">Whose card is it</label>
+              <input id="xgName" type="text" maxlength="40" value="Spinback RCE" autocomplete="off">
+              <label for="xgMsg">The message</label>
+              <textarea id="xgMsg" maxlength="320">Thanks for a year of raids, rebuilds and late-night saves. Happy Christmas from all of us - see you on the server.</textarea>
+              <label for="xgFrom">Signed</label>
+              <input id="xgFrom" type="text" maxlength="60" value="- the whole clan" autocomplete="off">
+              <div class="xg-actions">
+                <button type="button" class="wg-btn" id="xgSave">Download the card</button>
+                <button type="button" class="wg-btn" id="xgExample">Fill in an example</button>
+              </div>
+              <p class="cmd-note">The download is a PNG of exactly what you see. Snow keeps falling while the tab is open, and stops the moment you ask your device for less motion.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="sp-section">
+        <div class="wrap">
+          <h2 class="cmd-goals__title">What this page is, plainly</h2>
+          <ul class="up-list">
+            <li>It is a page on this website, not a feature of the bot. Nothing in Discord changed because of it.</li>
+            <li>It makes <strong>no network request</strong> with what you type: the card is canvas drawing in your browser, and the download comes from that canvas.</li>
+            <li>It stores nothing. Close the tab and the card is gone unless you downloaded it.</li>
+          </ul>
+        </div>
+      </section>
+</main>
+
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-col foot-brand">
+            <a href="index.html" class="logo"><img src="/media/spinback-icon.svg" alt="Spinback" width="34" height="34" decoding="async" loading="lazy">Spinback<span class="accent">RCE</span></a>
+            <p>The all-in-one Discord bot for Rust Console Edition servers. 100% free, always.</p>
+          </div>
+          <div class="foot-col">
+            <h4>Bot Help</h4>
+            <a href="start.html">Get started</a>
+            <a href="servers.html">Servers</a>
+            <a href="commands.html">Commands</a>
+            <a href="settings.html">Settings</a>
+            <a href="privacy.html">Privacy and what we store</a>
+            <a href="api.html">The API</a>
+            <a href="dashboard/kitbuilder.html">Kit Studio</a>
+          </div>
+                    <div class="foot-col" id="foot-site">
+            <h4>The site</h4>
+            <a href="about.html">About</a>
+            <a href="changelog.html">Changelog</a>
+            <a href="uptime.html">Uptime</a>
+            <a href="api.html">API</a>
+          </div>
+<div class="foot-col">
+            <h4>Community</h4>
+            <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
+            <a href="status.html">Status</a>
+          </div>
+        </div>
+        <div class="foot-bottom">Support - Spinback 5X EU &middot; 2026<br><span class="foot-fine">&copy; <span id="year"></span> Spinback RCE. Not affiliated with Facepunch Studios or Rust.</span></div>
+      </div>
+    </footer>
+    <script src="/winter.js" defer></script>
+  <script src="/christmas.js" defer></script>
+  <script src="/card.js" defer></script>
+</body>
+</html>

@@ -16,6 +16,7 @@
     ['Uptime and history', '/uptime.html', 'The bot service over the last 24 hours, read live from its own history endpoint'],
     ['Changelog', '/changelog.html', 'What changed on this site and when, from the repository commit list'],
     ['About', '/about.html', 'What Spinback RCE is, and what this website does and does not do'],
+    ['Make a Christmas card', '/card.html', 'Type a message and the card is drawn in your own browser'],
     ['Home', '/index.html', 'What Spinback is, and what it does'],
     ['Status', '/status.html', 'Live uptime, checks and how the bot is behaving'],
     ['Servers', '/servers.html', 'Every Rust server the bot has saved, with its state, population and map'],

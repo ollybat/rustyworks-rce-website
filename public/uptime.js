@@ -25,7 +25,25 @@
       var times = b.checks ? ((b.avgMs == null ? 'average not reported' : b.avgMs + ' ms average') + (b.maxMs == null ? '' : ', worst ' + b.maxMs + ' ms')) : 'no checks in this hour';
       html += '<div class="up-row"><span>' + esc(hour(b.at)) + '</span><span><span class="up-bar"><i style="width:' + pct + '%"></i></span> <small>' + esc(times) + '</small></span><em>' + esc(guilds) + '</em></div>';
     }
-    box.innerHTML = '<h3 class="cmd-goals__title">Hour by hour, newest first</h3>' + (html || '<p class="cmd-note">No buckets came back.</p>');
+    var lo = null, hi = null, k;
+    for (k = 0; k < buckets.length; k++) { var v = buckets[k].avgMs; if (v == null) continue; lo = (lo == null || v < lo) ? v : lo; hi = (hi == null || v > hi) ? v : hi; }
+    var chart = '';
+    if (lo != null) {
+      var Wc = 760, Hc = 150, stepX = Wc / Math.max(1, buckets.length - 1), d = '', started = false;
+      for (k = 0; k < buckets.length; k++) {
+        var vv = buckets[k].avgMs;
+        if (vv == null) { started = false; continue; }
+        var x = (k * stepX).toFixed(1), y = (Hc - ((vv - lo) / Math.max(1, hi - lo)) * (Hc - 14) - 7).toFixed(1);
+        d += (started ? ' L' : ' M') + x + ' ' + y;
+        started = true;
+      }
+      var pts = 0, k2;
+      for (k2 = 0; k2 < buckets.length; k2++) if (buckets[k2].avgMs != null) pts++;
+      chart = '<figure class="up-chart"><svg viewBox="0 0 ' + Wc + ' ' + Hc + '" preserveAspectRatio="none" role="img" aria-label="Average response time each hour">'
+        + '<path d="' + d + '" fill="none" stroke="#8fd0ff" stroke-width="2.5" stroke-linejoin="round"/>' + (pts === 1 ? '<circle cx="0" cy="0" r="0" fill="none"/>' : '') + '</svg>'
+        + '<figcaption class="cmd-note">Average response time each hour: lowest ' + lo + ' ms, highest ' + hi + ' ms. ' + (lo === hi ? 'Only one hour in this window has a measurement, so there is a single point and no line.' : 'Hours nobody measured are left as gaps - the line stops and starts again rather than being drawn through them.') + '</figcaption></figure>';
+    }
+    box.innerHTML = chart + '<h3 class="cmd-goals__title">Every hour, newest first</h3>' + (html || '<p class="cmd-note">No buckets came back.</p>');
     if (meta) meta.textContent = 'Window: the last ' + (d.hours == null ? 'unknown number of' : d.hours) + ' hours. Monitoring since ' + when(d.monitoringSince) + '. Read at ' + when(d.generatedAt) + '.';
   }).catch(function (e) {
     var tot = document.getElementById('upTotals');
