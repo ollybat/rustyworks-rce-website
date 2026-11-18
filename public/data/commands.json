@@ -1,7 +1,7 @@
 {
   "site": "https://spinback-j7ao5f.camelai.app",
   "source": "Mirrored from github.com/ollybat/spinback-rce-bot at src/commands, one file per command. Names, descriptions, tiers, usages and options are copied from those files; nothing here was written by hand except the group labels.",
-  "updated": "Mirrored from the bot repository on request.",
+  "updated": "Mirrored from the bot repository on request, including four staff console shortcuts added at the same time (say, save, info, who-is-on).",
   "groups": [
     {
       "key": "all",
@@ -874,6 +874,65 @@
       "subcommands": [],
       "needsSetup": true,
       "readOnly": false
+    },
+    {
+      "name": "say",
+      "group": "server",
+      "summary": "Say a line in the game chat, word for word",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "say <message>",
+      "options": [
+        {
+          "name": "message",
+          "type": "string",
+          "description": "What the server should say, word for word",
+          "required": true
+        }
+      ],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false,
+      "note": "Added at the owner's request. Declared as a console template in src/commands/say.js of the bot repository: the file holds no logic, only the exact line it sends."
+    },
+    {
+      "name": "save",
+      "group": "server",
+      "summary": "Ask the server to save its world now",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "save",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false,
+      "note": "Added at the owner's request. Template command: sends server.save."
+    },
+    {
+      "name": "info",
+      "group": "server",
+      "summary": "Ask the server for its info line: uptime, players, map and world size",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "info",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false,
+      "note": "Added at the owner's request. Template command: sends server.info."
+    },
+    {
+      "name": "who-is-on",
+      "group": "server",
+      "summary": "Ask the server who is connected right now",
+      "who": "moderator",
+      "tier": "moderator",
+      "usage": "who-is-on",
+      "options": [],
+      "subcommands": [],
+      "needsSetup": true,
+      "readOnly": false,
+      "note": "Added at the owner's request. Template command: sends players."
     }
   ],
   "goals": [],

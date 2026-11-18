@@ -225,7 +225,7 @@
         var s = document.getElementById('cmdSearch');
         if (s) s.addEventListener('input', function () { state.term = s.value; draw(); });
         fetch('data/commands.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
-          DATA = d; chips(); draw();
+          DATA = d; chips(); draw(); var sc = document.getElementById("statCommands"); if (sc) sc.textContent = d.commands.length; var so = document.getElementById("statOptions"); if (so) so.textContent = d.commands.filter(function (c) { return (c.options || []).length; }).length;
         }).catch(function (e) { var box = document.getElementById('cmdList'); if (box) { box.textContent = ''; box.appendChild(el('p', 'cmd-empty', 'The command list could not be read (' + e + ').')); } });
       })();
       </script>
@@ -248,7 +248,14 @@
             <a href="api.html">The API</a>
             <a href="dashboard/kitbuilder.html">Kit Studio</a>
           </div>
-          <div class="foot-col">
+                    <div class="foot-col" id="foot-site">
+            <h4>The site</h4>
+            <a href="about.html">About</a>
+            <a href="changelog.html">Changelog</a>
+            <a href="uptime.html">Uptime</a>
+            <a href="api.html">API</a>
+          </div>
+<div class="foot-col">
             <h4>Community</h4>
             <a href="https://discord.gg/NFRkb9NYNd" target="_blank" rel="noopener">Discord Support Server</a>
             <a href="status.html">Status</a>
