@@ -1,0 +1,218 @@
+{
+  "site": "https://spinback-j7ao5f.camelai.app",
+  "repo": "https://github.com/ollybat/rustyworks-rce-website",
+  "note": "The website repository's own history, newest first, read from GitHub when this file was last rebuilt.",
+  "rebuiltAt": "2026-11-18",
+  "commits": [
+    {
+      "sha": "faa29c4",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/faa29c4272cb66d40170364e8590611baebb2ea1",
+      "at": "2026-11-17",
+      "who": "ollybat",
+      "msg": "winter layer: wired into the API page, the two error pages and both dashboards"
+    },
+    {
+      "sha": "7379625",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/73796253cbfbefc250a68e2ca1ecaa64fa470a80",
+      "at": "2026-11-17",
+      "who": "ollybat",
+      "msg": "winter layer: wired into Status, Commands, Get started, Settings and Privacy"
+    },
+    {
+      "sha": "82de080",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/82de080a51c4b99dd3fda4b8c40c683f7f4f03c4",
+      "at": "2026-11-17",
+      "who": "ollybat",
+      "msg": "winter layer: the new stylesheet and script, wired into the home and Servers pages"
+    },
+    {
+      "sha": "62da860",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/62da860140559f1e5edf1ac72a44fe678101b2a1",
+      "at": "2026-11-17",
+      "who": "ollybat",
+      "msg": "servers: remove the Server Sensor block and its styles on request - the server card stays"
+    },
+    {
+      "sha": "60211f9",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/60211f96b4e474ad54d906cb4cc13b74d6a07c7f",
+      "at": "2026-11-17",
+      "who": "ollybat",
+      "msg": "servers: Server Sensor as real readings the page carries itself, in place of the screenshot"
+    },
+    {
+      "sha": "65b3ee3",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/65b3ee3c565cf90d4f04d564984a80a27a20adce",
+      "at": "2026-11-17",
+      "who": "ollybat",
+      "msg": "servers: add the Server Sensor panel screenshot the owner supplied, with the module list read off its sidebar"
+    },
+    {
+      "sha": "209072a",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/209072a1e4cda8ee03f6445f4592c66ee04ab244",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "site: keep the repo copies of search.js and servers.js in step with the /setup rename"
+    },
+    {
+      "sha": "fe936d4",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/fe936d403b5d51060cd1e268177746ef60251f33",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "site: the setup command is /setup - correct the name everywhere the site used the older /setup server"
+    },
+    {
+      "sha": "ab019d5",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/ab019d5811fd07cf38449bd4d25fe7dab5e4e82a",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "commands: the setup steps belong to /setup, not /setup server, since the mirror shows one setup command"
+    },
+    {
+      "sha": "f885562",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/f885562cffa5805f69b04f9e7cfbf69ca2a65342",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "commands: mirror the bot's real 36 commands from spinback-rce-bot/src/commands, and give the Servers page the server card we were given"
+    },
+    {
+      "sha": "7b69289",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/7b69289aa62d0f0b614800ea8bfa4828d7a63482",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "site: sweep out the commands that no longer exist - /ping, /help, /setup run|roles|channels|status|export|reset|doctor and /user whois - in favour of the new set"
+    },
+    {
+      "sha": "44d7def",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/44d7def2799ad40716c3f656e01daf81c2f82ee6",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "commands: remove the heading over an empty permission table, and write the owner's set up for the bot side"
+    },
+    {
+      "sha": "8abb90b",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/8abb90b8fb650775adbea7356f30b8dd869a90ad",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "commands: the owner's list, written into the catalogue and back onto the page - setup, emote kits, linking, queue skip, moderation"
+    },
+    {
+      "sha": "d4100ad",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/d4100ad7994f013841cc8e082bb547b9f8f8efc4",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "commands: clear the site catalogue on request and write up clearing the bot's registered set"
+    },
+    {
+      "sha": "6f06406",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/6f06406af54d4f1dc30f4c8ceb86ff26a246e424",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "bot: a file store for the settings, a volume check that proves the mount, and the console guard the in-game runner needs"
+    },
+    {
+      "sha": "3bd84c1",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/3bd84c1f74fee2b401360640f4bb5dd25e8c7eb4",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "bot: write up the in-game console runner as a spec (needs a push that can carry server.mjs)"
+    },
+    {
+      "sha": "55c218b",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/55c218ba789eb10ec76d0031765c58598a1f2d50",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "api: a page and a machine-readable index for the read-only data, with the bot's live endpoints and the one that is not published yet"
+    },
+    {
+      "sha": "78c7de8",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/78c7de84e14e32b1545db71b9db2b2c0e35449be",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "studio pages: Colour Studio gets a way home and page.js, and page.js now adds a manifest link and a home link where one is missing"
+    },
+    {
+      "sha": "700b471",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/700b4712acc743e1f47f6225f3e7842fc288db1e",
+      "at": "2026-11-15",
+      "who": "ollybat",
+      "msg": "privacy page: what the bot and the site keep, what is never shown, and the commands that remove it; footer link added once in page.js"
+    },
+    {
+      "sha": "2542127",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/254212731b1cb2d80cac2ac23ce5bad235dd83f3",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "bot: the five patches still outstanding, and what the site half looks like from outside"
+    },
+    {
+      "sha": "ff9dd90",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/ff9dd90bb9d1d643fc5885ba16200dd126cc2d7e",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "servers page: style the sort row's label so it matches the filter row"
+    },
+    {
+      "sha": "3bfcfdb",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/3bfcfdb3a7d81451d224289c8ba85dabc83f41a2",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "servers page: the sort control markup and the live regions it announces"
+    },
+    {
+      "sha": "88ed127",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/88ed1275f411767f78471af6b4b14f14222903b4",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "servers page: let the reader choose the order (answering first / name / last checked), and announce the live regions"
+    },
+    {
+      "sha": "135a87d",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/135a87db842e94f79f48d6ee4dd42d83504e6e15",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "servers patch: step 1 rewritten against the current server.mjs (rconState, not the removed serverChecks map)"
+    },
+    {
+      "sha": "5ad4c02",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/5ad4c02f68db8e2c026ad5d113181ae19f6520c6",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "Handover for the two bot-side jobs, and the /api/servers patch in place for whoever can push server.mjs"
+    },
+    {
+      "sha": "989564a",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/989564accbca3999cd8847b969fa868b1823fa2b",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "Point the empty server list and the 404 page at the step that helps"
+    },
+    {
+      "sha": "74a0a10",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/74a0a10e29c7c8e9eb0fe8846ee73bfbd2107467",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "Get started: an 'if something is not working' section, and the palette finds it"
+    },
+    {
+      "sha": "1d2d5a8",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/1d2d5a80bb4f0ea92f99481387673d675349ba1e",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "Search: index every command, subcommand and goal from commands.json, plus Servers and Get started"
+    },
+    {
+      "sha": "2feacf4",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/2feacf4cbc6789fba7fb154e28f3e9d2bdbb10ba",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "Postgres option for persisted settings: store module, schema, steps, pg driver"
+    },
+    {
+      "sha": "b1eff5c",
+      "url": "https://github.com/ollybat/rustyworks-rce-website/commit/b1eff5c44981c6aece62d26647b1e237592bac26",
+      "at": "2026-11-14",
+      "who": "ollybat",
+      "msg": "Polish layer: pointer-lit cards, a drifting backdrop, gradient accents and counting live numbers"
+    }
+  ]
+}
