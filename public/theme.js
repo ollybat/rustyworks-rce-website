@@ -53,7 +53,7 @@
   // ══════════════════════════════════════════════════════════════════════════
   var SEASON = {
     mode: 'auto',
-    force: '',
+    force: 'christmas',
     list: [
       { key: 'halloween',    from: '10-01', to: '11-05' },   // 1 Oct  -> 5 Nov
       { key: 'thanksgiving', from: '11-15', to: '11-30' },   // 15 Nov -> 30 Nov
@@ -272,7 +272,7 @@
     '<path d="M156 25l6-12 7 11z" fill="#e0383e"/><circle cx="162" cy="13" r="2.6" fill="#fff"/><circle cx="85" cy="25" r="2.4" fill="#e0383e"/><circle cx="47" cy="31" r="2.4" fill="#e0383e"/></svg>';
   // Seasonal logo: the same Spinback icon with a Halloween / Thanksgiving / Christmas
   // look. Put these three files next to rustyworks-icon.svg in /media/.
-  var LOGO_ORIG = /\/media\/rustyworks-icon\.svg(\?.*)?$/;
+  var LOGO_ORIG = /\/media\/(rustyworks|spinback)-icon\.svg(\?.*)?$/;
   var LOGO_FILE = {
     halloween:    '/media/spinback-icon-halloween.svg',
     thanksgiving: '/media/spinback-icon-thanksgiving.svg',
