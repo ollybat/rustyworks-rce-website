@@ -45,8 +45,12 @@
     }
     box.innerHTML = chart + '<h3 class="cmd-goals__title">Every hour, newest first</h3>' + (html || '<p class="cmd-note">No buckets came back.</p>');
     if (meta) meta.textContent = 'Window: the last ' + (d.hours == null ? 'unknown number of' : d.hours) + ' hours. Monitoring since ' + when(d.monitoringSince) + '. Read at ' + when(d.generatedAt) + '.';
-  }).catch(function (e) {
+  }).catch(function () {
     var tot = document.getElementById('upTotals');
-    if (tot) tot.innerHTML = '<p class="cmd-note">The history could not be read (' + esc(e) + ').</p>';
+    if (tot) tot.innerHTML = '<p class="cmd-note">There is no history to read here. The bot's history endpoint answers on the main site; this copy of the pages has no bot behind it.</p>';
+    var meta = document.getElementById('upMeta');
+    if (meta) meta.textContent = '';
+    var box = document.getElementById('upBuckets');
+    if (box) box.innerHTML = '';
   });
 })();
