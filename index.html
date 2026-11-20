@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spinback RCE - the free Rust Console Edition Discord bot</title>
+    <meta name="description" content="Spinback RCE is a free Discord bot for Rust Console Edition servers. This is the repository's front door; the full site lives in /public.">
+    <link rel="canonical" href="https://spinback-j7ao5f.camelai.app/">
+    <meta http-equiv="refresh" content="4; url=https://spinback-j7ao5f.camelai.app/">
+    <link rel="icon" type="image/svg+xml" href="https://spinback-j7ao5f.camelai.app/media/spinback-icon-christmas.svg">
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center;
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #eaf6ff; background: #060d1a;
+        background-image:
+          radial-gradient(900px 500px at 12% -6%, rgba(255, 209, 102, .14), transparent 60%),
+          radial-gradient(800px 460px at 92% 4%, rgba(229, 72, 77, .12), transparent 62%),
+          radial-gradient(700px 420px at 50% 108%, rgba(70, 200, 150, .12), transparent 60%);
+      }
+      main { width: min(680px, 92vw); padding: 34px 30px; border-radius: 20px;
+        border: 1px solid rgba(255, 209, 102, .28); background: rgba(9, 19, 30, .72);
+        box-shadow: 0 30px 70px rgba(0, 0, 0, .55); }
+      img { width: 64px; height: 64px; display: block; margin-bottom: 14px; }
+      h1 { font-size: clamp(1.7rem, 4.5vw, 2.4rem); margin: 0 0 6px; }
+      h1 span { background: linear-gradient(100deg, #fff, #ffd166 45%, #8fd0ff); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+      p { margin: 0 0 12px; color: #cfe6f7; }
+      .kicker { font-size: .78rem; letter-spacing: .16em; text-transform: uppercase; color: #ffd166; margin-bottom: 8px; }
+      .row { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 14px; }
+      a.btn { display: inline-block; padding: 11px 16px; border-radius: 12px; text-decoration: none;
+        border: 1px solid rgba(255, 209, 102, .5); background: rgba(255, 209, 102, .12); color: #fff5da; font-weight: 600; }
+      a.btn:hover { background: rgba(255, 209, 102, .22); }
+      a.ghost { border-color: rgba(191, 233, 255, .34); background: rgba(191, 233, 255, .08); color: #eaf6ff; font-weight: 500; }
+      .fine { font-size: .8rem; color: #9db8cc; margin: 10px 0 0; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="https://spinback-j7ao5f.camelai.app/media/spinback-icon-christmas.svg" alt="" width="64" height="64" decoding="async">
+      <p class="kicker">Repository front door</p>
+      <h1>Spinback <span>RCE</span></h1>
+      <p>The free all-in-one Discord bot for Rust Console Edition servers: RCON console work, player links, emote kits and the logs your staff actually read. Nothing to buy, ever.</p>
+      <p>You are looking at the repository's own front page. The full website - every page, the command list, the live status - is served from the site itself, and <code>public/</code> is where its files live in this repository.</p>
+      <div class="row">
+        <a class="btn" href="https://spinback-j7ao5f.camelai.app/">Open the site</a>
+        <a class="btn ghost" href="https://spinback-j7ao5f.camelai.app/commands.html">Commands</a>
+        <a class="btn ghost" href="https://spinback-j7ao5f.camelai.app/start.html">Get started</a>
+        <a class="btn ghost" href="https://discord.gg/NFRkb9NYNd">Discord</a>
+      </div>
+      <p class="fine">If your browser has not taken you to the site on its own after a few seconds, use the button above. This file exists so that the repository has a usable <code>index.html</code> at its top level; the deployed site serves <code>public/index.html</code> at its root. Not affiliated with Facepunch Studios or Rust.</p>
+    </main>
+  </body>
+</html>
