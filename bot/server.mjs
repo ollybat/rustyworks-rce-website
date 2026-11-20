@@ -961,6 +961,7 @@ async function rconLogged(options, actor) {
 /* The last RCON check of each saved server since this process started (not saved: it is
    runtime state, and a restart is a good reason to check again). */
 const serverChecks = {};
+let serversCache = { at: 0, body: null };   /* 30 s cache for GET /api/servers */
 
 /* What /setup status checks, read from the guild as the bot sees it right now: can the bot
    post in each saved log channel, does each saved role still exist, and can it give the
@@ -2477,6 +2478,34 @@ createServer(async (req, res) => {
     }));
     res.writeHead(200, cors);
     res.end(JSON.stringify({ ready: state.gateway === 'online', gateway: state.gateway, count: guilds.length, guilds }));
+    return;
+  }
+
+  /* Every Rust server the bot looks after, for the website's Servers page. Public and
+     read-only on purpose: nothing here is not already reported to a browser by
+     /api/status, and the address and password stay in the bot. */
+  if (req.method === 'GET' && url === '/api/servers') {
+    const cors = { 'content-type': 'application/json', 'cache-control': 'public, max-age=30',
+      'access-control-allow-origin': '*' };
+    if (!serversCache.body || Date.now() - serversCache.at > 30000) {
+      const list = (settings.servers || []).map(function (server) {
+        const check = serverChecks[server.id] || null;
+        return {
+          id: server.id,
+          name: server.name || 'Rust server',
+          guild: (state.guildInfo && state.guildInfo.name) || null,
+          online: !!(check && check.ok),
+          state: check ? (check.ok ? 'online' : 'offline') : 'unknown',
+          ms: check && typeof check.ms === 'number' ? check.ms : null,
+          checkedAt: check ? check.at : null,
+          reason: check && !check.ok ? (check.reason || 'unknown') : null,
+          detail: null,
+        };
+      });
+      serversCache = { at: Date.now(), body: JSON.stringify({ ok: true, count: list.length, servers: list }) };
+    }
+    res.writeHead(200, cors);
+    res.end(serversCache.body);
     return;
   }
 
